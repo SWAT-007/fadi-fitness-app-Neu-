@@ -1,19 +1,26 @@
-import type { Metadata } from 'next'
-import './globals.css'
+import type { Metadata } from "next";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: 'FitCoach',
-  description: 'Dein persönlicher Fitness-Begleiter',
-}
+  title: "MilaCoach",
+  description: "Fitness Coaching App",
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/icon-192.png",
+  },
+};
 
 export default function RootLayout({
   children,
-}: Readonly<{ children: React.ReactNode }>) {
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="de" className="h-full">
+    <html lang="de">
       <body className="h-full bg-gray-50 antialiased">
         {children}
       </body>
     </html>
-  )
+  );
 }
