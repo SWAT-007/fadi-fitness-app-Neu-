@@ -1,14 +1,9 @@
-import type { NextConfig } from "next";
+import withPWA from "next-pwa";
 
-const nextConfig: NextConfig = {
-  allowedDevOrigins: ["127.0.0.1", "localhost"],
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  experimental: {
-    cpus: 1,
-    workerThreads: true,
-  },
-};
+const nextConfig = withPWA({
+  dest: "public",
+  register: true,
+  skipWaiting: true,
+});
 
 export default nextConfig;
