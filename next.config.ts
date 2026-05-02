@@ -1,3 +1,4 @@
+// @ts-ignore
 import withPWA from "next-pwa";
 
 const nextConfig = withPWA({
