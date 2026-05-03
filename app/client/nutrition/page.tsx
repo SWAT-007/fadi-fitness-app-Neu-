@@ -347,11 +347,16 @@ export default function ClientNutritionPage() {
 
     const mealIds = sorted.nutrition_meals.map(m => m.id)
     if (mealIds.length > 0) {
+      // Nur heutiger Tag — ab Mitternacht (lokale Zeit in UTC umgerechnet)
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+
       const { data: cmfData } = await supabase
         .from('client_meal_foods')
         .select('*, food:foods(*)')
         .eq('client_id', client.id)
         .in('meal_id', mealIds)
+        .gte('created_at', todayStart.toISOString())
       setCmf((cmfData ?? []) as CmfWithFood[])
     }
 
