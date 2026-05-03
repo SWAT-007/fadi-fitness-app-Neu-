@@ -366,6 +366,8 @@ export default function ClientNutritionPage() {
 
   const pickSlot = async (mealId: string, food: Food) => {
     if (!clientId || !plan) return
+    const meal = plan.nutrition_meals.find(m => m.id === mealId)
+    if (!meal) return
     const isFree = isFreeCat(food.category)
 
     const oldOfSameCat = cmf.filter(c => c.meal_id === mealId && c.food.category === food.category)
@@ -388,9 +390,11 @@ export default function ClientNutritionPage() {
       }
     }
 
+    // Gemüse bekommt sofort die Trainer-Vorgabe; Makro-Slots erst nach Berechnen.
+    const vegGrams = Math.max(0, Math.round(meal.target_vegetable_g ?? 0))
     const insertPayload = {
       client_id: clientId, meal_id: mealId, food_id: food.id,
-      amount_g: 0,  // Gramm erst nach „Mengen berechnen"
+      amount_g: isFree ? vegGrams : 0,
       sort_order: isFree ? 99 : SLOT_CATS.indexOf(food.category),
     }
     const { data: inserted, error: insErr } = await supabase
@@ -414,12 +418,6 @@ export default function ClientNutritionPage() {
       return [...updated, inserted as CmfWithFood]
     })
     setOpenPicker(null)
-  }
-
-  const updateVegGrams = async (id: string, grams: number) => {
-    const safe = Math.max(0, Math.round(grams))
-    setCmf(prev => prev.map(c => c.id === id ? { ...c, amount_g: safe } : c))
-    await supabase.from('client_meal_foods').update({ amount_g: safe }).eq('id', id)
   }
 
   const clearSlot = async (mealId: string, cat: FoodCategory) => {
@@ -716,18 +714,14 @@ export default function ClientNutritionPage() {
                         </button>
                       )
                     }
-                    const calculated = picked.amount_g > 0
                     return (
                       <div key={cat} className="flex items-center gap-3 px-5 py-3">
                         <span className={`w-2 h-2 rounded-full ${c.dot} flex-shrink-0`} />
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium text-gray-900 truncate">{picked.food.name}</div>
                           <div className="text-[10px] text-gray-400">
-                            {calculated ? (
-                              <><b className="text-gray-700">{Math.round(picked.amount_g)} g</b><span className="ml-1 text-gray-300">vom Trainer festgelegt</span></>
-                            ) : (
-                              <>noch nicht berechnet{trainerG > 0 && ` · Trainer: ${trainerG}g`}</>
-                            )}
+                            <b className="text-gray-700">{trainerG} g</b>
+                            <span className="ml-1 text-gray-300">vom Trainer festgelegt</span>
                           </div>
                         </div>
                         <button
@@ -751,13 +745,17 @@ export default function ClientNutritionPage() {
                 </div>
               )}
 
-              {/* „Berechnen" — sichtbar wenn alle erlaubten Slots gefüllt sind aber noch nicht berechnet */}
+              {/* „Berechnen" — sichtbar wenn alle Makro-Slots gefüllt sind und irgendetwas uncalc ist (auch Gemüse) */}
               {(() => {
                 const filledCount = allowed.filter(cat => slots[cat]).length
-                const allFilled = filledCount === allowed.length && allowed.length > 0
-                const items = allowed.map(c => slots[c]).filter(Boolean) as CmfWithFood[]
-                const anyUncalc = items.some(it => it.amount_g === 0)
-                if (allFilled && anyUncalc) {
+                const allMacroFilled = filledCount === allowed.length && allowed.length > 0
+                const macroItems = allowed.map(c => slots[c]).filter(Boolean) as CmfWithFood[]
+                const allMealItems = [
+                  ...macroItems,
+                  ...allowedFree.map(c => slots[c]).filter(Boolean) as CmfWithFood[],
+                ]
+                const anyUncalc = allMealItems.some(it => it.amount_g === 0)
+                if (allMacroFilled && anyUncalc) {
                   return (
                     <div className="px-5 py-3 bg-green-50/50 border-t border-green-100">
                       <button

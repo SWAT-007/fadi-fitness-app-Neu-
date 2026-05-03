@@ -18,7 +18,13 @@
       "PowerShell(Stop-Process -Id \\(Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue | Select-Object -First 1\\).OwningProcess -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; Remove-Item \"C:\\\\Users\\\\Fadel-PC\\\\Documents\\\\fitness-app\\\\.next\" -Recurse -Force -ErrorAction SilentlyContinue; Write-Host \"Cache geleert\")",
       "Bash(grep -E \"^[^/]*\\\\.\\(ts|tsx\\)$|^app/|^components/|^lib/|^package\\\\.json|^tsconfig\")",
       "Bash(npx tsc *)",
-      "mcp__Claude_in_Chrome__tabs_context_mcp"
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(git status *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh pr create --base main --title 'fix\\(nutrition\\): apply trainer'\\\\''s vegetable grams immediately on pick' --body ' *)"
     ]
   }
 }

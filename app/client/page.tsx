@@ -32,6 +32,11 @@ export default function ClientDashboard() {
   const [loading, setLoading] = useState(true)
   const menuRef = useRef<HTMLDivElement>(null)
 
+  // Gewicht-Modal
+  const [weightOpen, setWeightOpen] = useState(false)
+  const [weightInput, setWeightInput] = useState('')
+  const [weightSaving, setWeightSaving] = useState(false)
+
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -88,6 +93,21 @@ export default function ClientDashboard() {
     }
     load()
   }, [router])
+
+  const handleSaveWeight = async () => {
+    if (!client || !weightInput) return
+    setWeightSaving(true)
+    const today = new Date().toISOString().split('T')[0]
+    const { data } = await supabase
+      .from('progress_logs')
+      .insert({ client_id: client.id, date: today, body_weight: parseFloat(weightInput) })
+      .select()
+      .single()
+    if (data) setLastWeight(data)
+    setWeightInput('')
+    setWeightOpen(false)
+    setWeightSaving(false)
+  }
 
   const greeting = () => {
     const h = new Date().getHours()
@@ -247,15 +267,63 @@ export default function ClientDashboard() {
 
       {/* Quick actions */}
       <div className="grid grid-cols-2 gap-3">
-        <Link href="/client/progress" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl p-4 transition-colors">
+        <button
+          onClick={() => { setWeightInput(''); setWeightOpen(true) }}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl p-4 transition-colors text-left"
+        >
           <div className="text-2xl mb-2">📈</div>
           <div className="font-semibold text-sm">Gewicht eintragen</div>
-        </Link>
+        </button>
         <Link href="/client/messages" className="bg-white border border-gray-200 rounded-2xl p-4 hover:bg-gray-50 transition-colors">
           <div className="text-2xl mb-2">💬</div>
           <div className="font-semibold text-sm text-gray-900">Trainer schreiben</div>
         </Link>
       </div>
+
+      {/* Gewicht-Modal */}
+      {weightOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-900">Gewicht eintragen</h2>
+              {lastWeight?.body_weight && (
+                <p className="text-xs text-gray-400 mt-0.5">Letzter Eintrag: {lastWeight.body_weight} kg</p>
+              )}
+            </div>
+            <div className="px-5 py-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Aktuelles Gewicht (kg)
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={weightInput}
+                onChange={e => setWeightInput(e.target.value)}
+                placeholder="z.B. 72.5"
+                autoFocus
+                onKeyDown={e => e.key === 'Enter' && handleSaveWeight()}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-lg font-semibold text-center focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
+              />
+            </div>
+            <div className="px-5 pb-5 flex gap-3">
+              <button
+                onClick={() => setWeightOpen(false)}
+                className="flex-1 py-3 border border-gray-200 text-gray-600 font-medium rounded-xl hover:bg-gray-50 transition-colors text-sm"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleSaveWeight}
+                disabled={!weightInput || weightSaving}
+                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors text-sm"
+              >
+                {weightSaving ? 'Speichern…' : 'Speichern'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

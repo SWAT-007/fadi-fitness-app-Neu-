@@ -127,9 +127,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Logo */}
         <div className="px-6 py-6 border-b border-gray-800">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">💪</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="MilaCoach" className="w-9 h-9 object-contain" />
             <div>
-              <div className="text-white font-bold text-lg leading-none">FitCoach</div>
+              <div className="text-white font-bold text-lg leading-none">MilaCoach</div>
               <div className="text-gray-400 text-xs mt-0.5">Admin</div>
             </div>
           </div>
@@ -191,7 +192,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="font-semibold text-gray-900">FitCoach</span>
+          <span className="font-semibold text-gray-900">MilaCoach</span>
         </header>
 
         <main className="flex-1 overflow-y-auto">

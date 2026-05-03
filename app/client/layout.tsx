@@ -72,8 +72,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       <div className="sticky top-0 z-10">
         <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xl">💪</span>
-            <span className="font-bold text-gray-900">FitCoach</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="MilaCoach" className="w-7 h-7 object-contain" />
+            <span className="font-bold text-gray-900">MilaCoach</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 text-sm font-bold">

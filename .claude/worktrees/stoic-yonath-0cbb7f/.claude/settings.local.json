@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"C:\\\\Users\\\\Fadel-PC\\\\Documents\\\\fitness-app\\\\app\\\\trainer\\\\clients\\\\[id]\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\Fadel-PC\\\\Documents\\\\fitness-app\\\\app\\\\trainer\\\\plans\\\\[id]\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\Fadel-PC\\\\Documents\\\\fitness-app\\\\app\\\\client\\\\plan\\\\[dayId]\")",
+      "Bash(taskkill /PID 5904 /F)",
+      "PowerShell(Stop-Process -Id 5904 -Force -ErrorAction SilentlyContinue)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(grep -E \"middleware\\\\.\\(ts|js\\)$\")",
+      "Bash(taskkill /PID 19544 /F)",
+      "PowerShell(Get-Process -Id 19544 -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force)",
+      "PowerShell(netstat -ano)",
+      "Bash(npm run *)",
+      "Bash(taskkill /PID 16432 /F)",
+      "PowerShell(Stop-Process -Id 16432 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Id \\(Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue | Select-Object -First 1\\).OwningProcess -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; Remove-Item \"C:\\\\Users\\\\Fadel-PC\\\\Documents\\\\fitness-app\\\\.next\" -Recurse -Force -ErrorAction SilentlyContinue; Write-Host \"Cache geleert\")",
+      "Bash(grep -E \"^[^/]*\\\\.\\(ts|tsx\\)$|^app/|^components/|^lib/|^package\\\\.json|^tsconfig\")",
+      "Bash(npx tsc *)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git -C \"C:/Users/Fadel-PC/Documents/fitness-app\" branch --show-current)",
+      "Bash(git -C \"C:/Users/Fadel-PC/Documents/fitness-app\" status --short)",
+      "Bash(mkdir -p /c/Users/Fadel-PC/Documents/fitness-app/app/admin/exercises)",
+      "Bash(cp ./lib/types.ts /c/Users/Fadel-PC/Documents/fitness-app/lib/types.ts)",
+      "Bash(cp ./lib/exercises.ts /c/Users/Fadel-PC/Documents/fitness-app/lib/exercises.ts)",
+      "Bash(cp ./components/ExercisePicker.tsx /c/Users/Fadel-PC/Documents/fitness-app/components/ExercisePicker.tsx)",
+      "Bash(cp ./app/admin/exercises/page.tsx /c/Users/Fadel-PC/Documents/fitness-app/app/admin/exercises/page.tsx)"
+    ]
+  }
+}

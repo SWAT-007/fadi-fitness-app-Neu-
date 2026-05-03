@@ -310,7 +310,19 @@ export default function NutritionEditorPage() {
   const updateMeal = async (mealId: string, patch: Partial<NutritionMeal>) => {
     setMeals(prev => prev.map(m => m.id === mealId ? { ...m, ...patch } : m))
     const { error } = await supabase.from('nutrition_meals').update(patch).eq('id', mealId)
-    if (error) console.warn('[meal update]', error)
+    if (error) {
+      console.warn('[meal update]', error)
+      // Spalten fehlen → klar an User melden, sonst „verschwindet" der Wert
+      // einfach beim nächsten Reload und Bug ist unsichtbar.
+      if (/column.*does not exist|schema cache/i.test(error.message)) {
+        alert(
+          `Speichern fehlgeschlagen: Spalte fehlt in der Datenbank.\n\n` +
+          `${error.message}\n\n` +
+          `Lösung — im Supabase SQL-Editor ausführen:\n\n` +
+          `alter table nutrition_meals add column if not exists target_vegetable_g numeric not null default 0;`
+        )
+      }
+    }
   }
 
   const deleteMeal = async (mid: string) => {
