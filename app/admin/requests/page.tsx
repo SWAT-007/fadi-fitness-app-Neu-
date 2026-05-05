@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { StaggerItem, useToast } from '@/components/Motion'
 
 type ChangeRequest = {
   id: string
@@ -13,6 +14,7 @@ type ChangeRequest = {
 }
 
 export default function RequestsPage() {
+  const { showToast } = useToast()
   const [requests, setRequests] = useState<ChangeRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
@@ -44,8 +46,11 @@ export default function RequestsPage() {
 
   const updateStatus = async (id: string, status: 'resolved' | 'rejected') => {
     setUpdating(id)
-    await supabase.from('exercise_change_requests').update({ status }).eq('id', id)
-    setRequests(prev => prev.filter(r => r.id !== id))
+    const { error } = await supabase.from('exercise_change_requests').update({ status }).eq('id', id)
+    if (!error) {
+      setRequests(prev => prev.filter(r => r.id !== id))
+      showToast(status === 'resolved' ? 'Anfrage erledigt ✓' : 'Anfrage abgelehnt', status === 'resolved' ? 'success' : 'danger')
+    }
     setUpdating(null)
   }
 
@@ -73,8 +78,8 @@ export default function RequestsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {requests.map(req => (
-            <div key={req.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          {requests.map((req, index) => (
+            <StaggerItem key={req.id} index={index} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
               <div className="flex items-start justify-between gap-4 mb-3">
                 <div className="flex-1 min-w-0">
                   {/* Client + exercise */}
@@ -126,7 +131,7 @@ export default function RequestsPage() {
                   {updating === req.id ? 'Wird gespeichert…' : 'Als erledigt markieren'}
                 </button>
               </div>
-            </div>
+            </StaggerItem>
           ))}
         </div>
       )}

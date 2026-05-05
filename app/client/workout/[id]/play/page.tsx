@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Exercise, ExerciseLog, WorkoutDay } from '@/lib/types'
+import { useToast } from '@/components/Motion'
 
 type SetLog = {
   weight: string
@@ -32,6 +33,7 @@ export default function WorkoutPlayerPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { showToast } = useToast()
   const freshStart = searchParams.get('fresh') === '1'
 
   const [workout, setWorkout] = useState<WorkoutDay | null>(null)
@@ -217,6 +219,7 @@ export default function WorkoutPlayerPage() {
     setFinalDurationSeconds(durationSeconds)
     setSaving(false)
     setComplete(true)
+    showToast('Workout gespeichert ✓', 'success')
   }
 
   const handleSwapRequest = async () => {
@@ -242,6 +245,7 @@ export default function WorkoutPlayerPage() {
     setSwapModalOpen(false)
     setSwapReason('')
     setSwapSent(exercise.id)
+    showToast('Anfrage gesendet ✓', 'info')
   }
 
   // Auto-advance when all sets done

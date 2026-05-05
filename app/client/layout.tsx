@@ -7,6 +7,7 @@ import { isAdminEmail } from '@/lib/admin'
 import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/lib/types'
 import ActiveWorkoutBanner from './ActiveWorkoutBanner'
+import { PageFade, ToastProvider } from '@/components/Motion'
 
 const navItems = [
   { href: '/client', label: 'Home', icon: '🏠' },
@@ -67,6 +68,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   }
 
   return (
+    <ToastProvider>
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Sticky top block: header + active workout banner */}
       <div className="sticky top-0 z-10">
@@ -90,7 +92,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
       {/* Content */}
       <main className="flex-1 pb-20">
-        {children}
+        <PageFade key={pathname}>
+          {children}
+        </PageFade>
       </main>
 
       {/* Bottom navigation */}
@@ -116,5 +120,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         </div>
       </nav>
     </div>
+    </ToastProvider>
   )
 }

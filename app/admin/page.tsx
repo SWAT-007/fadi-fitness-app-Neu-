@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Client } from '@/lib/types'
+import { AnimatedNumber, StaggerItem } from '@/components/Motion'
 
 interface Stats {
   clients: number
@@ -105,7 +106,7 @@ export default function TrainerDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">{card.label}</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{card.value}</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1"><AnimatedNumber value={card.value} /></p>
               </div>
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl ${card.color}`}>
                 {card.icon}
@@ -152,8 +153,9 @@ export default function TrainerDashboard() {
           </div>
         ) : (
           <ul className="divide-y divide-gray-100">
-            {recentClients.map(client => (
+            {recentClients.map((client, index) => (
               <li key={client.id}>
+                <StaggerItem index={index}>
                 <Link href={`/admin/clients/${client.id}`} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
                   <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">
                     {client.full_name.charAt(0).toUpperCase()}
@@ -166,6 +168,7 @@ export default function TrainerDashboard() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </Link>
+                </StaggerItem>
               </li>
             ))}
           </ul>

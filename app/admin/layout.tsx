@@ -6,12 +6,14 @@ import Link from 'next/link'
 import { ADMIN_EMAIL, isAdminEmail } from '@/lib/admin'
 import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/lib/types'
+import { PageFade, ToastProvider } from '@/components/Motion'
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: '▦' },
   { href: '/admin/clients', label: 'Kunden', icon: '👥' },
   { href: '/admin/plans', label: 'Trainingspläne', icon: '📋' },
   { href: '/admin/nutrition', label: 'Ernährung', icon: '🥗' },
+  { href: '/admin/recipes', label: 'Rezepte', icon: '📖' },
   { href: '/admin/requests', label: 'Anfragen', icon: '🔄' },
   { href: '/admin/messages', label: 'Nachrichten', icon: '💬' },
 ]
@@ -109,6 +111,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
+    <ToastProvider>
     <div className="min-h-screen flex bg-gray-50">
       {/* Mobile overlay */}
       {sidebarOpen && (
@@ -196,9 +199,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </header>
 
         <main className="flex-1 overflow-y-auto">
-          {children}
+          <PageFade key={pathname}>
+            {children}
+          </PageFade>
         </main>
       </div>
     </div>
+    </ToastProvider>
   )
 }

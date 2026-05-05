@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { isAdminEmail } from '@/lib/admin'
 import { supabase } from '@/lib/supabase'
 import type { Profile, Client, AssignedPlan, WorkoutPlan, WorkoutDay, ProgressLog } from '@/lib/types'
+import { AnimatedNumber, StaggerItem, SuccessButton, useToast } from '@/components/Motion'
 
 function formatDuration(seconds: number): string {
   if (seconds === 0) return '–'
@@ -18,6 +19,7 @@ function formatDuration(seconds: number): string {
 
 export default function ClientDashboard() {
   const router = useRouter()
+  const { showToast } = useToast()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [client, setClient] = useState<Client | null>(null)
   const [activePlan, setActivePlan] = useState<WorkoutPlan | null>(null)
@@ -36,6 +38,7 @@ export default function ClientDashboard() {
   const [weightOpen, setWeightOpen] = useState(false)
   const [weightInput, setWeightInput] = useState('')
   const [weightSaving, setWeightSaving] = useState(false)
+  const [weightSaved, setWeightSaved] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -107,6 +110,9 @@ export default function ClientDashboard() {
     setWeightInput('')
     setWeightOpen(false)
     setWeightSaving(false)
+    setWeightSaved(true)
+    showToast('Gewicht gespeichert ✓', 'success')
+    window.setTimeout(() => setWeightSaved(false), 1500)
   }
 
   const greeting = () => {
@@ -131,12 +137,12 @@ export default function ClientDashboard() {
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-3 mb-6">
         <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
-          <div className="text-2xl font-bold text-gray-900">{totalWorkouts}</div>
+          <div className="text-2xl font-bold text-gray-900"><AnimatedNumber value={totalWorkouts} /></div>
           <div className="text-xs text-gray-500 mt-0.5">Trainings gesamt</div>
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
           <div className="text-2xl font-bold text-gray-900">
-            {lastWeight?.body_weight ? `${lastWeight.body_weight} kg` : '–'}
+            {lastWeight?.body_weight ? <><AnimatedNumber value={lastWeight.body_weight} decimals={1} /> kg</> : '-'}
           </div>
           <div className="text-xs text-gray-500 mt-0.5">Letztes Gewicht</div>
         </div>
@@ -169,7 +175,7 @@ export default function ClientDashboard() {
             {menuOpenDayId && (
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpenDayId(null)} />
             )}
-            {planDays.map(day => {
+            {planDays.map((day, index) => {
               const isActive = activeDayIds.has(day.id)
               const isDone = !isActive && completedDayIds.has(day.id)
 
@@ -180,7 +186,7 @@ export default function ClientDashboard() {
               const menuTarget = `/client/workout/${day.id}/play${isDone ? '?fresh=1' : ''}`
 
               return (
-                <div key={day.id} className="relative">
+                <StaggerItem key={day.id} index={index} className="relative">
                   <div className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${rowBg}`}>
                     {/* Row — navigates to detail */}
                     <button
@@ -229,7 +235,7 @@ export default function ClientDashboard() {
                       </button>
                     </div>
                   )}
-                </div>
+                </StaggerItem>
               )
             })}
           </div>
@@ -244,7 +250,7 @@ export default function ClientDashboard() {
         <div className="p-4 grid grid-cols-2 gap-4">
           <div className="bg-gray-50 rounded-xl p-3">
             <div className="text-xs text-gray-500 mb-1">Diese Woche</div>
-            <div className="text-xl font-bold text-gray-900">{weeklyStats.workouts}</div>
+            <div className="text-xl font-bold text-gray-900"><AnimatedNumber value={weeklyStats.workouts} /></div>
             <div className="text-xs text-gray-400 mt-0.5">Trainings</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-3">
@@ -254,7 +260,7 @@ export default function ClientDashboard() {
           </div>
           <div className="bg-gray-50 rounded-xl p-3">
             <div className="text-xs text-gray-500 mb-1">Dieser Monat</div>
-            <div className="text-xl font-bold text-gray-900">{monthlyStats.workouts}</div>
+            <div className="text-xl font-bold text-gray-900"><AnimatedNumber value={monthlyStats.workouts} /></div>
             <div className="text-xs text-gray-400 mt-0.5">Trainings</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-3">
@@ -313,13 +319,14 @@ export default function ClientDashboard() {
               >
                 Abbrechen
               </button>
-              <button
+              <SuccessButton
                 onClick={handleSaveWeight}
                 disabled={!weightInput || weightSaving}
+                success={weightSaved}
                 className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors text-sm"
               >
-                {weightSaving ? 'Speichern…' : 'Speichern'}
-              </button>
+                {weightSaving ? 'Speichern...' : 'Speichern'}
+              </SuccessButton>
             </div>
           </div>
         </div>

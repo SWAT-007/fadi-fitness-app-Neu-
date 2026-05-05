@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { CheckinImage, ProgressLog, WeeklyCheckin } from '@/lib/types'
 import Lightbox from '@/components/Lightbox'
+import { AnimatedNumber, Collapsible, StaggerItem, useToast } from '@/components/Motion'
 
 // ─── Local types ────────────────────────────────────────────────────────────
 
@@ -212,6 +213,7 @@ function RatingBadge({ value, label }: { value: number | null | undefined; label
 type Tab = 'overview' | 'checkin' | 'records'
 
 export default function ProgressPage() {
+  const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [clientId, setClientId] = useState<string | null>(null)
   const [progressLogs, setProgressLogs] = useState<ProgressLog[]>([])
@@ -334,10 +336,11 @@ export default function ProgressPage() {
     if (!clientId || !weightInput) return
     setSavingWeight(true)
     const today = new Date().toISOString().split('T')[0]
-    await supabase.from('progress_logs').upsert(
+    const { error } = await supabase.from('progress_logs').upsert(
       { client_id: clientId, date: today, body_weight: parseFloat(weightInput), notes: weightNotes || null },
       { onConflict: 'client_id,date' }
     )
+    if (!error) showToast('Gewicht gespeichert ✓', 'success')
     setWeightInput('')
     setWeightNotes('')
     setShowWeightForm(false)
@@ -474,7 +477,8 @@ export default function ProgressPage() {
           `Fehler: ${unique.join(' | ')}`
         )
       } else {
-        setCheckinSuccess(true)
+      setCheckinSuccess(true)
+      showToast('Check-in gespeichert ✓', 'success')
         setTimeout(() => setCheckinSuccess(false), 4000)
       }
 
@@ -555,16 +559,16 @@ export default function ProgressPage() {
           {/* Stats grid */}
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm text-center">
-              <div className="text-xl font-bold text-gray-900">{latestWeight ?? '–'}</div>
+              <div className="text-xl font-bold text-gray-900">{latestWeight ? <AnimatedNumber value={latestWeight} decimals={1} /> : '-'}</div>
               <div className="text-xs text-gray-500 mt-0.5">kg aktuell</div>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm text-center">
-              <div className="text-xl font-bold text-gray-900">{totalWorkouts}</div>
+              <div className="text-xl font-bold text-gray-900"><AnimatedNumber value={totalWorkouts} /></div>
               <div className="text-xs text-gray-500 mt-0.5">Trainings</div>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm text-center">
               <div className={`text-xl font-bold ${streak > 0 ? 'text-orange-500' : 'text-gray-400'}`}>
-                {streak > 0 ? `${streak}` : '–'}
+                {streak > 0 ? <AnimatedNumber value={streak} /> : '-'}
               </div>
               <div className="text-xs text-gray-500 mt-0.5">{streak > 0 ? '🔥 Wochen' : 'Streak'}</div>
             </div>
@@ -590,7 +594,7 @@ export default function ProgressPage() {
             </div>
 
             {/* Inline weight entry form */}
-            {showWeightForm && (
+            <Collapsible open={showWeightForm}>
               <form onSubmit={handleSaveWeight} className="mb-4 p-4 bg-gray-50 rounded-xl space-y-3">
                 <div className="flex gap-3">
                   <div className="flex-1">
@@ -621,7 +625,7 @@ export default function ProgressPage() {
                   </button>
                 </div>
               </form>
-            )}
+            </Collapsible>
 
             {chartData.length >= 2 ? (
               <SvgLineChart data={chartData} />
@@ -650,8 +654,9 @@ export default function ProgressPage() {
                 <h3 className="font-semibold text-gray-900 text-sm">Letzte Trainings</h3>
               </div>
               <ul className="divide-y divide-gray-100">
-                {workoutLogs.slice(0, 5).map(log => (
-                  <li key={log.id} className="flex items-center gap-3 px-5 py-3">
+                {workoutLogs.slice(0, 5).map((log, index) => (
+                  <li key={log.id}>
+                    <StaggerItem index={index} className="flex items-center gap-3 px-5 py-3">
                     <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500 flex-shrink-0">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -670,6 +675,7 @@ export default function ProgressPage() {
                         {formatDuration(log.duration_seconds)}
                       </span>
                     ) : null}
+                    </StaggerItem>
                   </li>
                 ))}
               </ul>

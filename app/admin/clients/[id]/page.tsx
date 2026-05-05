@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { CheckinImage, Client, AssignedPlan, WorkoutPlan, WorkoutLog, ProgressLog, WeeklyCheckin } from '@/lib/types'
 import Lightbox from '@/components/Lightbox'
+import { useToast } from '@/components/Motion'
 
 type Tab = 'overview' | 'plans' | 'history' | 'progress' | 'analyse' | 'checkins'
 
@@ -129,6 +130,7 @@ function BarChart({ data, color, formatValue }: {
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const { showToast } = useToast()
 
   const [client, setClient] = useState<Client | null>(null)
   const [assignedPlans, setAssignedPlans] = useState<AssignedPlan[]>([])
@@ -302,6 +304,7 @@ export default function ClientDetailPage() {
     if (!selectedPlanId) return
     setAssigning(true)
     await supabase.from('assigned_plans').insert({ client_id: id, plan_id: selectedPlanId, is_active: true })
+    showToast('Plan zugewiesen ✓', 'success')
     setSelectedPlanId('')
     await load()
     setAssigning(false)
@@ -309,11 +312,13 @@ export default function ClientDetailPage() {
 
   const togglePlanActive = async (apId: string, current: boolean) => {
     await supabase.from('assigned_plans').update({ is_active: !current }).eq('id', apId)
+    showToast(!current ? 'Plan aktiviert ✓' : 'Plan deaktiviert', 'success')
     await load()
   }
 
   const removePlan = async (apId: string) => {
     await supabase.from('assigned_plans').delete().eq('id', apId)
+    showToast('Plan entfernt', 'danger')
     await load()
   }
 
@@ -329,6 +334,7 @@ export default function ClientDetailPage() {
     if (!client) return
     setSavingNotes(true)
     await supabase.from('clients').update({ notes: notesValue || null }).eq('id', client.id)
+    showToast('Notiz gespeichert ✓', 'success')
     setSavingNotes(false)
     setEditingNotes(false)
     await load()

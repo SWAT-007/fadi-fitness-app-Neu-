@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { AssignedPlan, WorkoutPlan, WorkoutDay } from '@/lib/types'
+import { StaggerItem } from '@/components/Motion'
 
 export default function ClientPlanPage() {
   const router = useRouter()
@@ -92,12 +93,12 @@ export default function ClientPlanPage() {
           <p className="text-gray-400 text-xs mt-1">Dein Trainer wird dir bald einen Plan zuweisen.</p>
         </div>
       ) : (
-        plans.map(ap => {
+        plans.map((ap, planIndex) => {
           const sortedDays = [...(ap.plan.workout_days ?? [])]
             .sort((a, b) => a.sort_order - b.sort_order)
 
           return (
-            <div key={ap.id} className="mb-6">
+            <StaggerItem key={ap.id} index={planIndex} className="mb-6">
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 {/* Plan header */}
                 <div className="px-5 pt-5 pb-3 border-b border-gray-100">
@@ -107,7 +108,7 @@ export default function ClientPlanPage() {
 
                 {/* Days */}
                 <div className="p-3 space-y-1">
-                  {sortedDays.map(day => {
+                  {sortedDays.map((day, index) => {
                     const isActive = activeDayIds.has(day.id)
                     const isDone   = !isActive && completedDayIds.has(day.id)
 
@@ -118,7 +119,7 @@ export default function ClientPlanPage() {
                     const menuTarget = `/client/workout/${day.id}/play${isDone ? '?fresh=1' : ''}`
 
                     return (
-                      <div key={day.id} className="relative">
+                      <StaggerItem key={day.id} index={index} className="relative">
                         <div className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${rowBg}`}>
                           {/* Row — navigates to preview */}
                           <button
@@ -178,12 +179,12 @@ export default function ClientPlanPage() {
                             </button>
                           </div>
                         )}
-                      </div>
+                      </StaggerItem>
                     )
                   })}
                 </div>
               </div>
-            </div>
+            </StaggerItem>
           )
         })
       )}

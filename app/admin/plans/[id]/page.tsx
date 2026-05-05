@@ -7,6 +7,7 @@ import ExercisePicker from '@/components/ExercisePicker'
 import { supabase } from '@/lib/supabase'
 import type { WorkoutPlan, WorkoutDay, Exercise } from '@/lib/types'
 import type { LibraryExercise } from '@/lib/exercises'
+import { Collapsible, StaggerItem, useToast } from '@/components/Motion'
 
 type ExerciseForm = {
   name: string; description: string; sets: number; reps: string
@@ -18,6 +19,7 @@ const emptyExForm: ExerciseForm = { name: '', description: '', sets: 3, reps: '1
 export default function PlanBuilderPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const { showToast } = useToast()
 
   const [plan, setPlan] = useState<WorkoutPlan | null>(null)
   const [days, setDays] = useState<WorkoutDay[]>([])
@@ -78,6 +80,7 @@ export default function PlanBuilderPage() {
     await supabase.from('workout_plans').update({ name: planName, description: planDesc || null }).eq('id', id)
     setPlan(p => p ? { ...p, name: planName, description: planDesc } : p)
     setEditingPlan(false)
+    showToast('Plan gespeichert ✓', 'success')
   }
 
   const openAddDay = () => { setDayModal({ open: true, editing: null }); setDayName(''); setDayDesc('') }
@@ -91,12 +94,14 @@ export default function PlanBuilderPage() {
       await supabase.from('workout_days').insert({ plan_id: id, name: dayName, description: dayDesc || null, sort_order: days.length })
     }
     setDayModal({ open: false, editing: null })
+    showToast(dayModal.editing ? 'Trainingstag gespeichert ✓' : 'Trainingstag erstellt ✓', 'success')
     await load()
   }
 
   const deleteDay = async (dayId: string) => {
     if (!confirm('Trainingstag und alle Übungen löschen?')) return
     await supabase.from('workout_days').delete().eq('id', dayId)
+    showToast('Trainingstag geloescht', 'danger')
     await load()
   }
 
@@ -123,6 +128,7 @@ export default function PlanBuilderPage() {
       image_url: exercise.image_url ?? null,
     })
     setPickerDayId(null)
+    showToast('Uebung hinzugefuegt ✓', 'success')
     await load()
   }
 
@@ -145,12 +151,14 @@ export default function PlanBuilderPage() {
       await supabase.from('exercises').insert(payload)
     }
     setExModal({ open: false, dayId: '', editing: null })
+    showToast(exModal.editing ? 'Uebung gespeichert ✓' : 'Uebung erstellt ✓', 'success')
     await load()
   }
 
   const deleteEx = async (exId: string) => {
     if (!confirm('Übung löschen?')) return
     await supabase.from('exercises').delete().eq('id', exId)
+    showToast('Uebung geloescht', 'danger')
     await load()
   }
 
@@ -240,14 +248,15 @@ export default function PlanBuilderPage() {
             </div>
 
             {/* Exercises */}
-            {expandedDays.has(day.id) && (
+            <Collapsible open={expandedDays.has(day.id)}>
               <div className="border-t border-gray-100">
                 {(exercises[day.id] ?? []).length === 0 ? (
                   <p className="text-sm text-gray-400 px-5 py-4">Noch keine Übungen.</p>
                 ) : (
                   <ul className="divide-y divide-gray-100">
                     {(exercises[day.id] ?? []).map((ex, ei) => (
-                      <li key={ex.id} className="px-5 py-3 flex items-start gap-3">
+                      <li key={ex.id}>
+                        <StaggerItem index={ei} className="px-5 py-3 flex items-start gap-3">
                         <div className="w-6 h-6 rounded-md bg-gray-100 text-gray-500 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
                           {ei + 1}
                         </div>
@@ -264,6 +273,7 @@ export default function PlanBuilderPage() {
                           <button onClick={() => openEditEx(ex)} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg text-xs">✏️</button>
                           <button onClick={() => deleteEx(ex.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg text-xs">🗑️</button>
                         </div>
+                        </StaggerItem>
                       </li>
                     ))}
                   </ul>
@@ -277,7 +287,7 @@ export default function PlanBuilderPage() {
                   </button>
                 </div>
               </div>
-            )}
+            </Collapsible>
           </div>
         ))}
       </div>

@@ -24,7 +24,18 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(gh pr create --base main --title 'fix\\(nutrition\\): apply trainer'\\\\''s vegetable grams immediately on pick' --body ' *)"
+      "Bash(gh pr create --base main --title 'fix\\(nutrition\\): apply trainer'\\\\''s vegetable grams immediately on pick' --body ' *)",
+      "Bash(npm install *)",
+      "Bash(node -e \"const p = require\\('pdf-parse'\\); console.log\\('ok'\\)\")",
+      "Bash(node -e \"const p = require\\('pdf-parse'\\); const fs = require\\('fs'\\); const buf = fs.readFileSync\\('public/pdfs/RTG_50_beste_Rezepte \\(1\\).pdf'\\); p\\(buf\\).then\\(d => console.log\\('chars:', d.text.length\\)\\).catch\\(e => console.error\\('ERR:', e.message\\)\\)\")",
+      "Bash(node -e \"const m = require\\('pdf-parse'\\); console.log\\(typeof m, typeof m.default, Object.keys\\(m\\).slice\\(0,10\\)\\)\")",
+      "Bash(node -e \"const d=require\\('/dev/stdin'\\); console.log\\(d.main, d.module, d.exports, d.type\\)\")",
+      "Bash(node -e \"const {PDFParse} = require\\('pdf-parse'\\); console.log\\(typeof PDFParse\\)\")",
+      "Bash(node -p \"JSON.parse\\(require\\('fs'\\).readFileSync\\(0,'utf8'\\)\\).version\")",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const p = require\\('pdf-parse'\\); const fs = require\\('fs'\\); const buf = fs.readFileSync\\('public/pdfs/RTG_50_beste_Rezepte \\(1\\).pdf'\\); p\\(buf\\).then\\(d => console.log\\('ok, chars:', d.text.length\\)\\).catch\\(e => console.error\\('ERR:', e.message\\)\\)\")",
+      "Bash(node --loader ts-node/esm --experimental-specifier-resolution=node -e ' *)",
+      "Bash(npx eslint *)"
     ]
   }
 }

@@ -3,14 +3,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Message, Profile, Client } from '@/lib/types'
+import { StaggerItem, SuccessButton, useToast } from '@/components/Motion'
 
 export default function ClientMessagesPage() {
+  const { showToast } = useToast()
   const [myProfile, setMyProfile] = useState<Profile | null>(null)
   const [trainerProfile, setTrainerProfile] = useState<Profile | null>(null)
   const [client, setClient] = useState<Client | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -74,11 +77,16 @@ export default function ClientMessagesPage() {
     e.preventDefault()
     if (!newMessage.trim() || !myProfile || !trainerProfile) return
     setSending(true)
-    await supabase.from('messages').insert({
+    const { error } = await supabase.from('messages').insert({
       sender_id: myProfile.id,
       receiver_id: trainerProfile.id,
       content: newMessage.trim(),
     })
+    if (!error) {
+      setSent(true)
+      showToast('Nachricht gesendet ✓', 'info')
+      window.setTimeout(() => setSent(false), 1500)
+    }
     setNewMessage('')
     setSending(false)
   }
@@ -117,10 +125,10 @@ export default function ClientMessagesPage() {
             Noch keine Nachrichten. Schreib deinem Trainer!
           </p>
         )}
-        {messages.map(msg => {
+        {messages.map((msg, index) => {
           const isMe = msg.sender_id === myProfile?.id
           return (
-            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+            <StaggerItem key={msg.id} index={index} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-xs px-4 py-2.5 rounded-2xl text-sm shadow-sm ${
                 isMe
                   ? 'bg-emerald-600 text-white rounded-br-sm'
@@ -131,7 +139,7 @@ export default function ClientMessagesPage() {
                   {new Date(msg.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
-            </div>
+            </StaggerItem>
           )
         })}
         <div ref={bottomRef} />
@@ -145,13 +153,14 @@ export default function ClientMessagesPage() {
           placeholder="Nachricht schreiben…"
           className="flex-1 px-4 py-2.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
-        <button
+        <SuccessButton
           type="submit"
           disabled={sending || !newMessage.trim()}
+          success={sent}
           className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
         >
           Senden
-        </button>
+        </SuccessButton>
       </form>
     </div>
   )

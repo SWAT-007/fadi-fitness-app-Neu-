@@ -40,11 +40,23 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Supabase Admin-Client (service role key, server-side only) ───────────
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  )
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error('[create-client] Missing env vars:', {
+      hasUrl: !!supabaseUrl,
+      hasServiceKey: !!serviceRoleKey,
+    })
+    return NextResponse.json(
+      { error: 'Server-Konfigurationsfehler: Umgebungsvariablen fehlen. Bitte SUPABASE_SERVICE_ROLE_KEY in Vercel hinzufügen.' },
+      { status: 500 }
+    )
+  }
+
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
 
   // ── Create auth user ─────────────────────────────────────────────────────
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({

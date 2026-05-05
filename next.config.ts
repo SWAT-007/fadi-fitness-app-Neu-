@@ -1,10 +1,17 @@
-// @ts-ignore
 import withPWA from "next-pwa";
 
-const nextConfig = withPWA({
+const withPWAConfig = withPWA({
   dest: "public",
+  disable: process.platform === "win32" || process.env.DISABLE_PWA === "true",
   register: true,
   skipWaiting: true,
+});
+
+const nextConfig = withPWAConfig({
+  experimental: {
+    workerThreads: true,
+  },
+  serverExternalPackages: ["pdf-parse"],
 });
 
 export default nextConfig;

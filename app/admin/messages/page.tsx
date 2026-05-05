@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Client, Message, Profile } from '@/lib/types'
+import { StaggerItem, SuccessButton, useToast } from '@/components/Motion'
 
 export default function TrainerMessagesPage() {
   const searchParams = useSearchParams()
+  const { showToast } = useToast()
   const initialClientId = searchParams.get('client')
 
   const [clients, setClients] = useState<Client[]>([])
@@ -15,6 +17,7 @@ export default function TrainerMessagesPage() {
   const [myProfile, setMyProfile] = useState<Profile | null>(null)
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -86,11 +89,16 @@ export default function TrainerMessagesPage() {
     e.preventDefault()
     if (!newMessage.trim() || !selectedClient?.user_id || !myProfile) return
     setSending(true)
-    await supabase.from('messages').insert({
+    const { error } = await supabase.from('messages').insert({
       sender_id: myProfile.id,
       receiver_id: selectedClient.user_id,
       content: newMessage.trim(),
     })
+    if (!error) {
+      setSent(true)
+      showToast('Nachricht gesendet ✓', 'info')
+      window.setTimeout(() => setSent(false), 1500)
+    }
     setNewMessage('')
     setSending(false)
   }
@@ -110,9 +118,9 @@ export default function TrainerMessagesPage() {
           {clients.length === 0 ? (
             <p className="text-sm text-gray-400 p-4">Keine Kunden vorhanden.</p>
           ) : (
-            clients.map(client => (
+            clients.map((client, index) => (
+              <StaggerItem key={client.id} index={index}>
               <button
-                key={client.id}
                 onClick={() => {
                   setSelectedClient(client)
                   if (!client.user_id) setMessages([])
@@ -131,6 +139,7 @@ export default function TrainerMessagesPage() {
                   </div>
                 </div>
               </button>
+              </StaggerItem>
             ))
           )}
         </div>
@@ -171,10 +180,10 @@ export default function TrainerMessagesPage() {
               {messages.length === 0 && (
                 <p className="text-center text-gray-400 text-sm mt-8">Noch keine Nachrichten.</p>
               )}
-              {messages.map(msg => {
+              {messages.map((msg, index) => {
                 const isMe = msg.sender_id === myProfile?.id
                 return (
-                  <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                  <StaggerItem key={msg.id} index={index} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-xs lg:max-w-md px-4 py-2.5 rounded-2xl text-sm ${
                       isMe
                         ? 'bg-indigo-600 text-white rounded-br-sm'
@@ -185,7 +194,7 @@ export default function TrainerMessagesPage() {
                         {new Date(msg.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
-                  </div>
+                  </StaggerItem>
                 )
               })}
               <div ref={bottomRef} />
@@ -199,13 +208,14 @@ export default function TrainerMessagesPage() {
                 placeholder="Nachricht schreiben…"
                 className="flex-1 px-4 py-2.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
-              <button
+              <SuccessButton
                 type="submit"
                 disabled={sending || !newMessage.trim()}
+                success={sent}
                 className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
               >
                 Senden
-              </button>
+              </SuccessButton>
             </form>
           </>
         )}

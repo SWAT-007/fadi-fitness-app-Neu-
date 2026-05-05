@@ -111,6 +111,52 @@ export interface ProgressLog {
   created_at: string
 }
 
+// ─── Drink Logging ───────────────────────────────────────────────────────────
+
+export interface DrinkLog {
+  id: string
+  client_id: string
+  drink_name: string
+  calories: number | null
+  meal_number: number | null
+  logged_at: string
+}
+
+// ─── Meal Logging ─────────────────────────────────────────────────────────────
+
+export interface MealLog {
+  id: string
+  client_id: string
+  meal_name: string
+  calories: number | null
+  protein_g: number | null
+  carbs_g: number | null
+  fat_g: number | null
+  logged_at: string
+}
+
+// ─── Meal History ─────────────────────────────────────────────────────────────
+
+export interface HistoryIngredient {
+  food_id: string
+  category: string
+  name: string
+  grams: number
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+}
+
+export interface MealHistoryEntry {
+  id: string
+  client_id: string
+  meal_name: string
+  ingredients: HistoryIngredient[]
+  total_calories: number | null
+  logged_at: string
+}
+
 export interface Message {
   id: string
   sender_id: string

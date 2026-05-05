@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Client, WorkoutPlan } from '@/lib/types'
+import { AnimatedNumber, StaggerItem, SuccessButton, useToast } from '@/components/Motion'
 
 export default function PlansPage() {
+  const { showToast } = useToast()
   const [plans, setPlans] = useState<WorkoutPlan[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
@@ -14,6 +16,7 @@ export default function PlansPage() {
   const [assignPlanId, setAssignPlanId] = useState('')
   const [assignError, setAssignError] = useState('')
   const [assignSuccess, setAssignSuccess] = useState('')
+  const [assignDone, setAssignDone] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
   const load = async () => {
@@ -61,13 +64,17 @@ export default function PlansPage() {
     setAssignClientId('')
     setAssignPlanId('')
     setAssignSuccess('Plan wurde zugewiesen.')
+    setAssignDone(true)
+    showToast('Plan zugewiesen ✓', 'success')
+    window.setTimeout(() => setAssignDone(false), 1500)
     setAssigning(false)
   }
 
   const handleDelete = async () => {
     if (!deleteId) return
-    await supabase.from('workout_plans').delete().eq('id', deleteId)
+    const { error } = await supabase.from('workout_plans').delete().eq('id', deleteId)
     setDeleteId(null)
+    if (!error) showToast('Plan geloescht', 'danger')
     await load()
   }
 
@@ -76,7 +83,7 @@ export default function PlansPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Trainingspläne</h1>
-          <p className="text-gray-500 text-sm mt-1">{plans.length} Pläne erstellt</p>
+          <p className="text-gray-500 text-sm mt-1"><AnimatedNumber value={plans.length} /> Plaene erstellt</p>
         </div>
         <div className="flex gap-2">
           <Link
@@ -137,13 +144,14 @@ export default function PlansPage() {
             ))}
           </select>
 
-          <button
+          <SuccessButton
             type="submit"
             disabled={!assignClientId || !assignPlanId || assigning}
+            success={assignDone}
             className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
           >
             {assigning ? 'Speichern...' : 'Zuweisen'}
-          </button>
+          </SuccessButton>
         </div>
       </form>
 
@@ -161,10 +169,10 @@ export default function PlansPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {plans.map(plan => {
+          {plans.map((plan, index) => {
             const dayCount = (plan as WorkoutPlan & { workout_days: { id: string }[] }).workout_days?.length ?? 0
             return (
-              <div key={plan.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
+              <StaggerItem key={plan.id} index={index} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
                 <Link href={`/admin/plans/${plan.id}`} className="block p-5">
                   <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-xl mb-4">📋</div>
                   <h3 className="font-semibold text-gray-900 mb-1">{plan.name}</h3>
@@ -189,7 +197,7 @@ export default function PlansPage() {
                     Löschen
                   </button>
                 </div>
-              </div>
+              </StaggerItem>
             )
           })}
         </div>

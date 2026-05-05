@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Client } from '@/lib/types'
+import { AnimatedNumber, StaggerItem } from '@/components/Motion'
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([])
@@ -31,7 +32,7 @@ export default function ClientsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Kunden</h1>
-          <p className="text-gray-500 text-sm mt-1">{clients.length} Kunden gesamt</p>
+          <p className="text-gray-500 text-sm mt-1"><AnimatedNumber value={clients.length} /> Kunden gesamt</p>
         </div>
         <Link
           href="/admin/clients/new"
@@ -56,8 +57,9 @@ export default function ClientsPage() {
       ) : (
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
           <ul className="divide-y divide-gray-100">
-            {clients.map(client => (
+            {clients.map((client, index) => (
               <li key={client.id}>
+                <StaggerItem index={index}>
                 <Link
                   href={`/admin/clients/${client.id}`}
                   className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors"
@@ -75,6 +77,7 @@ export default function ClientsPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </Link>
+                </StaggerItem>
               </li>
             ))}
           </ul>
