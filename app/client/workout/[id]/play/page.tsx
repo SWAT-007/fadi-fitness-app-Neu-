@@ -48,6 +48,8 @@ export default function WorkoutPlayerPage() {
   const [logs, setLogs] = useState<Record<string, SetLog[]>>({})
   const [existingLogs, setExistingLogs] = useState<Record<string, Record<number, ExerciseLog>>>({})
   const [clientId, setClientId] = useState<string | null>(null)
+  const [clientTrainerId, setClientTrainerId] = useState<string | null>(null)
+  const [clientName, setClientName] = useState<string>('')
   const [workoutLogId, setWorkoutLogId] = useState<string | null>(null)
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -85,7 +87,7 @@ export default function WorkoutPlayerPage() {
       const [workoutRes, exercisesRes, clientRes] = await Promise.all([
         supabase.from('workout_days').select('*').eq('id', id).single(),
         supabase.from('exercises').select('*').eq('day_id', id).order('sort_order'),
-        supabase.from('clients').select('id').eq('user_id', user.id).maybeSingle(),
+        supabase.from('clients').select('id, trainer_id, full_name').eq('user_id', user.id).maybeSingle(),
       ])
 
       if (!workoutRes.data) { router.push('/client/plan'); return }
@@ -97,6 +99,8 @@ export default function WorkoutPlayerPage() {
       const client = clientRes.data
       if (!client) { setLoading(false); return }
       setClientId(client.id)
+      setClientTrainerId((client as typeof client & { trainer_id: string }).trainer_id ?? null)
+      setClientName((client as typeof client & { full_name: string }).full_name ?? '')
 
       const today = new Date().toISOString().split('T')[0]
 
@@ -238,6 +242,19 @@ export default function WorkoutPlayerPage() {
     setSaving(false)
     setComplete(true)
     showToast('Workout gespeichert ✓', 'success')
+
+    if (clientTrainerId) {
+      const dayName = workout?.name ?? 'ein Training'
+      await supabase.from('notifications').insert({
+        client_id: clientTrainerId,
+        type: 'workout',
+        title: `${clientName || 'Ein Kunde'} hat ${dayName} abgeschlossen`,
+        body: durationSeconds > 0
+          ? `Dauer: ${Math.floor(durationSeconds / 60)} Minuten`
+          : null,
+        is_read: false,
+      })
+    }
   }
 
   const handleSwapRequest = async () => {

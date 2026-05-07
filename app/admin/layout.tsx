@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/lib/types'
 import { PageFade, ToastProvider } from '@/components/Motion'
+import TrainerNotificationBell from '@/components/TrainerNotificationBell'
 
 const stroke = {
   fill: 'none' as const,
@@ -45,14 +46,16 @@ const Icon = {
   ),
 }
 
-const navItems: { href: string; label: string; icon: ReactNode }[] = [
+type NavBadgeKey = 'messages' | 'requests'
+
+const navItems: { href: string; label: string; icon: ReactNode; badgeKey?: NavBadgeKey }[] = [
   { href: '/admin', label: 'Dashboard', icon: Icon.dashboard },
   { href: '/admin/clients', label: 'Kunden', icon: Icon.users },
   { href: '/admin/plans', label: 'Trainingspläne', icon: Icon.plans },
   { href: '/admin/nutrition', label: 'Ernährung', icon: Icon.nutrition },
   { href: '/admin/recipes', label: 'Rezepte', icon: Icon.recipes },
-  { href: '/admin/requests', label: 'Anfragen', icon: Icon.requests },
-  { href: '/admin/messages', label: 'Nachrichten', icon: Icon.messages },
+  { href: '/admin/requests', label: 'Anfragen', icon: Icon.requests, badgeKey: 'requests' },
+  { href: '/admin/messages', label: 'Nachrichten', icon: Icon.messages, badgeKey: 'messages' },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -62,6 +65,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [loading, setLoading] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [navBadges, setNavBadges] = useState<Record<NavBadgeKey, number>>({ messages: 0, requests: 0 })
+
+  const loadNavBadges = useCallback(async (trainerId: string) => {
+    const [messagesRes, requestsRes] = await Promise.all([
+      supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('client_id', trainerId)
+        .eq('type', 'message')
+        .eq('is_read', false),
+      supabase
+        .from('exercise_change_requests')
+        .select('id, clients!inner(trainer_id)', { count: 'exact', head: true })
+        .eq('status', 'pending')
+        .eq('clients.trainer_id', trainerId),
+    ])
+
+    setNavBadges({
+      messages: messagesRes.count ?? 0,
+      requests: requestsRes.count ?? 0,
+    })
+  }, [])
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -109,6 +134,43 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     })
     return () => subscription.unsubscribe()
   }, [router])
+
+  useEffect(() => {
+    if (!profile) return
+    loadNavBadges(profile.id)
+
+    const channel = supabase
+      .channel(`admin-nav-badges-${profile.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications', filter: `client_id=eq.${profile.id}` },
+        () => loadNavBadges(profile.id)
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'exercise_change_requests' },
+        () => loadNavBadges(profile.id)
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [profile, loadNavBadges])
+
+  useEffect(() => {
+    if (!profile || !pathname.startsWith('/admin/messages')) return
+
+    const markMessageNotificationsRead = async () => {
+      setNavBadges(prev => ({ ...prev, messages: 0 }))
+      await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('client_id', profile.id)
+        .eq('type', 'message')
+        .eq('is_read', false)
+    }
+
+    markMessageNotificationsRead()
+  }, [profile, pathname])
 
   const handleLogout = async () => {
     try {
@@ -187,6 +249,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             const active = item.href === '/admin'
               ? pathname === '/admin'
               : pathname.startsWith(item.href)
+            const badgeCount = item.badgeKey ? navBadges[item.badgeKey] : 0
             return (
               <Link
                 key={item.href}
@@ -204,7 +267,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <span className={`w-[18px] h-[18px] flex items-center justify-center ${active ? 'text-indigo-400' : 'text-gray-500 group-hover:text-gray-300'}`}>
                   {item.icon}
                 </span>
-                {item.label}
+                <span className="flex-1 truncate">{item.label}</span>
+                {badgeCount > 0 && (
+                  <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-indigo-500 text-white text-[11px] font-bold leading-none flex items-center justify-center ring-1 ring-white/10 tabular-nums">
+                    {badgeCount > 99 ? '99+' : badgeCount}
+                  </span>
+                )}
               </Link>
             )
           })}
@@ -212,7 +280,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Profile + Logout */}
         <div className="px-3 py-3 border-t border-white/[0.06]">
-          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] mb-1">
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] mb-1 pr-2">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-[13px] font-semibold ring-1 ring-white/20">
               {profile?.full_name?.charAt(0)?.toUpperCase() ?? 'A'}
             </div>
@@ -220,6 +288,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <div className="text-white text-[13px] font-medium truncate">{profile?.full_name}</div>
               <div className="text-gray-500 text-[11px] truncate">{profile?.email}</div>
             </div>
+            {profile && <TrainerNotificationBell trainerId={profile.id} />}
           </div>
           <button
             onClick={handleLogout}
@@ -241,7 +310,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           >
             <span className="w-5 h-5 block">{Icon.menu}</span>
           </button>
-          <span className="font-semibold text-gray-900 tracking-tight">MilaCoach</span>
+          <span className="font-semibold text-gray-900 tracking-tight flex-1">MilaCoach</span>
+          {profile && <TrainerNotificationBell trainerId={profile.id} theme="light" />}
         </header>
 
         <main className="flex-1 overflow-y-auto">

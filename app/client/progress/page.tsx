@@ -217,6 +217,8 @@ export default function ProgressPage() {
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [clientId, setClientId] = useState<string | null>(null)
+  const [clientTrainerId, setClientTrainerId] = useState<string | null>(null)
+  const [clientName, setClientName] = useState<string>('')
   const [progressLogs, setProgressLogs] = useState<ProgressLog[]>([])
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLogItem[]>([])
   const [checkins, setCheckins] = useState<WeeklyCheckin[]>([])
@@ -254,9 +256,11 @@ export default function ProgressPage() {
     try {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
-    const { data: client } = await supabase.from('clients').select('id').eq('user_id', user.id).maybeSingle()
+    const { data: client } = await supabase.from('clients').select('id, trainer_id, full_name').eq('user_id', user.id).maybeSingle()
     if (!client) { setLoading(false); return }
     setClientId(client.id)
+    setClientTrainerId((client as typeof client & { trainer_id: string }).trainer_id ?? null)
+    setClientName((client as typeof client & { full_name: string }).full_name ?? '')
 
     const [progressRes, workoutsRes, totalRes, checkinsRes] = await Promise.all([
       supabase.from('progress_logs').select('*').eq('client_id', client.id).order('date', { ascending: false }).limit(30),
@@ -455,7 +459,16 @@ export default function ProgressPage() {
       } else {
       setCheckinSuccess(true)
       showToast('Check-in gespeichert ✓', 'success')
-        setTimeout(() => setCheckinSuccess(false), 4000)
+      setTimeout(() => setCheckinSuccess(false), 4000)
+      if (clientTrainerId) {
+        await supabase.from('notifications').insert({
+          client_id: clientTrainerId,
+          type: 'checkin',
+          title: `${clientName || 'Ein Kunde'} hat einen Check-in eingereicht`,
+          body: ciComment?.trim() ? ciComment.trim().slice(0, 80) : null,
+          is_read: false,
+        })
+      }
       }
 
       await load()

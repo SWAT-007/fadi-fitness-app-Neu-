@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Client, Message, Profile } from '@/lib/types'
@@ -63,8 +63,33 @@ export default function TrainerMessagesPage() {
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [unreadByClientId, setUnreadByClientId] = useState<Record<string, number>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  const loadUnreadCounts = useCallback(async (trainerId: string, clientList: Client[]) => {
+    const clientUserIds = clientList.map(client => client.user_id).filter(Boolean) as string[]
+    if (clientUserIds.length === 0) {
+      setUnreadByClientId({})
+      return
+    }
+
+    const { data } = await supabase
+      .from('messages')
+      .select('sender_id')
+      .eq('receiver_id', trainerId)
+      .is('read_at', null)
+      .in('sender_id', clientUserIds)
+
+    const senderCounts = new Map<string, number>()
+    for (const message of data ?? []) {
+      senderCounts.set(message.sender_id, (senderCounts.get(message.sender_id) ?? 0) + 1)
+    }
+
+    setUnreadByClientId(Object.fromEntries(
+      clientList.map(client => [client.id, client.user_id ? senderCounts.get(client.user_id) ?? 0 : 0])
+    ))
+  }, [])
 
   useEffect(() => {
     const init = async () => {
@@ -79,6 +104,7 @@ export default function TrainerMessagesPage() {
       setMyProfile(profileRes.data)
       const clientList = clientsRes.data ?? []
       setClients(clientList)
+      await loadUnreadCounts(user.id, clientList)
 
       if (initialClientId) {
         const found = clientList.find(c => c.id === initialClientId)
@@ -88,7 +114,7 @@ export default function TrainerMessagesPage() {
       setLoading(false)
     }
     init()
-  }, [initialClientId])
+  }, [initialClientId, loadUnreadCounts])
 
   useEffect(() => {
     if (!selectedClient?.user_id || !myProfile) {
@@ -103,6 +129,13 @@ export default function TrainerMessagesPage() {
         .or(`and(sender_id.eq.${myProfile.id},receiver_id.eq.${selectedClient.user_id}),and(sender_id.eq.${selectedClient.user_id},receiver_id.eq.${myProfile.id})`)
         .order('created_at')
       setMessages((data ?? []) as Message[])
+      setUnreadByClientId(prev => ({ ...prev, [selectedClient.id]: 0 }))
+      await supabase
+        .from('messages')
+        .update({ read_at: new Date().toISOString() })
+        .eq('sender_id', selectedClient.user_id)
+        .eq('receiver_id', myProfile.id)
+        .is('read_at', null)
     }
     loadMessages()
 
@@ -115,12 +148,50 @@ export default function TrainerMessagesPage() {
           (msg.sender_id === selectedClient.user_id && msg.receiver_id === myProfile.id)
         ) {
           setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
+          if (msg.sender_id === selectedClient.user_id && msg.receiver_id === myProfile.id) {
+            setUnreadByClientId(prev => ({ ...prev, [selectedClient.id]: 0 }))
+            supabase
+              .from('messages')
+              .update({ read_at: new Date().toISOString() })
+              .eq('id', msg.id)
+              .then()
+          }
         }
       })
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
   }, [selectedClient, myProfile])
+
+  useEffect(() => {
+    if (!myProfile || clients.length === 0) return
+
+    const channel = supabase
+      .channel(`admin-message-badges-${myProfile.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${myProfile.id}` }, payload => {
+        const msg = payload.new as Message
+        const senderClient = clients.find(client => client.user_id === msg.sender_id)
+        if (!senderClient) return
+
+        if (selectedClient?.user_id === msg.sender_id) {
+          setUnreadByClientId(prev => ({ ...prev, [senderClient.id]: 0 }))
+          supabase
+            .from('messages')
+            .update({ read_at: new Date().toISOString() })
+            .eq('id', msg.id)
+            .then()
+          return
+        }
+
+        setUnreadByClientId(prev => ({
+          ...prev,
+          [senderClient.id]: (prev[senderClient.id] ?? 0) + 1,
+        }))
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [clients, myProfile, selectedClient])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -201,6 +272,7 @@ export default function TrainerMessagesPage() {
           ) : (
             filteredClients.map((client, index) => {
               const isSelected = selectedClient?.id === client.id
+              const unreadCount = unreadByClientId[client.id] ?? 0
               return (
                 <StaggerItem key={client.id} index={index}>
                   <button
@@ -212,8 +284,15 @@ export default function TrainerMessagesPage() {
                     {isSelected && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-7 w-[3px] rounded-r-full bg-indigo-600" />}
                     <Avatar name={client.full_name} size={36} />
                     <div className="flex-1 min-w-0">
-                      <div className={`text-[13.5px] font-medium truncate tracking-tight ${isSelected ? 'text-indigo-700' : 'text-gray-900'}`}>
-                        {client.full_name}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`min-w-0 truncate text-[13.5px] font-medium tracking-tight ${isSelected ? 'text-indigo-700' : 'text-gray-900'}`}>
+                          {client.full_name}
+                        </span>
+                        {unreadCount > 0 && (
+                          <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-indigo-500 text-white text-[11px] font-bold leading-none flex items-center justify-center ring-1 ring-white tabular-nums">
+                            {unreadCount > 99 ? '99+' : unreadCount}
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11.5px] text-gray-400 truncate">
                         {client.user_id ? client.email : 'Kein App-Zugang'}

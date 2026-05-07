@@ -10,6 +10,7 @@ const typeIcon: Record<NotificationType, string> = {
   training_plan: '💪',
   nutrition_plan: '🥗',
   workout: '⚡',
+  checkin: 'OK',
 }
 
 const typeHref: Record<NotificationType, string> = {
@@ -17,6 +18,7 @@ const typeHref: Record<NotificationType, string> = {
   training_plan: '/client/plan',
   nutrition_plan: '/client/nutrition',
   workout: '/client/plan',
+  checkin: '/client/progress',
 }
 
 function timeAgo(value: string) {

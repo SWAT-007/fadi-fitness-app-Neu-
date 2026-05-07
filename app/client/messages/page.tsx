@@ -112,7 +112,7 @@ export default function ClientMessagesPage() {
 
   const sendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault()
-    if (!newMessage.trim() || !myProfile || !trainerProfile) return
+    if (!newMessage.trim() || !myProfile || !trainerProfile || !client) return
     const content = newMessage.trim()
     setSending(true)
     setNewMessage('')
@@ -121,7 +121,41 @@ export default function ClientMessagesPage() {
       .insert({ sender_id: myProfile.id, receiver_id: trainerProfile.id, content })
       .select('*, sender:profiles!messages_sender_id_fkey(*)')
       .single()
-    if (!error && data) appendMessage(data as Message)
+    if (!error && data) {
+      appendMessage(data as Message)
+      // Notify the trainer
+      const senderName = myProfile.full_name || client.full_name || 'Ein Kunde'
+      const notification = {
+        client_id: trainerProfile.id,
+        type: 'message',
+        title: `${senderName} hat dir eine Nachricht geschickt`,
+        body: content.slice(0, 60),
+        is_read: false,
+      }
+      console.log('[Notifications] client->trainer message insert', {
+        insertedClientId: notification.client_id,
+        trainerAuthUserId: trainerProfile.id,
+        clientTrainerId: client.trainer_id,
+        clientAuthUserId: myProfile.id,
+        clientRowId: client.id,
+        insertsTrainerUserId: notification.client_id === trainerProfile.id,
+        insertsClientOwnId: notification.client_id === myProfile.id,
+      })
+      const { data: sessionData } = await supabase.auth.getSession()
+      const notificationResponse = await fetch('/api/notifications/client-message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionData.session?.access_token ?? ''}`,
+        },
+        body: JSON.stringify({ content }),
+      })
+      const notificationResult = await notificationResponse.json().catch(() => null)
+      console.log('[Notifications] client->trainer insert result', notificationResult)
+      if (!notificationResponse.ok) {
+        console.error('[Notifications] client->trainer insert failed:', notificationResult)
+      }
+    }
     setSending(false)
     inputRef.current?.focus()
   }
@@ -265,4 +299,3 @@ function Bubble({
     </div>
   )
 }
-
