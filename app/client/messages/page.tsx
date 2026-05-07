@@ -17,20 +17,6 @@ const Icon = {
   lock: <svg viewBox="0 0 24 24" {...stroke}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /></svg>,
 }
 
-const AVATAR_GRADIENTS = [
-  'from-indigo-500 to-violet-600',
-  'from-emerald-500 to-teal-600',
-  'from-rose-500 to-pink-600',
-  'from-amber-500 to-orange-600',
-  'from-blue-500 to-cyan-600',
-  'from-fuchsia-500 to-purple-600',
-]
-function avatarGradient(seed: string) {
-  let h = 0
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
-  return AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length]
-}
-
 function isSameDay(a: string, b: string) {
   const da = new Date(a), db = new Date(b)
   return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate()
@@ -158,27 +144,8 @@ export default function ClientMessagesPage() {
     )
   }
 
-  const trainerName = trainerProfile.full_name ?? 'Trainer'
-  const grad = avatarGradient(trainerName)
-
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 8rem)' }}>
-      {/* Chat header — gradient card */}
-      <header className="relative overflow-hidden mx-3 mt-3 rounded-2xl px-4 py-3 text-white bg-gradient-to-br from-[#0b0c0f] via-[#111318] to-[#1a1d24] shadow-[0_8px_24px_-16px_rgba(0,0,0,0.5)]">
-        <span className="pointer-events-none absolute -right-8 -top-8 w-28 h-28 rounded-full bg-emerald-500/20 blur-3xl" />
-        <div className="relative flex items-center gap-3">
-          <div
-            className={`shrink-0 w-10 h-10 rounded-full bg-gradient-to-br ${grad} flex items-center justify-center font-semibold text-[14px] ring-2 ring-white/20`}
-          >
-            {trainerName.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold text-[14px] tracking-tight truncate">{trainerName}</div>
-            <div className="text-[11.5px] text-white/60">Dein Trainer</div>
-          </div>
-        </div>
-      </header>
-
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-3 py-4 bg-gradient-to-b from-gray-50 to-white">
         {messages.length === 0 ? (
