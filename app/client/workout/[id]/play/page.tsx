@@ -29,6 +29,13 @@ function CheckIcon() {
   )
 }
 
+function calc1RM(weight: string, reps: string): string {
+  const w = parseFloat(weight)
+  const r = parseInt(reps)
+  if (!w || !r || isNaN(w) || isNaN(r) || r <= 0) return '—'
+  return (w * (1 + r / 30)).toFixed(1)
+}
+
 export default function WorkoutPlayerPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -56,6 +63,9 @@ export default function WorkoutPlayerPage() {
   const [swapReason, setSwapReason] = useState('')
   const [swapSending, setSwapSending] = useState(false)
   const [swapSent, setSwapSent] = useState<string | null>(null)
+
+  const [bulkKgOpen, setBulkKgOpen] = useState(false)
+  const [bulkKgValue, setBulkKgValue] = useState('')
 
   useEffect(() => {
     if (complete) return
@@ -161,7 +171,7 @@ export default function WorkoutPlayerPage() {
     }
 
     load()
-  }, [id, router])
+  }, [id, router, freshStart])
 
   const updateSet = (exerciseId: string, setIndex: number, field: keyof SetLog, value: string | boolean) => {
     setLogs(prev => ({
@@ -193,6 +203,14 @@ export default function WorkoutPlayerPage() {
       setSaving(false)
       return
     }
+
+    await supabase
+      .from('workout_logs')
+      .delete()
+      .eq('client_id', clientId)
+      .eq('day_id', id)
+      .is('completed_at', null)
+      .neq('id', workoutLogId)
 
     for (const exercise of exercises) {
       const exerciseSets = logs[exercise.id] ?? []
@@ -248,6 +266,8 @@ export default function WorkoutPlayerPage() {
     showToast('Anfrage gesendet ✓', 'info')
   }
 
+  useEffect(() => { setBulkKgOpen(false) }, [currentExerciseIndex])
+
   // Auto-advance when all sets done
   useEffect(() => {
     if (loading || complete || saving) return
@@ -283,6 +303,13 @@ export default function WorkoutPlayerPage() {
   const exerciseSets = exercise ? logs[exercise.id] ?? [] : []
   const completedCount = exerciseSets.filter(s => s.completed).length
   const progress = exercises.length > 0 ? (currentExerciseIndex / exercises.length) * 100 : 0
+  const activeSetIndex = exerciseSets.findIndex(s => !s.completed)
+
+  const applyBulkKg = () => {
+    if (!exercise) return
+    exerciseSets.forEach((_, i) => updateSet(exercise.id, i, 'weight', bulkKgValue))
+    setBulkKgOpen(false)
+  }
 
   // ── No exercises ─────────────────────────────────────────────────────────
 
@@ -442,67 +469,163 @@ export default function WorkoutPlayerPage() {
         </div>
 
         {/* Sets table */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          {/* Column header */}
-          <div className="grid grid-cols-[2.5rem_1fr_4.5rem_3.25rem] items-center gap-2 px-3 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-gray-400 border-b border-gray-100">
-            <span className="text-center">Satz</span>
-            <span className="text-center">Gewicht (kg)</span>
-            <span className="text-center">Wdh</span>
-            <span className="text-center">✓</span>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+          {/* Column headers */}
+          <div className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 px-3 pt-3 pb-2">
+            {/* # with settings icon */}
+            <div className="flex flex-col items-center gap-0.5">
+              <svg className="w-3 h-3 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+              </svg>
+              <span className="text-[10px] font-semibold text-gray-400">#</span>
+            </div>
+            {/* KG with pencil — tap to bulk-edit */}
+            <button
+              type="button"
+              onClick={() => { setBulkKgOpen(v => !v); setBulkKgValue(exerciseSets[0]?.weight ?? '') }}
+              className="flex items-center justify-center gap-1 group"
+            >
+              <span className="text-[10px] font-semibold text-gray-400 group-hover:text-emerald-600 transition-colors">KG</span>
+              <svg className="w-3 h-3 text-gray-300 group-hover:text-emerald-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </button>
+            <span className="text-[10px] font-semibold text-gray-400 text-center">WDH</span>
+            {/* 10RM read-only */}
+            <div className="flex items-center justify-center gap-0.5">
+              <span className="text-[10px] font-semibold text-gray-400">10RM</span>
+              <svg className="w-3 h-3 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </div>
+            <span />
           </div>
 
-          {exerciseSets.map((set, setIndex) => (
-            <div
-              key={setIndex}
-              className={`grid grid-cols-[2.5rem_1fr_4.5rem_3.25rem] items-center gap-2 px-3 py-2 border-b border-gray-100 last:border-b-0 transition-colors ${
-                set.completed ? 'bg-emerald-50' : ''
-              }`}
-            >
-              <span className={`text-center text-sm font-bold tabular-nums ${
-                set.completed ? 'text-emerald-600' : 'text-gray-400'
-              }`}>
-                {setIndex + 1}
-              </span>
-
+          {/* Bulk KG row */}
+          {bulkKgOpen && (
+            <div className="flex items-center gap-2 px-3 pb-2">
               <input
                 type="number"
                 inputMode="decimal"
                 step="0.5"
-                min="0"
-                value={set.weight}
-                onChange={event => updateSet(exercise.id, setIndex, 'weight', event.target.value)}
-                placeholder="—"
-                className="w-full px-2 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-base text-center font-semibold text-gray-900 tabular-nums placeholder:text-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
+                value={bulkKgValue}
+                onChange={e => setBulkKgValue(e.target.value)}
+                placeholder="kg für alle Sätze"
+                autoFocus
+                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-center font-semibold text-gray-900 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
               />
-
-              <span className="text-center text-sm font-medium text-gray-600 tabular-nums">
-                {set.reps}
-              </span>
-
               <button
                 type="button"
-                aria-label={`Satz ${setIndex + 1} abhaken`}
-                onClick={() => updateSet(exercise.id, setIndex, 'completed', !set.completed)}
-                className={`mx-auto w-11 h-11 rounded-lg flex items-center justify-center transition-all ${
-                  set.completed
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-gray-50 border border-gray-200 text-gray-300 hover:border-emerald-400 hover:text-emerald-500'
-                }`}
+                onClick={applyBulkKg}
+                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition-colors"
               >
-                <CheckIcon />
+                Alle setzen
               </button>
             </div>
-          ))}
-        </div>
+          )}
 
-        {/* Progress hint */}
-        <p className="text-center text-xs text-gray-400">
-          {completedCount === exerciseSets.length
-            ? (currentExerciseIndex >= exercises.length - 1
-                ? (saving ? 'Wird gespeichert…' : 'Workout wird abgeschlossen…')
-                : 'Nächste Übung…')
-            : `${completedCount} / ${exerciseSets.length} Sätze erledigt`}
-        </p>
+          <div className="mx-3 border-t border-gray-100" />
+
+          {/* Set rows */}
+          <div className="py-2 space-y-1">
+            {exerciseSets.map((set, setIndex) => {
+              const isActive = setIndex === activeSetIndex
+              const orm = calc1RM(set.weight, set.reps)
+
+              if (isActive) {
+                return (
+                  <div
+                    key={setIndex}
+                    className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 bg-blue-50 rounded-2xl px-2 py-2"
+                  >
+                    <div className="relative flex items-center justify-center">
+                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-blue-500" />
+                      <span className="text-sm font-bold text-gray-900 tabular-nums">{setIndex + 1}</span>
+                    </div>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.5"
+                      min="0"
+                      value={set.weight}
+                      onChange={e => updateSet(exercise.id, setIndex, 'weight', e.target.value)}
+                      placeholder="—"
+                      className="w-full px-2 py-2 bg-white rounded-xl text-sm text-center font-bold text-gray-900 tabular-nums shadow-sm border-0 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                    />
+                    <span className="text-sm font-bold text-gray-900 text-center tabular-nums">{set.reps}</span>
+                    <span className="text-xs font-medium text-blue-500 text-center tabular-nums">{orm}</span>
+                    <button
+                      type="button"
+                      aria-label={`Satz ${setIndex + 1} abhaken`}
+                      onClick={() => updateSet(exercise.id, setIndex, 'completed', !set.completed)}
+                      className="w-9 h-9 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center text-white transition-colors shadow-sm mx-auto"
+                    >
+                      <CheckIcon />
+                    </button>
+                  </div>
+                )
+              }
+
+              if (set.completed) {
+                return (
+                  <div
+                    key={setIndex}
+                    className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 px-2 py-2"
+                  >
+                    <span className="text-sm font-semibold text-emerald-500 text-center tabular-nums">{setIndex + 1}</span>
+                    <span className="text-sm text-gray-400 text-center tabular-nums">{set.weight || '—'}</span>
+                    <span className="text-sm text-gray-400 text-center tabular-nums">{set.reps}</span>
+                    <span className="text-xs text-gray-400 text-center tabular-nums">{orm}</span>
+                    <button
+                      type="button"
+                      aria-label={`Satz ${setIndex + 1} rückgängig`}
+                      onClick={() => updateSet(exercise.id, setIndex, 'completed', !set.completed)}
+                      className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-500 transition-colors mx-auto"
+                    >
+                      <CheckIcon />
+                    </button>
+                  </div>
+                )
+              }
+
+              return (
+                <div
+                  key={setIndex}
+                  className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 px-2 py-2"
+                >
+                  <span className="text-sm text-gray-400 text-center tabular-nums">{setIndex + 1}</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.5"
+                    min="0"
+                    value={set.weight}
+                    onChange={e => updateSet(exercise.id, setIndex, 'weight', e.target.value)}
+                    placeholder="—"
+                    className="w-full px-2 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm text-center text-gray-400 tabular-nums focus:ring-1 focus:ring-gray-300 focus:outline-none"
+                  />
+                  <span className="text-sm text-gray-400 text-center tabular-nums">{set.reps}</span>
+                  <span className="text-xs text-gray-300 text-center">—</span>
+                  <button
+                    type="button"
+                    disabled
+                    className="w-9 h-9 rounded-full border-2 border-gray-100 flex items-center justify-center text-transparent mx-auto cursor-not-allowed opacity-40"
+                  >
+                    <CheckIcon />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="pb-3 text-center text-xs text-gray-400">
+            {completedCount === exerciseSets.length
+              ? (currentExerciseIndex >= exercises.length - 1
+                  ? (saving ? 'Wird gespeichert…' : 'Workout wird abgeschlossen…')
+                  : 'Nächste Übung…')
+              : `${completedCount} / ${exerciseSets.length} Sätze erledigt`}
+          </div>
+        </div>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl">

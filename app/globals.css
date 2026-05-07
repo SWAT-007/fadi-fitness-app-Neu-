@@ -3,6 +3,10 @@
 :root {
   --background: #f9fafb;
   --foreground: #111827;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 * {
@@ -64,4 +68,43 @@ input, textarea, select {
 
 .motion-success-pulse {
   animation: motion-success-pulse 1.5s ease-out both;
+}
+
+/* Press feedback for any pressable element. Buttons must feel responsive. */
+.press {
+  transition: transform 160ms var(--ease-out);
+}
+.press:active {
+  transform: scale(0.97);
+}
+
+/* Lift on hover for cards. Hover only on real pointer devices. */
+@media (hover: hover) and (pointer: fine) {
+  .lift {
+    transition: transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out), border-color 200ms var(--ease-out);
+  }
+  .lift:hover {
+    transform: translateY(-2px);
+  }
+}
+.lift:active {
+  transform: scale(0.99);
+}
+
+/* One-shot bubble entry. Runs once per element mount, no stagger delay —
+   important for real-time messages that arrive one at a time. */
+@keyframes bubble-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.bubble-in {
+  animation: bubble-in 220ms var(--ease-out) both;
+}
+
+@keyframes typing-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+.typing-dot {
+  animation: typing-dot 1.2s infinite var(--ease-in-out);
 }

@@ -107,9 +107,6 @@ function parsePipeList(line: string): ParsedIngredient[] {
 //  556
 //  30G76G12G
 
-// Lines to ignore when searching backward for a title
-const SKIP_LINES = /^(ZUTATEN|ZUBEREITUNG|NÄHRWERTE|KALORIEN|PROTEIN|FETT|KOHLENHYDRATE|EMPFEHLUNG|PRE-WORKOUT|POST-WORKOUT|FRÜHSTÜCK|HAUPTMAHLZEIT|SNACK|SINCE)/i
-
 // Patterns that are definitely NOT recipe titles
 const NOISE_LINE = /^(\d+$|\d+G\d+G\d+G$|\d+[\d,.]*G$|\d+\s*MINUTEN|PROTEIN.*HYDRATE|NÄHRWERTE|KALORIEN|EMPFEHLUNG|PRE-WORKOUT|POST-WORKOUT|FRÜHSTÜCK|HAUPTMAHLZEIT|SINCE|EDITORIAL|FAST KITCHEN|REZEPTE IN|ZUBEREITUNGSZEIT)/i
 
@@ -169,8 +166,6 @@ function parseAllFormatA(text: string, source: string): ParsedRecipe[] {
     const start = positions[i]
     const end = i + 1 < positions.length ? positions[i + 1] : text.length
     const block = text.slice(start, end)
-    const blockUpper = block.toUpperCase()
-
     // Title from the 300 chars immediately before this ZUTATEN:
     const title = titleFromBefore(text.slice(Math.max(0, start - 300), start))
     if (!title) continue
@@ -229,7 +224,6 @@ function parseAllFormatB(text: string, source: string): ParsedRecipe[] {
   const matches: Array<{ index: number; name: string }> = []
   let m: RegExpExecArray | null
 
-  // eslint-disable-next-line no-cond-assign
   while ((m = titleRe.exec(text)) !== null) {
     // Strip trailing page number (e.g. "RECIPE NAME  28")
     const name = m[2].replace(/\s+\d{1,3}\s*$/, '').trim()
@@ -294,7 +288,6 @@ function parseAllFormatC(text: string, source: string): ParsedRecipe[] {
   const positions: number[] = []
   let rm: RegExpExecArray | null
 
-  // eslint-disable-next-line no-cond-assign
   while ((rm = macroPat.exec(text)) !== null) { positions.push(rm.index) }
 
   for (let i = 0; i < positions.length; i++) {

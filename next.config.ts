@@ -12,6 +12,11 @@ const nextConfig = withPWAConfig({
     workerThreads: true,
   },
   serverExternalPackages: ["pdf-parse"],
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'omyahzgbzmvovrmeuxlv.supabase.co' },
+    ],
+  },
 });
 
 export default nextConfig;

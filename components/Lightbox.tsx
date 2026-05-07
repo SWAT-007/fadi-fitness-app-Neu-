@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 
 interface Props {
   urls: string[]
@@ -62,13 +63,18 @@ export default function Lightbox({ urls, startIndex, onClose }: Props) {
       )}
 
       {/* Image */}
-      <img
-        src={urls[idx]}
-        alt={`Bild ${idx + 1}`}
-        className="max-w-[92vw] max-h-[88vh] object-contain rounded-lg select-none"
+      <div
+        className="relative w-[92vw] h-[88vh]"
         onClick={e => e.stopPropagation()}
-        draggable={false}
-      />
+      >
+        <Image
+          src={urls[idx]}
+          alt={`Bild ${idx + 1}`}
+          fill
+          className="object-contain rounded-lg select-none"
+          draggable={false}
+        />
+      </div>
 
       {/* Next arrow */}
       {urls.length > 1 && idx < urls.length - 1 && (

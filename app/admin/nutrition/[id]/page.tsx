@@ -337,6 +337,7 @@ export default function NutritionEditorPage() {
     if (!assignClientId) return
     setAssigning(true); setAssignMsg('')
     const payload = { client_id: assignClientId, plan_id: id, is_active: true }
+    const previousAssignment = assigned.find(row => row.client_id === assignClientId)
     const { error } = await supabase
       .from('assigned_nutrition_plans')
       .upsert(payload, { onConflict: 'client_id,plan_id' })
@@ -349,6 +350,14 @@ export default function NutritionEditorPage() {
       if (!linkedRes.data?.user_id) {
         setAssignMsg(`✓ Zugewiesen — aber „${cli?.full_name}" hat noch kein Konto. Sobald sich der Kunde mit „${cli?.email}" registriert, wird der Plan sichtbar.`)
       } else {
+        if (!previousAssignment?.is_active) {
+          await supabase.from('notifications').insert({
+            client_id: linkedRes.data.user_id,
+            type: 'nutrition_plan',
+            title: 'Neuer Ernährungsplan zugewiesen',
+            body: plan?.name ?? null,
+          })
+        }
         setAssignMsg(`✓ Plan an „${cli?.full_name}" zugewiesen.`)
       }
       setAssignClientId('')
@@ -456,7 +465,7 @@ export default function NutritionEditorPage() {
             )
           })()}
         </div>
-        <p className="text-xs text-gray-400 mb-4">Summe der Mahlzeit-Ziele vs. Tages-Ziel. Pro Makro „verteilen" klicken oder oben Rest komplett auf alle Mahlzeiten gleichmäßig verteilen lassen.</p>
+        <p className="text-xs text-gray-400 mb-4">Summe der Mahlzeit-Ziele vs. Tages-Ziel. Pro Makro &bdquo;verteilen&ldquo; klicken oder oben Rest komplett auf alle Mahlzeiten gleichmäßig verteilen lassen.</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
             { key: 'kcal'    as const, label: 'Kalorien', cur: ms.cal, max: numTCal, unit: 'kcal', color: '#f97316' },

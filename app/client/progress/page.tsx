@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import type { CheckinImage, ProgressLog, WeeklyCheckin } from '@/lib/types'
 import Lightbox from '@/components/Lightbox'
@@ -221,16 +222,10 @@ export default function ProgressPage() {
   const [checkins, setCheckins] = useState<WeeklyCheckin[]>([])
   const [totalWorkouts, setTotalWorkouts] = useState(0)
   const [tab, setTab] = useState<Tab>('overview')
-
-  // Weight entry form
-  const [showWeightForm, setShowWeightForm] = useState(false)
-  const [weightInput, setWeightInput] = useState('')
-  const [weightNotes, setWeightNotes] = useState('')
-  const [savingWeight, setSavingWeight] = useState(false)
+  const [showRecentWorkouts, setShowRecentWorkouts] = useState(true)
 
   // Check-in form
   const [showCheckinForm, setShowCheckinForm] = useState(false)
-  const [ciWeight, setCiWeight] = useState('')
   const [ciMood, setCiMood] = useState(0)
   const [ciEnergy, setCiEnergy] = useState(0)
   const [ciSleep, setCiSleep] = useState(0)
@@ -331,26 +326,8 @@ export default function ProgressPage() {
 
   // ─── Handlers ────────────────────────────────────────────────────────────
 
-  const handleSaveWeight = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!clientId || !weightInput) return
-    setSavingWeight(true)
-    const today = new Date().toISOString().split('T')[0]
-    const { error } = await supabase.from('progress_logs').upsert(
-      { client_id: clientId, date: today, body_weight: parseFloat(weightInput), notes: weightNotes || null },
-      { onConflict: 'client_id,date' }
-    )
-    if (!error) showToast('Gewicht gespeichert ✓', 'success')
-    setWeightInput('')
-    setWeightNotes('')
-    setShowWeightForm(false)
-    setSavingWeight(false)
-    await load()
-  }
-
   const openEditCheckin = () => {
     if (thisWeekCheckin) {
-      setCiWeight(thisWeekCheckin.body_weight?.toString() ?? '')
       setCiMood(thisWeekCheckin.mood ?? 0)
       setCiEnergy(thisWeekCheckin.energy ?? 0)
       setCiSleep(thisWeekCheckin.sleep_quality ?? 0)
@@ -406,7 +383,6 @@ export default function ProgressPage() {
           {
             client_id: clientId,
             week_start: thisWeekStart,
-            body_weight: ciWeight ? parseFloat(ciWeight) : null,
             mood: ciMood || null,
             energy: ciEnergy || null,
             sleep_quality: ciSleep || null,
@@ -461,7 +437,7 @@ export default function ProgressPage() {
       }
 
       // 3. Reset form
-      setCiWeight(''); setCiMood(0); setCiEnergy(0); setCiSleep(0)
+      setCiMood(0); setCiEnergy(0); setCiSleep(0)
       setCiHunger(0); setCiStress(0); setCiComment('')
       ciPreviews.forEach(p => URL.revokeObjectURL(p))
       setCiFiles([])
@@ -585,47 +561,7 @@ export default function ProgressPage() {
                   </p>
                 )}
               </div>
-              <button
-                onClick={() => setShowWeightForm(v => !v)}
-                className="text-xs text-emerald-600 hover:text-emerald-700 font-medium bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors"
-              >
-                + Eintragen
-              </button>
             </div>
-
-            {/* Inline weight entry form */}
-            <Collapsible open={showWeightForm}>
-              <form onSubmit={handleSaveWeight} className="mb-4 p-4 bg-gray-50 rounded-xl space-y-3">
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Gewicht (kg) *</label>
-                    <input
-                      required autoFocus
-                      type="number" step="0.1"
-                      value={weightInput}
-                      onChange={e => setWeightInput(e.target.value)}
-                      placeholder="80.5"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Notiz</label>
-                    <input
-                      value={weightNotes}
-                      onChange={e => setWeightNotes(e.target.value)}
-                      placeholder="Optional"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setShowWeightForm(false)} className="flex-1 py-2 border border-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-100">Abbrechen</button>
-                  <button type="submit" disabled={savingWeight} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg disabled:opacity-60">
-                    {savingWeight ? 'Speichern…' : 'Speichern'}
-                  </button>
-                </div>
-              </form>
-            </Collapsible>
 
             {chartData.length >= 2 ? (
               <SvgLineChart data={chartData} />
@@ -650,35 +586,52 @@ export default function ProgressPage() {
           {/* Recent workouts */}
           {workoutLogs.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-              <div className="px-5 py-4 border-b border-gray-100">
+              <button
+                type="button"
+                onClick={() => setShowRecentWorkouts(open => !open)}
+                className={`w-full px-5 py-4 flex items-center justify-between text-left transition-colors hover:bg-gray-50 ${
+                  showRecentWorkouts ? 'border-b border-gray-100' : ''
+                }`}
+                aria-expanded={showRecentWorkouts}
+              >
                 <h3 className="font-semibold text-gray-900 text-sm">Letzte Trainings</h3>
-              </div>
-              <ul className="divide-y divide-gray-100">
-                {workoutLogs.slice(0, 5).map((log, index) => (
-                  <li key={log.id}>
-                    <StaggerItem index={index} className="flex items-center gap-3 px-5 py-3">
-                    <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500 flex-shrink-0">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-900">
-                        {(log.workout_day as { name: string } | null)?.name ?? 'Training'}
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform ${showRecentWorkouts ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <Collapsible open={showRecentWorkouts}>
+                <ul className="divide-y divide-gray-100">
+                  {workoutLogs.slice(0, 5).map((log, index) => (
+                    <li key={log.id}>
+                      <StaggerItem index={index} className="flex items-center gap-3 px-5 py-3">
+                      <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500 flex-shrink-0">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
                       </div>
-                      <div className="text-xs text-gray-400">
-                        {new Date(log.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900">
+                          {(log.workout_day as { name: string } | null)?.name ?? 'Training'}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {new Date(log.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        </div>
                       </div>
-                    </div>
-                    {log.duration_seconds ? (
-                      <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-lg tabular-nums">
-                        {formatDuration(log.duration_seconds)}
-                      </span>
-                    ) : null}
-                    </StaggerItem>
-                  </li>
-                ))}
-              </ul>
+                      {log.duration_seconds ? (
+                        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-lg tabular-nums">
+                          {formatDuration(log.duration_seconds)}
+                        </span>
+                      ) : null}
+                      </StaggerItem>
+                    </li>
+                  ))}
+                </ul>
+              </Collapsible>
             </div>
           )}
 
@@ -782,17 +735,6 @@ export default function ProgressPage() {
               </h3>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Körpergewicht (optional)</label>
-                <input
-                  type="number" step="0.1"
-                  value={ciWeight}
-                  onChange={e => setCiWeight(e.target.value)}
-                  placeholder="z.B. 80.5 kg"
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Stimmung</label>
                 <RatingButtons value={ciMood} onChange={setCiMood} emojis={['😫', '😕', '😐', '🙂', '😄']} />
               </div>
@@ -849,9 +791,9 @@ export default function ProgressPage() {
                             key={img.id}
                             type="button"
                             onClick={() => openLightbox(thisWeekCheckin!.checkin_images!, i)}
-                            className="aspect-square rounded-xl overflow-hidden ring-1 ring-gray-200 hover:ring-emerald-400 transition-all"
+                            className="relative aspect-square rounded-xl overflow-hidden ring-1 ring-gray-200 hover:ring-emerald-400 transition-all"
                           >
-                            <img src={url} alt="" className="w-full h-full object-cover" />
+                            <Image src={url} alt="" fill className="object-cover" />
                           </button>
                         ) : (
                           <div key={img.id} className="aspect-square rounded-xl bg-gray-100 animate-pulse" />
@@ -876,10 +818,12 @@ export default function ProgressPage() {
                   <div className="grid grid-cols-4 gap-2 mb-3">
                     {ciPreviews.map((url, i) => (
                       <div key={i} className="relative aspect-square">
-                        <img
+                        <Image
                           src={url}
                           alt=""
-                          className="w-full h-full object-cover rounded-xl ring-1 ring-gray-200"
+                          fill
+                          unoptimized
+                          className="object-cover rounded-xl ring-1 ring-gray-200"
                         />
                         <button
                           type="button"
@@ -1003,9 +947,9 @@ export default function ProgressPage() {
                               key={img.id}
                               type="button"
                               onClick={() => openLightbox(ci.checkin_images!, imgIdx)}
-                              className="aspect-square rounded-xl overflow-hidden ring-1 ring-gray-200 hover:ring-emerald-400 hover:scale-105 transition-all"
+                              className="relative aspect-square rounded-xl overflow-hidden ring-1 ring-gray-200 hover:ring-emerald-400 hover:scale-105 transition-all"
                             >
-                              <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                              <Image src={url} alt="" fill className="object-cover" />
                             </button>
                           ) : (
                             <div key={img.id} className="aspect-square rounded-xl bg-gray-100 animate-pulse" />

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import type { CheckinImage, Client, AssignedPlan, WorkoutPlan, WorkoutLog, ProgressLog, WeeklyCheckin } from '@/lib/types'
 import Lightbox from '@/components/Lightbox'
@@ -303,7 +304,16 @@ export default function ClientDetailPage() {
   const handleAssignPlan = async () => {
     if (!selectedPlanId) return
     setAssigning(true)
-    await supabase.from('assigned_plans').insert({ client_id: id, plan_id: selectedPlanId, is_active: true })
+    const { error } = await supabase.from('assigned_plans').insert({ client_id: id, plan_id: selectedPlanId, is_active: true })
+    if (!error && client?.user_id) {
+      const assignedPlan = availablePlans.find(plan => plan.id === selectedPlanId)
+      await supabase.from('notifications').insert({
+        client_id: client.user_id,
+        type: 'training_plan',
+        title: 'Neuer Trainingsplan zugewiesen',
+        body: assignedPlan?.name ?? null,
+      })
+    }
     showToast('Plan zugewiesen ✓', 'success')
     setSelectedPlanId('')
     await load()
@@ -914,13 +924,13 @@ export default function ClientDetailPage() {
                                 key={img.id}
                                 type="button"
                                 onClick={() => openAdminLightbox(ci.checkin_images!, imgIdx)}
-                                className="aspect-square rounded-xl overflow-hidden ring-1 ring-gray-200 hover:ring-indigo-400 hover:scale-105 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                className="relative aspect-square rounded-xl overflow-hidden ring-1 ring-gray-200 hover:ring-indigo-400 hover:scale-105 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
                               >
-                                <img
+                                <Image
                                   src={url}
                                   alt={`Foto ${imgIdx + 1}`}
-                                  className="w-full h-full object-cover"
-                                  loading="lazy"
+                                  fill
+                                  className="object-cover"
                                 />
                               </button>
                             ) : (

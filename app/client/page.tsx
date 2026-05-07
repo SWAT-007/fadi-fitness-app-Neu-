@@ -1,12 +1,34 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { isAdminEmail } from '@/lib/admin'
 import { supabase } from '@/lib/supabase'
 import type { Profile, Client, AssignedPlan, WorkoutPlan, WorkoutDay, ProgressLog } from '@/lib/types'
 import { AnimatedNumber, StaggerItem, SuccessButton, useToast } from '@/components/Motion'
+
+const stroke = {
+  fill: 'none' as const,
+  stroke: 'currentColor',
+  strokeWidth: 1.75,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+}
+
+const Icon = {
+  flame: <svg viewBox="0 0 24 24" {...stroke}><path d="M12 3s4 4.5 4 8.5a4 4 0 11-8 0c0-1.5.7-2.7 1.5-3.5C9 11 11 12 12 14c1-3-1-5 0-11z" /></svg>,
+  scale: <svg viewBox="0 0 24 24" {...stroke}><rect x="3" y="6" width="18" height="14" rx="2" /><path d="M8 6V4h8v2" /><path d="M9 13h6M12 10v6" /></svg>,
+  arrow: <svg viewBox="0 0 24 24" {...stroke}><path d="M9 5l7 7-7 7" /></svg>,
+  play: <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>,
+  check: <svg viewBox="0 0 24 24" {...stroke} strokeWidth={2.5}><path d="M5 13l4 4L19 7" /></svg>,
+  dots: <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg>,
+  refresh: <svg viewBox="0 0 24 24" {...stroke}><path d="M4 12a8 8 0 0114-5.3L20 8" /><path d="M20 4v4h-4" /><path d="M20 12a8 8 0 01-14 5.3L4 16" /><path d="M4 20v-4h4" /></svg>,
+  trend: <svg viewBox="0 0 24 24" {...stroke}><path d="M3 17l6-6 4 4 8-8" /><path d="M14 7h7v7" /></svg>,
+  chat: <svg viewBox="0 0 24 24" {...stroke}><path d="M4 6a2 2 0 012-2h12a2 2 0 012 2v9a2 2 0 01-2 2h-7l-4 3.5V17H6a2 2 0 01-2-2V6z" /></svg>,
+  dumbbell: <svg viewBox="0 0 24 24" {...stroke}><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12" /></svg>,
+  clock: <svg viewBox="0 0 24 24" {...stroke}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>,
+  plus: <svg viewBox="0 0 24 24" {...stroke}><path d="M12 5v14M5 12h14" /></svg>,
+}
 
 function formatDuration(seconds: number): string {
   if (seconds === 0) return '–'
@@ -34,7 +56,6 @@ export default function ClientDashboard() {
   const [loading, setLoading] = useState(true)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  // Gewicht-Modal
   const [weightOpen, setWeightOpen] = useState(false)
   const [weightInput, setWeightInput] = useState('')
   const [weightSaving, setWeightSaving] = useState(false)
@@ -44,16 +65,15 @@ export default function ClientDashboard() {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      if (isAdminEmail(user.email)) { router.replace('/admin'); return }
+
+      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+      if (prof?.role === 'trainer') { router.replace('/admin'); return }
+      setProfile(prof)
 
       const { data: cl } = await supabase.from('clients').select('*').eq('user_id', user.id).maybeSingle()
       if (!cl) { setLoading(false); return }
       setClient(cl)
 
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-      setProfile(prof)
-
-      // Monday of current week
       const now = new Date()
       const dayOfWeek = now.getDay()
       const monday = new Date(now)
@@ -115,123 +135,161 @@ export default function ClientDashboard() {
     window.setTimeout(() => setWeightSaved(false), 1500)
   }
 
-  const greeting = () => {
+  const greeting = (() => {
     const h = new Date().getHours()
-    if (h < 12) return 'Guten Morgen'
-    if (h < 18) return 'Guten Tag'
+    if (h < 11) return 'Guten Morgen'
+    if (h < 18) return 'Hallo'
     return 'Guten Abend'
-  }
+  })()
+
+  const firstName = profile?.full_name?.split(' ')[0] ?? 'Athlet'
+  const weeklyGoal = 4
+  const weeklyProgressPct = Math.min(100, Math.round((weeklyStats.workouts / weeklyGoal) * 100))
 
   if (loading) {
     return <div className="flex justify-center p-12"><div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" /></div>
   }
 
   return (
-    <div className="p-4 max-w-lg mx-auto">
-      {/* Greeting */}
-      <div className="mt-2 mb-6">
-        <p className="text-gray-500 text-sm">{greeting()},</p>
-        <h1 className="text-2xl font-bold text-gray-900">{profile?.full_name ?? 'Athlet'} 👋</h1>
+    <div className="px-4 pt-4 pb-8 max-w-lg mx-auto">
+      {/* Hero — gradient greeting card with weekly progress ring */}
+      <div className="relative overflow-hidden rounded-3xl mb-4 p-5 text-white bg-gradient-to-br from-[#0b0c0f] via-[#111318] to-[#1a1d24] shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
+        <span className="pointer-events-none absolute -right-10 -top-10 w-44 h-44 rounded-full bg-emerald-500/20 blur-3xl" />
+        <span className="pointer-events-none absolute right-12 bottom-0 w-28 h-28 rounded-full bg-violet-500/15 blur-3xl" />
+        <div className="relative flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium tracking-[0.16em] uppercase text-white/50">{greeting}</p>
+            <h1 className="mt-1 text-[26px] font-semibold tracking-tight leading-tight">{firstName}</h1>
+            <p className="text-white/60 text-[13px] mt-1.5">
+              {weeklyStats.workouts === 0
+                ? 'Bereit für dein erstes Training diese Woche?'
+                : `${weeklyStats.workouts} von ${weeklyGoal} Trainings diese Woche.`}
+            </p>
+          </div>
+          <ProgressRing pct={weeklyProgressPct} />
+        </div>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
-          <div className="text-2xl font-bold text-gray-900"><AnimatedNumber value={totalWorkouts} /></div>
-          <div className="text-xs text-gray-500 mt-0.5">Trainings gesamt</div>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
-          <div className="text-2xl font-bold text-gray-900">
-            {lastWeight?.body_weight ? <><AnimatedNumber value={lastWeight.body_weight} decimals={1} /> kg</> : '-'}
-          </div>
-          <div className="text-xs text-gray-500 mt-0.5">Letztes Gewicht</div>
-        </div>
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <StatCard
+          label="Trainings gesamt"
+          value={<AnimatedNumber value={totalWorkouts} />}
+          accent="from-emerald-500/10 to-transparent"
+          iconBg="bg-emerald-50" iconColor="text-emerald-600"
+          icon={Icon.flame}
+        />
+        <StatCard
+          label="Letztes Gewicht"
+          value={lastWeight?.body_weight
+            ? <><AnimatedNumber value={lastWeight.body_weight} decimals={1} /><span className="text-base font-medium text-gray-500 ml-1">kg</span></>
+            : <span className="text-gray-400">–</span>}
+          accent="from-violet-500/10 to-transparent"
+          iconBg="bg-violet-50" iconColor="text-violet-600"
+          icon={Icon.scale}
+        />
       </div>
 
       {/* Active plan */}
       {!client ? (
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm text-center">
-          <div className="text-4xl mb-3">🏋️</div>
-          <p className="text-gray-500 text-sm">Dein Kundenkonto ist noch nicht mit deinem Trainer verbunden.</p>
-        </div>
+        <EmptyCard icon={Icon.dumbbell} text="Dein Kundenkonto ist noch nicht mit deinem Trainer verbunden." />
       ) : !activePlan ? (
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm text-center">
-          <div className="text-4xl mb-3">📋</div>
-          <p className="text-gray-500 text-sm">Dir wurde noch kein Trainingsplan zugewiesen.</p>
-        </div>
+        <EmptyCard icon={Icon.dumbbell} text="Dir wurde noch kein Trainingsplan zugewiesen." />
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-4">
-          <div className="px-5 pt-5 pb-3 border-b border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Aktueller Plan</p>
-                <h2 className="font-bold text-gray-900 mt-0.5">{activePlan.name}</h2>
-              </div>
-              <Link href="/client/plan" className="text-xs text-emerald-600 hover:underline font-medium">Alle Tage</Link>
+        <div className="bg-white rounded-2xl border border-gray-200/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)] mb-4 overflow-hidden">
+          <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-gray-100">
+            <div>
+              <p className="text-[11px] text-gray-500 font-medium uppercase tracking-[0.12em]">Aktueller Plan</p>
+              <h2 className="font-semibold text-gray-900 mt-0.5 tracking-tight">{activePlan.name}</h2>
             </div>
+            <Link
+              href="/client/plan"
+              className="press inline-flex items-center gap-1 text-[12.5px] font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 -mr-1 rounded-lg hover:bg-emerald-50"
+            >
+              Alle Tage <span className="w-3.5 h-3.5">{Icon.arrow}</span>
+            </Link>
           </div>
-          <div className="p-3 space-y-1">
-            {/* Close menu on outside click */}
+          <div className="p-2.5 space-y-1">
             {menuOpenDayId && (
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpenDayId(null)} />
             )}
             {planDays.map((day, index) => {
               const isActive = activeDayIds.has(day.id)
               const isDone = !isActive && completedDayIds.has(day.id)
-
-              const rowBg = isActive ? 'bg-blue-50' : isDone ? 'bg-emerald-50' : 'hover:bg-gray-50'
-              const iconBg = isActive ? 'bg-blue-500 text-white' : isDone ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-lg'
-              const menuLabel = isActive ? 'Fortsetzen' : isDone ? 'Nochmal starten' : 'Training starten'
-              const menuIcon = isActive ? '▶️' : isDone ? '🔁' : '▶️'
-              const menuTarget = `/client/workout/${day.id}/play${isDone ? '?fresh=1' : ''}`
+              const rowBg = isActive
+                ? 'bg-blue-50/70 hover:bg-blue-50'
+                : isDone
+                  ? 'bg-emerald-50/60 hover:bg-emerald-50'
+                  : 'hover:bg-gray-50'
+              const iconBg = isActive
+                ? 'bg-blue-500 text-white ring-2 ring-blue-200'
+                : isDone
+                  ? 'bg-emerald-500 text-white ring-2 ring-emerald-200'
+                  : 'bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200/60'
 
               return (
-                <StaggerItem key={day.id} index={index} className="relative">
-                  <div className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${rowBg}`}>
-                    {/* Row — navigates to detail */}
+                <StaggerItem key={day.id} index={index} className={`relative ${menuOpenDayId === day.id ? 'z-40' : 'z-0'}`}>
+                  <div className={`flex items-center gap-3 p-2.5 rounded-xl transition-colors ${rowBg}`}>
                     <button
                       onClick={() => router.push(`/client/plan/${day.id}`)}
-                      className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                      className="press flex items-center gap-3 flex-1 min-w-0 text-left"
                     >
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-sm font-bold transition-colors ${iconBg}`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
                         {isActive
-                          ? <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" /><span className="relative inline-flex rounded-full h-3 w-3 bg-white" /></span>
+                          ? <span className="relative flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
+                            </span>
                           : isDone
-                            ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                            : '💪'}
+                            ? <span className="w-5 h-5 block">{Icon.check}</span>
+                            : <span className="w-5 h-5 block">{Icon.dumbbell}</span>}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-gray-900 text-sm">{day.name}</div>
+                        <div className="font-medium text-gray-900 text-[14px] tracking-tight">{day.name}</div>
                         {isActive
-                          ? <div className="text-xs text-blue-600 mt-0.5 font-medium">Läuft gerade</div>
+                          ? <div className="text-[11.5px] text-blue-600 mt-0.5 font-medium">Läuft gerade</div>
                           : isDone
-                            ? <div className="text-xs text-emerald-600 mt-0.5 font-medium">Diese Woche erledigt</div>
-                            : day.description && <div className="text-xs text-gray-400 truncate">{day.description}</div>
+                            ? <div className="text-[11.5px] text-emerald-600 mt-0.5 font-medium">Diese Woche erledigt</div>
+                            : day.description && <div className="text-[11.5px] text-gray-400 truncate mt-0.5">{day.description}</div>
                         }
                       </div>
                     </button>
 
-                    {/* 3-dot menu */}
-                    <button
-                      onClick={e => { e.stopPropagation(); setMenuOpenDayId(menuOpenDayId === day.id ? null : day.id) }}
-                      className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 flex-shrink-0 relative z-20"
-                      aria-label="Optionen"
-                    >
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                        <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
-                      </svg>
-                    </button>
+                    {isActive ? (
+                      <button
+                        onClick={e => { e.stopPropagation(); router.push(`/client/workout/${day.id}/play`) }}
+                        className="press flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-[12px] font-semibold flex-shrink-0"
+                      >
+                        <span className="w-3 h-3">{Icon.play}</span>
+                        Weiter
+                      </button>
+                    ) : isDone ? (
+                      <button
+                        onClick={e => { e.stopPropagation(); setMenuOpenDayId(menuOpenDayId === day.id ? null : day.id) }}
+                        className="press p-1.5 rounded-lg hover:bg-white/70 text-gray-400 flex-shrink-0 relative z-20"
+                        aria-label="Optionen"
+                      >
+                        <span className="w-4 h-4 block">{Icon.dots}</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={e => { e.stopPropagation(); router.push(`/client/workout/${day.id}/play`) }}
+                        className="press flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white text-[12px] font-semibold flex-shrink-0 shadow-[0_4px_12px_-4px_rgba(16,185,129,0.5)]"
+                      >
+                        <span className="w-3 h-3">{Icon.play}</span>
+                        Starten
+                      </button>
+                    )}
                   </div>
 
-                  {/* Dropdown */}
-                  {menuOpenDayId === day.id && (
-                    <div ref={menuRef} className="absolute right-2 top-12 z-30 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-[170px]">
+                  {isDone && menuOpenDayId === day.id && (
+                    <div ref={menuRef} className="absolute right-2 top-12 z-30 bg-white rounded-xl shadow-lg border border-gray-200/70 py-1 min-w-[170px]">
                       <button
-                        onClick={() => { router.push(menuTarget); setMenuOpenDayId(null) }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                        onClick={() => { router.push(`/client/workout/${day.id}/play?fresh=1`); setMenuOpenDayId(null) }}
+                        className="press w-full text-left px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                       >
-                        <span>{menuIcon}</span>
-                        {menuLabel}
+                        <span className="w-4 h-4 text-gray-500">{Icon.refresh}</span>
+                        Nochmal starten
                       </button>
                     </div>
                   )}
@@ -243,31 +301,16 @@ export default function ClientDashboard() {
       )}
 
       {/* Analyse */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-4">
-        <div className="px-5 pt-4 pb-3 border-b border-gray-100">
-          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Analyse</p>
+      <div className="bg-white rounded-2xl border border-gray-200/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)] mb-4 overflow-hidden">
+        <div className="px-5 pt-4 pb-3 flex items-center gap-2 border-b border-gray-100">
+          <span className="w-4 h-4 text-gray-400">{Icon.trend}</span>
+          <p className="text-[11px] text-gray-500 font-medium uppercase tracking-[0.12em]">Fortschritt</p>
         </div>
-        <div className="p-4 grid grid-cols-2 gap-4">
-          <div className="bg-gray-50 rounded-xl p-3">
-            <div className="text-xs text-gray-500 mb-1">Diese Woche</div>
-            <div className="text-xl font-bold text-gray-900"><AnimatedNumber value={weeklyStats.workouts} /></div>
-            <div className="text-xs text-gray-400 mt-0.5">Trainings</div>
-          </div>
-          <div className="bg-gray-50 rounded-xl p-3">
-            <div className="text-xs text-gray-500 mb-1">Diese Woche</div>
-            <div className="text-xl font-bold text-gray-900">{formatDuration(weeklyStats.seconds)}</div>
-            <div className="text-xs text-gray-400 mt-0.5">Trainingszeit</div>
-          </div>
-          <div className="bg-gray-50 rounded-xl p-3">
-            <div className="text-xs text-gray-500 mb-1">Dieser Monat</div>
-            <div className="text-xl font-bold text-gray-900"><AnimatedNumber value={monthlyStats.workouts} /></div>
-            <div className="text-xs text-gray-400 mt-0.5">Trainings</div>
-          </div>
-          <div className="bg-gray-50 rounded-xl p-3">
-            <div className="text-xs text-gray-500 mb-1">Dieser Monat</div>
-            <div className="text-xl font-bold text-gray-900">{formatDuration(monthlyStats.seconds)}</div>
-            <div className="text-xs text-gray-400 mt-0.5">Trainingszeit</div>
-          </div>
+        <div className="p-3 grid grid-cols-2 gap-2.5">
+          <AnalyseTile label="Diese Woche" sub="Trainings" icon={Icon.dumbbell} value={<AnimatedNumber value={weeklyStats.workouts} />} accent="from-emerald-500/10" />
+          <AnalyseTile label="Diese Woche" sub="Trainingszeit" icon={Icon.clock} value={formatDuration(weeklyStats.seconds)} accent="from-blue-500/10" />
+          <AnalyseTile label="Dieser Monat" sub="Trainings" icon={Icon.dumbbell} value={<AnimatedNumber value={monthlyStats.workouts} />} accent="from-violet-500/10" />
+          <AnalyseTile label="Dieser Monat" sub="Trainingszeit" icon={Icon.clock} value={formatDuration(monthlyStats.seconds)} accent="from-orange-500/10" />
         </div>
       </div>
 
@@ -275,29 +318,39 @@ export default function ClientDashboard() {
       <div className="grid grid-cols-2 gap-3">
         <button
           onClick={() => { setWeightInput(''); setWeightOpen(true) }}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl p-4 transition-colors text-left"
+          className="lift press group relative overflow-hidden rounded-2xl p-4 text-left text-white bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 shadow-[0_8px_24px_-12px_rgba(16,185,129,0.6)]"
         >
-          <div className="text-2xl mb-2">📈</div>
-          <div className="font-semibold text-sm">Gewicht eintragen</div>
+          <span className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/15 blur-2xl" />
+          <div className="relative w-9 h-9 rounded-xl bg-white/15 backdrop-blur-sm ring-1 ring-white/20 flex items-center justify-center mb-3">
+            <span className="w-4.5 h-4.5 block">{Icon.plus}</span>
+          </div>
+          <div className="relative font-semibold text-[14px] tracking-tight">Gewicht eintragen</div>
+          <div className="relative text-emerald-50/85 text-[12px] mt-0.5">Heute, {new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}</div>
         </button>
-        <Link href="/client/messages" className="bg-white border border-gray-200 rounded-2xl p-4 hover:bg-gray-50 transition-colors">
-          <div className="text-2xl mb-2">💬</div>
-          <div className="font-semibold text-sm text-gray-900">Trainer schreiben</div>
+        <Link
+          href="/client/messages"
+          className="lift press group rounded-2xl p-4 bg-white border border-gray-200/70 hover:border-gray-300/80 shadow-[0_1px_2px_rgba(16,24,40,0.04)] hover:shadow-[0_8px_24px_-12px_rgba(16,24,40,0.12)]"
+        >
+          <div className="w-9 h-9 rounded-xl bg-gray-50 ring-1 ring-inset ring-black/5 flex items-center justify-center text-gray-700 mb-3">
+            <span className="w-5 h-5 block">{Icon.chat}</span>
+          </div>
+          <div className="font-semibold text-[14px] text-gray-900 tracking-tight">Trainer schreiben</div>
+          <div className="text-gray-500 text-[12px] mt-0.5">Frage stellen oder Update</div>
         </Link>
       </div>
 
       {/* Gewicht-Modal */}
       {weightOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50 backdrop-blur-sm motion-page-fade">
           <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="font-semibold text-gray-900">Gewicht eintragen</h2>
+              <h2 className="font-semibold text-gray-900 tracking-tight">Gewicht eintragen</h2>
               {lastWeight?.body_weight && (
-                <p className="text-xs text-gray-400 mt-0.5">Letzter Eintrag: {lastWeight.body_weight} kg</p>
+                <p className="text-[12px] text-gray-400 mt-0.5">Letzter Eintrag: {lastWeight.body_weight} kg</p>
               )}
             </div>
             <div className="px-5 py-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-[13px] font-medium text-gray-700 mb-2">
                 Aktuelles Gewicht (kg)
               </label>
               <input
@@ -309,13 +362,13 @@ export default function ClientDashboard() {
                 placeholder="z.B. 72.5"
                 autoFocus
                 onKeyDown={e => e.key === 'Enter' && handleSaveWeight()}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-lg font-semibold text-center focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-lg font-semibold text-center tabular-nums focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
               />
             </div>
             <div className="px-5 pb-5 flex gap-3">
               <button
                 onClick={() => setWeightOpen(false)}
-                className="flex-1 py-3 border border-gray-200 text-gray-600 font-medium rounded-xl hover:bg-gray-50 transition-colors text-sm"
+                className="press flex-1 py-3 border border-gray-200 text-gray-600 font-medium rounded-xl hover:bg-gray-50 text-[13px]"
               >
                 Abbrechen
               </button>
@@ -323,14 +376,88 @@ export default function ClientDashboard() {
                 onClick={handleSaveWeight}
                 disabled={!weightInput || weightSaving}
                 success={weightSaved}
-                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors text-sm"
+                className="press flex-1 py-3 bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-40 text-white font-semibold rounded-xl text-[13px] shadow-[0_4px_12px_-4px_rgba(16,185,129,0.5)]"
               >
-                {weightSaving ? 'Speichern...' : 'Speichern'}
+                {weightSaving ? 'Speichern…' : 'Speichern'}
               </SuccessButton>
             </div>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function ProgressRing({ pct }: { pct: number }) {
+  const r = 22
+  const c = 2 * Math.PI * r
+  const dash = (pct / 100) * c
+  return (
+    <div className="relative shrink-0 w-14 h-14" aria-label={`${pct}% der Wochenziele`}>
+      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 56 56" width="56" height="56">
+        <circle cx="28" cy="28" r={r} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="4" />
+        <circle
+          cx="28" cy="28" r={r} fill="none"
+          stroke="url(#ringGrad)" strokeWidth="4" strokeLinecap="round"
+          strokeDasharray={`${dash} ${c - dash}`}
+          style={{ transition: 'stroke-dasharray 600ms cubic-bezier(0.23, 1, 0.32, 1)' }}
+        />
+        <defs>
+          <linearGradient id="ringGrad" x1="0" y1="0" x2="56" y2="56">
+            <stop offset="0%" stopColor="#34d399" />
+            <stop offset="100%" stopColor="#a78bfa" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-[13px] font-semibold tabular-nums text-white">{pct}%</span>
+      </div>
+    </div>
+  )
+}
+
+function StatCard({
+  label, value, accent, iconBg, iconColor, icon,
+}: { label: string; value: ReactNode; accent: string; iconBg: string; iconColor: string; icon: ReactNode }) {
+  return (
+    <div className="lift relative overflow-hidden bg-white rounded-2xl border border-gray-200/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)] p-4">
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${accent} to-transparent`} />
+      <div className="relative flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[24px] font-semibold text-gray-900 tracking-tight tabular-nums leading-none">{value}</div>
+          <div className="text-[11.5px] text-gray-500 mt-2">{label}</div>
+        </div>
+        <div className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${iconBg} ${iconColor} ring-1 ring-inset ring-black/5`}>
+          <span className="w-4 h-4 block">{icon}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AnalyseTile({
+  label, sub, icon, value, accent,
+}: { label: string; sub: string; icon: ReactNode; value: ReactNode; accent: string }) {
+  return (
+    <div className={`relative overflow-hidden rounded-xl bg-gray-50 p-3 ring-1 ring-inset ring-black/[0.03]`}>
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${accent} to-transparent`} />
+      <div className="relative flex items-center gap-1.5 text-gray-400">
+        <span className="w-3.5 h-3.5">{icon}</span>
+        <span className="text-[10.5px] font-medium uppercase tracking-[0.1em]">{label}</span>
+      </div>
+      <div className="relative text-[20px] font-semibold text-gray-900 tracking-tight tabular-nums mt-1.5 leading-none">{value}</div>
+      <div className="relative text-[11.5px] text-gray-400 mt-1">{sub}</div>
+    </div>
+  )
+}
+
+function EmptyCard({ icon, text }: { icon: ReactNode; text: string }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)] p-6 text-center mb-4">
+      <div className="mx-auto w-12 h-12 rounded-2xl bg-gray-50 ring-1 ring-inset ring-black/5 flex items-center justify-center text-gray-400 mb-3">
+        <span className="w-6 h-6 block">{icon}</span>
+      </div>
+      <p className="text-gray-600 text-[13px]">{text}</p>
     </div>
   )
 }

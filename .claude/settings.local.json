@@ -35,7 +35,10 @@
       "Bash(node -e ' *)",
       "Bash(node -e \"const p = require\\('pdf-parse'\\); const fs = require\\('fs'\\); const buf = fs.readFileSync\\('public/pdfs/RTG_50_beste_Rezepte \\(1\\).pdf'\\); p\\(buf\\).then\\(d => console.log\\('ok, chars:', d.text.length\\)\\).catch\\(e => console.error\\('ERR:', e.message\\)\\)\")",
       "Bash(node --loader ts-node/esm --experimental-specifier-resolution=node -e ' *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(npm.cmd run *)"
     ]
   }
 }

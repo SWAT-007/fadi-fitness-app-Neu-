@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { isAdminEmail, normalizeEmail } from '@/lib/admin'
 import { supabase } from '@/lib/supabase'
 
 const createAdminSession = async (accessToken: string, expiresAt?: number) => {
@@ -13,9 +12,11 @@ const createAdminSession = async (accessToken: string, expiresAt?: number) => {
       body: JSON.stringify({ accessToken, expiresAt }),
     })
     const payload = await response.json().catch(() => null) as { message?: unknown } | null
-    if (response.ok) return { ok: true } as const
+    if (response.ok) return { ok: true, isAdmin: true } as const
+    if (response.status === 403) return { ok: true, isAdmin: false } as const
     return {
       ok: false,
+      isAdmin: false,
       message: typeof payload?.message === 'string'
         ? payload.message
         : `Admin-Sitzung konnte nicht erstellt werden (Status ${response.status}).`,
@@ -24,6 +25,8 @@ const createAdminSession = async (accessToken: string, expiresAt?: number) => {
     return { ok: false, message: 'Netzwerkfehler beim Erstellen der Admin-Sitzung.' } as const
   }
 }
+
+const normalizeEmail = (value: string) => value.trim().toLowerCase()
 
 const clearAdminSession = async () => {
   try { await fetch('/api/auth/session', { method: 'DELETE' }) } catch { /* ignore */ }
@@ -49,14 +52,16 @@ export default function LoginPage() {
 
     if (signInError) { setError(signInError.message); setLoading(false); return }
 
-    if (isAdminEmail(data.user.email)) {
-      if (!data.session?.access_token) {
-        setError('Admin-Sitzung konnte nicht erstellt werden.')
-        setLoading(false)
-        return
-      }
-      const result = await createAdminSession(data.session.access_token, data.session.expires_at)
-      if (!result.ok) { setError(result.message); setLoading(false); return }
+    if (!data.session?.access_token) {
+      setError('Sitzung konnte nicht erstellt werden.')
+      setLoading(false)
+      return
+    }
+
+    const result = await createAdminSession(data.session.access_token, data.session.expires_at)
+    if (!result.ok) { setError(result.message); setLoading(false); return }
+
+    if (result.isAdmin) {
       router.push('/admin')
       return
     }

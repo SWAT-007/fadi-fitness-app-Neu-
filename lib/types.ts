@@ -168,6 +168,18 @@ export interface Message {
   receiver?: Profile
 }
 
+export type NotificationType = 'message' | 'training_plan' | 'nutrition_plan' | 'workout'
+
+export interface Notification {
+  id: string
+  client_id: string
+  type: NotificationType
+  title: string
+  body?: string | null
+  is_read: boolean
+  created_at: string
+}
+
 // ─── Nutrition ───────────────────────────────────────────────────────────────
 
 export type NutritionGoal    = 'cut' | 'bulk' | 'maintain'

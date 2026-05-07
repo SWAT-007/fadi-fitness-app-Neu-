@@ -61,6 +61,17 @@ export default function PlansPage() {
       return
     }
 
+    const assignedClient = clients.find(client => client.id === assignClientId)
+    const assignedPlan = plans.find(plan => plan.id === assignPlanId)
+    if (assignedClient?.user_id) {
+      await supabase.from('notifications').insert({
+        client_id: assignedClient.user_id,
+        type: 'training_plan',
+        title: 'Neuer Trainingsplan zugewiesen',
+        body: assignedPlan?.name ?? null,
+      })
+    }
+
     setAssignClientId('')
     setAssignPlanId('')
     setAssignSuccess('Plan wurde zugewiesen.')

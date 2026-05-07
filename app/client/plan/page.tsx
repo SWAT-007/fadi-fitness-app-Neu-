@@ -99,7 +99,7 @@ export default function ClientPlanPage() {
 
           return (
             <StaggerItem key={ap.id} index={planIndex} className="mb-6">
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-visible">
                 {/* Plan header */}
                 <div className="px-5 pt-5 pb-3 border-b border-gray-100">
                   <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Aktueller Plan</p>
@@ -109,17 +109,14 @@ export default function ClientPlanPage() {
                 {/* Days */}
                 <div className="p-3 space-y-1">
                   {sortedDays.map((day, index) => {
-                    const isActive = activeDayIds.has(day.id)
-                    const isDone   = !isActive && completedDayIds.has(day.id)
+                    const isActive = activeDayIds.has(day.id) && !completedDayIds.has(day.id)
+                    const isDone   = completedDayIds.has(day.id)
 
                     const rowBg  = isActive ? 'bg-blue-50' : isDone ? 'bg-emerald-50' : 'hover:bg-gray-50'
                     const iconBg = isActive ? 'bg-blue-500 text-white' : isDone ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-lg'
-                    const menuLabel  = isActive ? 'Fortsetzen' : isDone ? 'Nochmal starten' : 'Training starten'
-                    const menuIcon   = isActive ? '▶️' : isDone ? '🔁' : '▶️'
-                    const menuTarget = `/client/workout/${day.id}/play${isDone ? '?fresh=1' : ''}`
 
                     return (
-                      <StaggerItem key={day.id} index={index} className="relative">
+                      <StaggerItem key={day.id} index={index} className={`relative ${menuOpenDayId === day.id ? 'z-40' : 'z-0'}`}>
                         <div className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${rowBg}`}>
                           {/* Row — navigates to preview */}
                           <button
@@ -150,32 +147,50 @@ export default function ClientPlanPage() {
                             </div>
                           </button>
 
-                          {/* 3-dot menu */}
-                          <button
-                            onClick={e => { e.stopPropagation(); setMenuOpenDayId(menuOpenDayId === day.id ? null : day.id) }}
-                            className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 flex-shrink-0 relative z-20"
-                            aria-label="Optionen"
-                          >
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                              <circle cx="12" cy="5" r="1.5" />
-                              <circle cx="12" cy="12" r="1.5" />
-                              <circle cx="12" cy="19" r="1.5" />
-                            </svg>
-                          </button>
+                          {/* Action button */}
+                          {isActive ? (
+                            <button
+                              onClick={e => { e.stopPropagation(); router.push(`/client/workout/${day.id}/play`) }}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold flex-shrink-0 transition-colors"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                              Weiter
+                            </button>
+                          ) : isDone ? (
+                            <button
+                              onClick={e => { e.stopPropagation(); setMenuOpenDayId(menuOpenDayId === day.id ? null : day.id) }}
+                              className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 flex-shrink-0 relative z-20"
+                              aria-label="Optionen"
+                            >
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <circle cx="12" cy="5" r="1.5" />
+                                <circle cx="12" cy="12" r="1.5" />
+                                <circle cx="12" cy="19" r="1.5" />
+                              </svg>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={e => { e.stopPropagation(); router.push(`/client/workout/${day.id}/play`) }}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold flex-shrink-0 transition-colors"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                              Starten
+                            </button>
+                          )}
                         </div>
 
-                        {/* Dropdown */}
-                        {menuOpenDayId === day.id && (
+                        {/* Dropdown — außerhalb des Flex-Containers, relativ zu StaggerItem */}
+                        {isDone && menuOpenDayId === day.id && (
                           <div
                             ref={menuRef}
                             className="absolute right-2 top-12 z-30 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-[170px]"
                           >
                             <button
-                              onClick={() => { router.push(menuTarget); setMenuOpenDayId(null) }}
+                              onClick={() => { router.push(`/client/workout/${day.id}/play?fresh=1`); setMenuOpenDayId(null) }}
                               className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                             >
-                              <span>{menuIcon}</span>
-                              {menuLabel}
+                              <span>🔁</span>
+                              Nochmal starten
                             </button>
                           </div>
                         )}

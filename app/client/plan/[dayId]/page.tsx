@@ -32,6 +32,13 @@ function CheckIcon() {
   )
 }
 
+function calc1RM(weight: string, reps: string): string {
+  const w = parseFloat(weight)
+  const r = parseInt(reps)
+  if (!w || !r || isNaN(w) || isNaN(r) || r <= 0) return '—'
+  return (w * (1 + r / 30)).toFixed(1)
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function WorkoutDayPage() {
@@ -49,7 +56,7 @@ export default function WorkoutDayPage() {
 
   // Phase & timer
   const [phase, setPhase] = useState<Phase>('preview')
-  const [startedAt, setStartedAt] = useState<Date | null>(null)
+  const [startedAt] = useState<Date | null>(null)
   const [elapsed, setElapsed] = useState(0)
   const [finalDuration, setFinalDuration] = useState(0)
 
@@ -345,46 +352,98 @@ export default function WorkoutDayPage() {
               </div>
 
               {/* Set inputs */}
-              <div className="px-4 pb-4 space-y-2">
-                <div className="grid grid-cols-[3.25rem_1fr_1fr_2.75rem] gap-2 px-1 text-[11px] font-medium text-gray-400">
-                  <span>Satz</span>
-                  <span className="text-center">Gewicht</span>
-                  <span className="text-center">Wdh.</span>
+              <div className="pb-3">
+                {/* Column headers */}
+                <div className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 px-4 pt-1 pb-2">
+                  <div className="flex flex-col items-center gap-0.5">
+                    <svg className="w-3 h-3 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-[10px] font-semibold text-gray-400">#</span>
+                  </div>
+                  <span className="text-[10px] font-semibold text-gray-400 text-center">KG</span>
+                  <span className="text-[10px] font-semibold text-gray-400 text-center">WDH</span>
+                  <span className="text-[10px] font-semibold text-gray-400 text-center">10RM</span>
                   <span />
                 </div>
 
-                {sets.map((set, setIndex) => (
-                  <div key={setIndex} className="grid grid-cols-[3.25rem_1fr_1fr_2.75rem] gap-2 items-center">
-                    <div className="text-xs font-semibold text-gray-500">Satz {setIndex + 1}</div>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      value={set.weight}
-                      onChange={e => updateSetLog(ex.id, setIndex, 'weight', e.target.value)}
-                      placeholder="kg"
-                      className="w-full min-w-0 px-2 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-center font-medium focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
-                    />
-                    <input
-                      value={set.reps}
-                      onChange={e => updateSetLog(ex.id, setIndex, 'reps', e.target.value)}
-                      placeholder="Wdh."
-                      className="w-full min-w-0 px-2 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-center font-medium focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
-                    />
-                    <button
-                      type="button"
-                      aria-label={`Satz ${setIndex + 1} abhaken`}
-                      onClick={() => updateSetLog(ex.id, setIndex, 'completed', !set.completed)}
-                      className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all ${
-                        set.completed
-                          ? 'bg-emerald-500 border-emerald-500 text-white'
-                          : 'border-gray-300 hover:border-emerald-400 text-transparent hover:text-emerald-300'
-                      }`}
-                    >
-                      <CheckIcon />
-                    </button>
-                  </div>
-                ))}
+                <div className="space-y-1 px-1">
+                  {(() => {
+                    const activeSetIndex = sets.findIndex(s => !s.completed)
+                    return sets.map((set, setIndex) => {
+                      const isActive = setIndex === activeSetIndex
+                      const orm = calc1RM(set.weight, set.reps)
+                      if (isActive) {
+                        return (
+                          <div key={setIndex} className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 bg-blue-50 rounded-2xl px-2 py-2">
+                            <div className="relative flex items-center justify-center">
+                              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-blue-500" />
+                              <span className="text-sm font-bold text-gray-900 tabular-nums">{setIndex + 1}</span>
+                            </div>
+                            <input
+                              type="number"
+                              step="0.5"
+                              min="0"
+                              value={set.weight}
+                              onChange={e => updateSetLog(ex.id, setIndex, 'weight', e.target.value)}
+                              placeholder="—"
+                              className="w-full px-2 py-2 bg-white rounded-xl text-sm text-center font-bold text-gray-900 tabular-nums shadow-sm border-0 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                            />
+                            <span className="text-sm font-bold text-gray-900 text-center tabular-nums">{set.reps}</span>
+                            <span className="text-xs font-medium text-blue-500 text-center tabular-nums">{orm}</span>
+                            <button
+                              type="button"
+                              onClick={() => updateSetLog(ex.id, setIndex, 'completed', !set.completed)}
+                              className="w-9 h-9 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center text-white transition-colors shadow-sm mx-auto"
+                            >
+                              <CheckIcon />
+                            </button>
+                          </div>
+                        )
+                      }
+                      if (set.completed) {
+                        return (
+                          <div key={setIndex} className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 px-2 py-2">
+                            <span className="text-sm font-semibold text-emerald-500 text-center tabular-nums">{setIndex + 1}</span>
+                            <span className="text-sm text-gray-400 text-center tabular-nums">{set.weight || '—'}</span>
+                            <span className="text-sm text-gray-400 text-center tabular-nums">{set.reps}</span>
+                            <span className="text-xs text-gray-400 text-center tabular-nums">{orm}</span>
+                            <button
+                              type="button"
+                              onClick={() => updateSetLog(ex.id, setIndex, 'completed', !set.completed)}
+                              className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-500 mx-auto"
+                            >
+                              <CheckIcon />
+                            </button>
+                          </div>
+                        )
+                      }
+                      return (
+                        <div key={setIndex} className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 px-2 py-2">
+                          <span className="text-sm text-gray-400 text-center tabular-nums">{setIndex + 1}</span>
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            value={set.weight}
+                            onChange={e => updateSetLog(ex.id, setIndex, 'weight', e.target.value)}
+                            placeholder="—"
+                            className="w-full px-2 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm text-center text-gray-400 tabular-nums focus:ring-1 focus:ring-gray-300 focus:outline-none"
+                          />
+                          <span className="text-sm text-gray-400 text-center tabular-nums">{set.reps}</span>
+                          <span className="text-xs text-gray-300 text-center">—</span>
+                          <button
+                            type="button"
+                            disabled
+                            className="w-9 h-9 rounded-full border-2 border-gray-100 flex items-center justify-center text-transparent mx-auto cursor-not-allowed opacity-40"
+                          >
+                            <CheckIcon />
+                          </button>
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
               </div>
             </div>
           )

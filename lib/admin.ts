@@ -1,11 +1,11 @@
-export const ADMIN_EMAIL = 'fadhel.alshadood@gmail.com'
+export const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? ''
 export const ADMIN_AUTH_COOKIE = 'fitcoach_admin_access_token'
 
 export const normalizeEmail = (email?: string | null) =>
   email?.trim().toLowerCase() ?? ''
 
 export const isAdminEmail = (email?: string | null) =>
-  normalizeEmail(email) === ADMIN_EMAIL
+  normalizeEmail(email) === normalizeEmail(ADMIN_EMAIL)
 
 function parseJwt(token: string): Record<string, unknown> | null {
   try {

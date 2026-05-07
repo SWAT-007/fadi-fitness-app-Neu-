@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { isAdminEmail } from '@/lib/admin'
 import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/lib/types'
 import ActiveWorkoutBanner from './ActiveWorkoutBanner'
+import NotificationBell from '@/components/NotificationBell'
 import { PageFade, ToastProvider } from '@/components/Motion'
 
 const navItems = [
@@ -27,7 +27,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.replace('/login'); return }
-      if (isAdminEmail(user.email)) { router.replace('/admin'); return }
 
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
       if (!prof || prof.role !== 'client') {
@@ -79,6 +78,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             <span className="font-bold text-gray-900">MilaCoach</span>
           </div>
           <div className="flex items-center gap-3">
+            {profile && <NotificationBell clientUserId={profile.id} />}
             <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 text-sm font-bold">
               {profile?.full_name?.charAt(0)?.toUpperCase() ?? 'K'}
             </div>
