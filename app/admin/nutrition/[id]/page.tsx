@@ -356,6 +356,7 @@ export default function NutritionEditorPage() {
             type: 'nutrition_plan',
             title: 'Neuer Ernährungsplan zugewiesen',
             body: plan?.name ?? null,
+            is_read: false,
           })
         }
         setAssignMsg(`✓ Plan an „${cli?.full_name}" zugewiesen.`)

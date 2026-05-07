@@ -43,10 +43,22 @@ const TypeIcon: Record<NotificationType, ReactNode> = {
       <path d="M8 9h8M8 13h8M8 17h5" />
     </svg>
   ),
+  workout_plan: (
+    <svg viewBox="0 0 24 24" {...stroke}>
+      <rect x="4" y="4" width="16" height="17" rx="2" />
+      <path d="M8 9h8M8 13h8M8 17h5" />
+    </svg>
+  ),
   nutrition_plan: (
     <svg viewBox="0 0 24 24" {...stroke}>
       <path d="M12 21c-4 0-7-3.5-7-8 0-3 2-5 4-5 1.2 0 1.8.5 3 .5s1.8-.5 3-.5c2 0 4 2 4 5 0 4.5-3 8-7 8z" />
       <path d="M12 8c0-2.5 1.5-4 4-4" />
+    </svg>
+  ),
+  request: (
+    <svg viewBox="0 0 24 24" {...stroke}>
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
     </svg>
   ),
 }
@@ -56,7 +68,9 @@ const TypeColor: Record<NotificationType, string> = {
   workout:       'bg-emerald-50 text-emerald-600 ring-emerald-100',
   checkin:       'bg-violet-50 text-violet-600 ring-violet-100',
   training_plan: 'bg-blue-50 text-blue-600 ring-blue-100',
+  workout_plan:  'bg-blue-50 text-blue-600 ring-blue-100',
   nutrition_plan:'bg-orange-50 text-orange-600 ring-orange-100',
+  request:       'bg-indigo-50 text-indigo-600 ring-indigo-100',
 }
 
 const TypeHref: Record<NotificationType, string> = {
@@ -64,7 +78,9 @@ const TypeHref: Record<NotificationType, string> = {
   workout:       '/admin/clients',
   checkin:       '/admin/clients',
   training_plan: '/admin/plans',
+  workout_plan:  '/admin/plans',
   nutrition_plan:'/admin/nutrition',
+  request:       '/admin/requests',
 }
 
 function timeAgo(value: string) {

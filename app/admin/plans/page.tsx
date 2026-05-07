@@ -66,7 +66,7 @@ export default function PlansPage() {
     if (assignedClient?.user_id) {
       await supabase.from('notifications').insert({
         client_id: assignedClient.user_id,
-        type: 'training_plan',
+        type: 'workout_plan',
         title: 'Neuer Trainingsplan zugewiesen',
         body: assignedPlan?.name ?? null,
       })

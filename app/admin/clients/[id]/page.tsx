@@ -309,9 +309,10 @@ export default function ClientDetailPage() {
       const assignedPlan = availablePlans.find(plan => plan.id === selectedPlanId)
       await supabase.from('notifications').insert({
         client_id: client.user_id,
-        type: 'training_plan',
+        type: 'workout_plan',
         title: 'Neuer Trainingsplan zugewiesen',
         body: assignedPlan?.name ?? null,
+        is_read: false,
       })
     }
     showToast('Plan zugewiesen ✓', 'success')

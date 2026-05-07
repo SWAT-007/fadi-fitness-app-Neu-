@@ -9,7 +9,7 @@ type ChangeRequest = {
   reason: string
   status: string
   created_at: string
-  clients: { full_name: string } | null
+  clients: { full_name: string; user_id: string | null } | null
   exercises: { name: string } | null
 }
 
@@ -28,7 +28,7 @@ export default function RequestsPage() {
 
     const { data, error } = await supabase
       .from('exercise_change_requests')
-      .select('*, clients(full_name, trainer_id), exercises(name)')
+      .select('*, clients(full_name, trainer_id, user_id), exercises(name)')
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
 
@@ -46,8 +46,18 @@ export default function RequestsPage() {
 
   const updateStatus = async (id: string, status: 'resolved' | 'rejected') => {
     setUpdating(id)
+    const request = requests.find(item => item.id === id)
     const { error } = await supabase.from('exercise_change_requests').update({ status }).eq('id', id)
     if (!error) {
+      if (request?.clients?.user_id) {
+        await supabase.from('notifications').insert({
+          client_id: request.clients.user_id,
+          type: 'request',
+          title: status === 'resolved' ? 'Deine Anfrage wurde akzeptiert' : 'Deine Anfrage wurde abgelehnt',
+          body: request.exercises?.name ?? null,
+          is_read: false,
+        })
+      }
       setRequests(prev => prev.filter(r => r.id !== id))
       showToast(status === 'resolved' ? 'Anfrage erledigt ✓' : 'Anfrage abgelehnt', status === 'resolved' ? 'success' : 'danger')
     }

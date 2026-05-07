@@ -4,7 +4,7 @@
 create table if not exists notifications (
   id uuid default gen_random_uuid() primary key,
   client_id uuid references auth.users(id) on delete cascade not null,
-  type text not null check (type in ('message', 'training_plan', 'nutrition_plan', 'workout')),
+  type text not null check (type in ('message', 'training_plan', 'workout_plan', 'nutrition_plan', 'workout', 'checkin', 'request')),
   title text not null,
   body text,
   is_read boolean not null default false,
@@ -33,7 +33,7 @@ create policy "notifications_client_update" on notifications
 
 create policy "notifications_trainer_insert" on notifications
   for insert with check (
-    type in ('message', 'training_plan', 'nutrition_plan', 'workout')
+    type in ('message', 'training_plan', 'workout_plan', 'nutrition_plan', 'workout', 'checkin', 'request')
     and is_read = false
     and
     exists (

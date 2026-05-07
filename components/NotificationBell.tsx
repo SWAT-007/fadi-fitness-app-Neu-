@@ -3,22 +3,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import type { Notification, NotificationType } from '@/lib/types'
+import type { Notification } from '@/lib/types'
 
-const typeIcon: Record<NotificationType, string> = {
-  message: '💬',
-  training_plan: '💪',
-  nutrition_plan: '🥗',
-  workout: '⚡',
-  checkin: 'OK',
+const clientNotificationTypes = ['workout_plan', 'nutrition_plan', 'request'] as const
+type ClientNotificationType = typeof clientNotificationTypes[number]
+
+const isClientNotification = (notification: Notification): notification is Notification & { type: ClientNotificationType } =>
+  clientNotificationTypes.includes(notification.type as ClientNotificationType)
+
+const typeIcon: Record<ClientNotificationType, string> = {
+  workout_plan: 'Plan',
+  nutrition_plan: 'Food',
+  request: 'OK',
 }
 
-const typeHref: Record<NotificationType, string> = {
-  message: '/client/messages',
-  training_plan: '/client/plan',
+const typeHref: Record<ClientNotificationType, string> = {
+  workout_plan: '/client/plan',
   nutrition_plan: '/client/nutrition',
-  workout: '/client/plan',
-  checkin: '/client/progress',
+  request: '/client/plan',
 }
 
 function timeAgo(value: string) {
@@ -40,6 +42,7 @@ export default function NotificationBell({ clientUserId }: { clientUserId: strin
   const menuRef = useRef<HTMLDivElement>(null)
 
   const appendNotification = useCallback((notification: Notification) => {
+    if (!isClientNotification(notification)) return
     setNotifications(prev => {
       if (prev.some(existing => existing.id === notification.id)) return prev
       return [notification, ...prev].sort((a, b) => (
@@ -54,29 +57,28 @@ export default function NotificationBell({ clientUserId }: { clientUserId: strin
         .from('notifications')
         .select('*')
         .eq('client_id', clientUserId)
+        .in('type', [...clientNotificationTypes])
         .order('created_at', { ascending: false })
         .limit(20)
 
-      setNotifications((data ?? []) as Notification[])
+      setNotifications(((data ?? []) as Notification[]).filter(isClientNotification))
     }
     load()
   }, [clientUserId])
 
   useEffect(() => {
-    const channel = supabase
-      .channel(`notifications-${clientUserId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `client_id=eq.${clientUserId}`,
-        },
-        payload => appendNotification(payload.new as Notification)
-      )
-      .subscribe()
-
+    const channel = supabase.channel(`notifications-${clientUserId}`)
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `client_id=eq.${clientUserId}`,
+      },
+      payload => appendNotification(payload.new as Notification)
+    )
+    channel.subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [appendNotification, clientUserId])
 
@@ -108,7 +110,7 @@ export default function NotificationBell({ clientUserId }: { clientUserId: strin
     }
   }
 
-  const openNotification = async (notification: Notification) => {
+  const openNotification = async (notification: Notification & { type: ClientNotificationType }) => {
     setOpen(false)
     if (!notification.is_read) {
       setNotifications(prev => prev.map(item => (
@@ -128,7 +130,10 @@ export default function NotificationBell({ clientUserId }: { clientUserId: strin
         aria-label="Benachrichtigungen"
         aria-expanded={open}
       >
-        🔔
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
         {unreadCount > 0 && (
           <span className="absolute -right-1 -top-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white">
             {unreadCount > 9 ? '9+' : unreadCount}
@@ -137,7 +142,7 @@ export default function NotificationBell({ clientUserId }: { clientUserId: strin
       </button>
 
       {open && (
-        <div className="absolute right-0 top-11 z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl">
+        <div className="fixed right-3 top-16 z-50 w-80 max-w-[90vw] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl sm:absolute sm:right-0 sm:top-11">
           <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
             <div>
               <div className="text-sm font-semibold text-gray-900">Benachrichtigungen</div>
@@ -153,13 +158,13 @@ export default function NotificationBell({ clientUserId }: { clientUserId: strin
             </button>
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
+          <div className="max-h-[min(24rem,calc(100vh-8rem))] overflow-y-auto">
             {notifications.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-gray-400">
                 Keine Benachrichtigungen.
               </div>
             ) : (
-              notifications.map(notification => (
+              notifications.filter(isClientNotification).map(notification => (
                 <button
                   key={notification.id}
                   type="button"
@@ -168,15 +173,15 @@ export default function NotificationBell({ clientUserId }: { clientUserId: strin
                     notification.is_read ? 'bg-white' : 'bg-emerald-50/60'
                   }`}
                 >
-                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white text-base shadow-sm ring-1 ring-gray-100">
+                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white text-[10px] font-semibold text-indigo-600 shadow-sm ring-1 ring-gray-100">
                     {typeIcon[notification.type]}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className={`block text-sm ${notification.is_read ? 'font-medium text-gray-700' : 'font-semibold text-gray-900'}`}>
+                    <span className={`block text-sm leading-snug ${notification.is_read ? 'font-medium text-gray-700' : 'font-semibold text-gray-900'}`}>
                       {notification.title}
                     </span>
                     {notification.body && (
-                      <span className="mt-0.5 block truncate text-xs text-gray-400">{notification.body}</span>
+                      <span className="mt-0.5 block text-xs leading-snug text-gray-400">{notification.body}</span>
                     )}
                     <span className="mt-1 block text-xs text-gray-400">{timeAgo(notification.created_at)}</span>
                   </span>

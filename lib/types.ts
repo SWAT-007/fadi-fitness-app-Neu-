@@ -168,7 +168,14 @@ export interface Message {
   receiver?: Profile
 }
 
-export type NotificationType = 'message' | 'training_plan' | 'nutrition_plan' | 'workout' | 'checkin'
+export type NotificationType =
+  | 'message'
+  | 'training_plan'
+  | 'workout_plan'
+  | 'nutrition_plan'
+  | 'workout'
+  | 'checkin'
+  | 'request'
 
 export interface Notification {
   id: string
