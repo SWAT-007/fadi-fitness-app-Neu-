@@ -38,9 +38,7 @@ export default function ClientsPage() {
 
   const inviteLink = useMemo(() => {
     if (!inviteResult?.token || typeof window === 'undefined') return ''
-    const url = new URL('/login', window.location.origin)
-    url.searchParams.set('inviteToken', inviteResult.token)
-    return url.toString()
+    return new URL(`/invite/${inviteResult.token}`, window.location.origin).toString()
   }, [inviteResult])
 
   const copyToClipboard = async (value: string) => {
