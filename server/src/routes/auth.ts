@@ -45,6 +45,10 @@ authRouter.post("/register", async (req, res) => {
     return res.status(400).json({ message: "Invalid request" });
   }
 
+  if (role === "client") {
+    return res.status(403).json({ message: "Client registration requires an invitation link" });
+  }
+
   try {
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
@@ -53,6 +57,9 @@ authRouter.post("/register", async (req, res) => {
         passwordHash,
         role: role.toUpperCase() as "TRAINER" | "CLIENT",
         fullName: fallbackFullNameFromEmail(email),
+        ...(role === "trainer" && {
+          trainerProfile: { create: {} },
+        }),
       },
       select: {
         id: true,
