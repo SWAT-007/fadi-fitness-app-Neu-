@@ -41,6 +41,7 @@ model TrainerProfile {
   userId      String        @unique
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   clients     ClientProfile[]
+  linkTokens  ClientLinkToken[]
   workoutPlans WorkoutPlan[]
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
@@ -57,7 +58,6 @@ model ClientProfile {
   phone           String?
   notes           String?
   status          String            @default("active")
-  linkTokens      ClientLinkToken[]
   assignedPlans   AssignedPlan[]
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
@@ -66,15 +66,17 @@ model ClientProfile {
 }
 
 model ClientLinkToken {
-  id          String        @id @default(cuid())
-  clientId    String
-  client      ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  tokenHash   String        @unique
-  expiresAt   DateTime
-  consumedAt  DateTime?
-  createdAt   DateTime      @default(now())
+  id         String         @id @default(cuid())
+  trainerId  String
+  trainer    TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  email      String
+  tokenHash  String         @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime       @default(now())
 
-  @@index([clientId, expiresAt])
+  @@index([trainerId])
+  @@index([email])
 }
 
 model WorkoutPlan {
