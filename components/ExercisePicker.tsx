@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { fetchExerciseLibrary, type LibraryExercise } from '@/lib/exercises'
+import {
+  EXERCISE_CATEGORIES,
+  fetchExerciseLibrary,
+  getExerciseCategory,
+  type ExerciseCategory,
+  type LibraryExercise,
+} from '@/lib/exercises'
 
 type ExercisePickerProps = {
   open: boolean
@@ -21,31 +27,44 @@ function CloseIcon() {
 export default function ExercisePicker({ open, onClose, onSelect }: ExercisePickerProps) {
   const [library, setLibrary] = useState<LibraryExercise[]>([])
   const [loading, setLoading] = useState(true)
-  const [muscleFilter, setMuscleFilter] = useState('')
+  const [muscleFilter, setMuscleFilter] = useState<ExerciseCategory | 'all'>('all')
   const [search, setSearch] = useState('')
+  const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
     if (!open) return
     setLoading(true)
-    fetchExerciseLibrary().then(data => {
-      setLibrary(data)
-      setLoading(false)
-    })
+    setLoadError('')
+    setMuscleFilter('all')
+    setSearch('')
+
+    fetchExerciseLibrary()
+      .then(data => {
+        setLibrary(data)
+      })
+      .catch(error => {
+        console.error('[ExercisePicker] Could not load exercise library:', error)
+        setLibrary([])
+        setLoadError('Übungen konnten nicht geladen werden. Bitte versuche es erneut.')
+      })
+      .finally(() => setLoading(false))
   }, [open])
 
   if (!open) return null
 
-  const muscleGroups = Array.from(new Set(library.map(e => e.muscle_group).filter(Boolean) as string[])).sort()
-
+  const query = search.trim().toLowerCase()
   const filtered = library.filter(e => {
-    const matchMuscle = !muscleFilter || e.muscle_group === muscleFilter
-    const matchSearch = !search || e.name.toLowerCase().includes(search.toLowerCase())
+    const matchMuscle = muscleFilter === 'all' || getExerciseCategory(e.muscle_group) === muscleFilter
+    const matchSearch = !query || e.name.toLowerCase().includes(query)
     return matchMuscle && matchSearch
   })
 
+  const categoryCount = (category: ExerciseCategory) =>
+    library.filter(exercise => getExerciseCategory(exercise.muscle_group) === category).length
+
   return (
-    <div className="fixed inset-0 z-50 bg-white flex flex-col">
-      <div className="flex items-center gap-3 px-4 py-4 border-b border-gray-100 flex-shrink-0">
+    <div className="fixed inset-y-0 left-0 right-0 z-50 flex h-screen min-h-0 flex-col overflow-hidden bg-white lg:left-[260px]">
+      <div className="flex flex-shrink-0 items-center gap-3 border-b border-gray-100 px-4 py-4">
         <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
           <CloseIcon />
         </button>
@@ -55,36 +74,48 @@ export default function ExercisePicker({ open, onClose, onSelect }: ExercisePick
         </Link>
       </div>
 
-      <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0 space-y-3">
+      <div className="flex-shrink-0 space-y-3 border-b border-gray-100 px-4 py-3">
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Suchen…"
           className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
         />
-        {muscleGroups.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto -mx-1 px-1">
-            {(['', ...muscleGroups]).map(group => (
-              <button
-                key={group || 'all'}
-                onClick={() => setMuscleFilter(group)}
-                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                  muscleFilter === group
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {group || 'Alle'}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex gap-2 overflow-x-auto -mx-1 px-1">
+          <button
+            onClick={() => setMuscleFilter('all')}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              muscleFilter === 'all'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Alle <span className="opacity-70">{library.length}</span>
+          </button>
+          {EXERCISE_CATEGORIES.map(group => (
+            <button
+              key={group}
+              onClick={() => setMuscleFilter(group)}
+              className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                muscleFilter === group
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {group} <span className="opacity-70">{categoryCount(group)}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {loading ? (
           <div className="p-8 flex justify-center">
             <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : loadError ? (
+          <div className="p-8 text-center text-sm text-red-500">
+            {loadError}
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-8 text-center text-sm text-gray-400">
@@ -98,7 +129,7 @@ export default function ExercisePicker({ open, onClose, onSelect }: ExercisePick
             )}
           </div>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100 pb-6">
             {filtered.map(exercise => (
               <li key={exercise.id}>
                 <button
