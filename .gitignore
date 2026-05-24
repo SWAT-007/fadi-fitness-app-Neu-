@@ -40,3 +40,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .claude/
+
+/lib/generated/prisma
+
+# tooling
+.codex/
+graphify-out/
+docs/2026-*/
