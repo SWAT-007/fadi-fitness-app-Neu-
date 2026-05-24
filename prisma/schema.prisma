@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  TRAINER
+  CLIENT
+}
+
+enum NotificationType {
+  MESSAGE
+  TRAINING_PLAN
+  WORKOUT_PLAN
+  NUTRITION_PLAN
+  WORKOUT
+  CHECKIN
+  REQUEST
+  SYSTEM
+}
+
+model User {
+  id            String          @id @default(cuid())
+  email         String          @unique
+  passwordHash  String
+  role          UserRole
+  fullName      String
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  trainerProfile TrainerProfile?
+  clientProfile  ClientProfile?
+  notifications  Notification[]
+}
+
+model TrainerProfile {
+  id          String        @id @default(cuid())
+  userId      String        @unique
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clients     ClientProfile[]
+  workoutPlans WorkoutPlan[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model ClientProfile {
+  id              String            @id @default(cuid())
+  userId          String?           @unique
+  user            User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  trainerId       String
+  trainer         TrainerProfile    @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  fullName        String
+  email           String
+  phone           String?
+  notes           String?
+  status          String            @default("active")
+  linkTokens      ClientLinkToken[]
+  assignedPlans   AssignedPlan[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([trainerId])
+}
+
+model ClientLinkToken {
+  id          String        @id @default(cuid())
+  clientId    String
+  client      ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tokenHash   String        @unique
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@index([clientId, expiresAt])
+}
+
+model WorkoutPlan {
+  id            String          @id @default(cuid())
+  trainerId     String
+  trainer       TrainerProfile  @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  name          String
+  description   String?
+  isActive      Boolean         @default(true)
+  days          WorkoutDay[]
+  assignedPlans AssignedPlan[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([trainerId])
+}
+
+model AssignedPlan {
+  id         String        @id @default(cuid())
+  clientId   String
+  planId     String
+  assignedAt DateTime      @default(now())
+  active     Boolean       @default(true)
+  client     ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  plan       WorkoutPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, active])
+  @@index([planId, active])
+  @@unique([clientId, planId])
+}
+
+model WorkoutDay {
+  id          String      @id @default(cuid())
+  planId      String
+  plan        WorkoutPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  sortOrder   Int         @default(0)
+  exercises   Exercise[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([planId, sortOrder])
+}
+
+model Exercise {
+  id            String      @id @default(cuid())
+  dayId          String
+  day            WorkoutDay  @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  sets           Int
+  reps           String
+  targetWeightKg Float?
+  restSeconds    Int?
+  note           String?
+  sortOrder      Int         @default(0)
+  imageUrl       String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([dayId, sortOrder])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  readAt    DateTime?
+
+  @@index([userId, isRead, createdAt])
+}
