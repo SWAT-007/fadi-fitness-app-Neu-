@@ -207,6 +207,7 @@ export default function TrainerMessagesPage() {
         if (!senderClient) return
 
         if (selectedClient?.user_id === msg.sender_id) {
+          appendMessage(msg)
           setUnreadByClientId(prev => ({ ...prev, [senderClient.id]: 0 }))
           supabase
             .from('messages')
@@ -224,7 +225,22 @@ export default function TrainerMessagesPage() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [clients, myProfile, selectedClient])
+  }, [clients, myProfile, selectedClient, appendMessage])
+
+  useEffect(() => {
+    if (!myProfile || clients.length === 0) return
+    const trainerId = myProfile.id
+    const refresh = () => { void loadUnreadCounts(trainerId, clients) }
+    const intervalId = setInterval(refresh, 8000)
+    window.addEventListener('focus', refresh)
+    const onVisibility = () => { if (document.visibilityState === 'visible') refresh() }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      clearInterval(intervalId)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [myProfile, clients, loadUnreadCounts])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })

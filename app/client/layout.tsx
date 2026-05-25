@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -21,6 +21,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const router = useRouter()
   const pathname = usePathname()
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -52,6 +53,45 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     }
     checkAuth()
   }, [router])
+
+  const loadUnreadCount = useCallback(async (userId: string) => {
+    const { count } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('client_id', userId)
+      .eq('type', 'message')
+      .eq('is_read', false)
+    setUnreadMessageCount(count ?? 0)
+  }, [])
+
+  useEffect(() => {
+    if (!profile?.id) return
+    void loadUnreadCount(profile.id)
+    const refresh = () => { void loadUnreadCount(profile.id) }
+    const intervalId = setInterval(refresh, 8000)
+    window.addEventListener('focus', refresh)
+    const onVisibility = () => { if (document.visibilityState === 'visible') refresh() }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      clearInterval(intervalId)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [profile?.id, loadUnreadCount])
+
+  useEffect(() => {
+    if (!profile?.id) return
+    const channel = supabase
+      .channel(`client-msg-badge-${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `client_id=eq.${profile.id}` },
+        () => { void loadUnreadCount(profile.id) })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [profile?.id, loadUnreadCount])
+
+  useEffect(() => {
+    if (pathname.startsWith('/client/messages')) setUnreadMessageCount(0)
+  }, [pathname])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -108,12 +148,17 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors ${
+                className={`relative flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors ${
                   active ? 'text-emerald-600' : 'text-gray-400 hover:text-gray-600'
                 }`}
               >
                 <span className="text-xl leading-none">{item.icon}</span>
                 <span className="text-xs font-medium">{item.label}</span>
+                {item.href === '/client/messages' && unreadMessageCount > 0 && (
+                  <span className="absolute right-[25%] top-0.5 min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white">
+                    {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+                  </span>
+                )}
               </Link>
             )
           })}
