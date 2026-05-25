@@ -157,6 +157,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [profile, loadNavBadges])
 
   useEffect(() => {
+    if (!profile) return
+    const trainerId = profile.id
+    const refresh = () => { void loadNavBadges(trainerId) }
+    const intervalId = setInterval(refresh, 8000)
+    window.addEventListener('focus', refresh)
+    const onVisibility = () => { if (document.visibilityState === 'visible') refresh() }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      clearInterval(intervalId)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [profile, loadNavBadges])
+
+  useEffect(() => {
     if (!profile || !pathname.startsWith('/admin/messages')) return
 
     const markMessageNotificationsRead = async () => {
