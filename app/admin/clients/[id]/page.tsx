@@ -162,7 +162,6 @@ export default function ClientDetailPage() {
   const [editingProfile, setEditingProfile] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
   const [profileName, setProfileName] = useState('')
-  const [profileEmail, setProfileEmail] = useState('')
   const [profilePhone, setProfilePhone] = useState('')
   const [resetPasswordOpen, setResetPasswordOpen] = useState(false)
   const [newPassword, setNewPassword] = useState('')
@@ -243,7 +242,6 @@ export default function ClientDetailPage() {
 
       setClient(clientRes.data)
       setProfileName(clientRes.data.full_name ?? '')
-      setProfileEmail(clientRes.data.email ?? '')
       setProfilePhone(clientRes.data.phone ?? '')
       setNotesValue(clientRes.data.notes ?? '')
       setAssignedPlans((assignedRes.data ?? []) as AssignedPlan[])
@@ -406,7 +404,6 @@ export default function ClientDetailPage() {
   const resetProfileForm = () => {
     if (!client) return
     setProfileName(client.full_name ?? '')
-    setProfileEmail(client.email ?? '')
     setProfilePhone(client.phone ?? '')
   }
 
