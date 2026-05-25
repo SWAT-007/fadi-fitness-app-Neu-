@@ -47,3 +47,4 @@ next-env.d.ts
 .codex/
 graphify-out/
 docs/2026-*/
+backups/
