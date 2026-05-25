@@ -5,7 +5,10 @@ import { ADMIN_AUTH_COOKIE, getEmailFromJwt, getUserIdFromJwt, isAdminEmail } fr
 const deleteError = (message: string, status: number) =>
   NextResponse.json({ ok: false, error: message }, { status })
 
-const isMissingTableError = (error: { code?: string } | null) => error?.code === '42P01'
+const isMissingTableError = (error: { code?: string; message?: string } | null) =>
+  error?.code === '42P01' ||
+  error?.code === 'PGRST205' ||
+  (error?.message ?? '').includes('Could not find the table')
 
 const assertDeleteOk = (error: { code?: string; message?: string } | null, fallback: string) => {
   if (!error || isMissingTableError(error)) return null
@@ -98,7 +101,6 @@ export async function POST(request: NextRequest) {
     await deleteByClient('drink_logs', 'Drink-Logs konnten nicht gelöscht werden.')
     await deleteByClient('meal_history', 'Meal-History konnte nicht gelöscht werden.')
     await deleteByClient('client_meal_foods', 'Meal-Auswahlen konnten nicht gelöscht werden.')
-    await deleteByClient('client_food_swaps', 'Food-Swaps konnten nicht gelöscht werden.')
     await deleteByClient('notifications', 'Benachrichtigungen konnten nicht gelöscht werden.')
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Kunde konnte nicht gelöscht werden.'
