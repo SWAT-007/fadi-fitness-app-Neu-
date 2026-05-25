@@ -155,6 +155,10 @@ export default function ClientDetailPage() {
   const [profileName, setProfileName] = useState('')
   const [profileEmail, setProfileEmail] = useState('')
   const [profilePhone, setProfilePhone] = useState('')
+  const [resetPasswordOpen, setResetPasswordOpen] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [resettingPassword, setResettingPassword] = useState(false)
   const [editingNotes, setEditingNotes] = useState(false)
   const [notesValue, setNotesValue] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
@@ -413,6 +417,55 @@ export default function ClientDetailPage() {
     }
   }
 
+  const handleResetPassword = async () => {
+    if (!client) return
+    if (!client.user_id) {
+      showToast('Dieser Kunde hat noch keinen App-Zugang.', 'danger')
+      return
+    }
+
+    if (!newPassword || !confirmNewPassword) {
+      showToast('Bitte Passwort und Bestätigung eingeben.', 'danger')
+      return
+    }
+    if (newPassword.length < 6) {
+      showToast('Passwort muss mindestens 6 Zeichen lang sein.', 'danger')
+      return
+    }
+    if (newPassword !== confirmNewPassword) {
+      showToast('Passwörter stimmen nicht überein.', 'danger')
+      return
+    }
+
+    setResettingPassword(true)
+    try {
+      const response = await fetch('/api/admin/reset-client-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: client.id,
+          password: newPassword,
+          confirmPassword: confirmNewPassword,
+        }),
+      })
+
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      if (!response.ok) {
+        showToast(payload?.error ?? 'Passwort konnte nicht zurückgesetzt werden.', 'danger')
+        return
+      }
+
+      showToast('Passwort erfolgreich zurückgesetzt ✓', 'success')
+      setNewPassword('')
+      setConfirmNewPassword('')
+      setResetPasswordOpen(false)
+    } catch {
+      showToast('Netzwerkfehler beim Zurücksetzen des Passworts.', 'danger')
+    } finally {
+      setResettingPassword(false)
+    }
+  }
+
   if (loading) {
     return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
   }
@@ -604,6 +657,65 @@ export default function ClientDetailPage() {
                 </dd>
               </div>
             </dl>
+
+            <div className="mt-5 pt-5 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-gray-900">Passwort zurücksetzen</span>
+                {!resetPasswordOpen && (
+                  <button
+                    onClick={() => setResetPasswordOpen(true)}
+                    disabled={!client.user_id}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 disabled:text-gray-400 disabled:cursor-not-allowed"
+                  >
+                    Bearbeiten
+                  </button>
+                )}
+              </div>
+              {!client.user_id ? (
+                <p className="text-sm text-gray-500">
+                  Passwort-Reset ist erst möglich, wenn der Kunde einen App-Zugang hat.
+                </p>
+              ) : resetPasswordOpen ? (
+                <div className="space-y-2">
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Neues Passwort (mind. 6 Zeichen)"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                  <input
+                    type="password"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    placeholder="Passwort bestätigen"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setResetPasswordOpen(false)
+                        setNewPassword('')
+                        setConfirmNewPassword('')
+                      }}
+                      disabled={resettingPassword}
+                      className="flex-1 py-2 border border-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-50 disabled:opacity-60"
+                    >
+                      Abbrechen
+                    </button>
+                    <button
+                      onClick={handleResetPassword}
+                      disabled={resettingPassword}
+                      className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg disabled:opacity-60"
+                    >
+                      {resettingPassword ? 'Setze zurück...' : 'Zurücksetzen'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">Setzt das Login-Passwort dieses Kunden neu.</p>
+              )}
+            </div>
 
             {/* Trainer Notes */}
             <div className="mt-5 pt-5 border-t border-gray-100">
