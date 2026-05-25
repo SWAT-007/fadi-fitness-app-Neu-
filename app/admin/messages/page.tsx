@@ -66,6 +66,7 @@ export default function TrainerMessagesPage() {
   const [unreadByClientId, setUnreadByClientId] = useState<Record<string, number>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const sendingRef = useRef(false)
   const prevMessageCountRef = useRef(0)
 
   const appendMessage = useCallback((message: Message) => {
@@ -273,7 +274,9 @@ export default function TrainerMessagesPage() {
 
   const sendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault()
+    if (sendingRef.current) return
     if (!newMessage.trim() || !selectedClient?.user_id || !myProfile) return
+    sendingRef.current = true
     const content = newMessage.trim()
     setSending(true)
     setNewMessage('')
@@ -299,7 +302,12 @@ export default function TrainerMessagesPage() {
       if (notificationError) console.error('[Notifications] message insert failed:', notificationError)
       showToast('Gesendet', 'info')
     }
+    if (error) {
+      showToast('Senden fehlgeschlagen', 'danger')
+      setNewMessage(content)
+    }
     setSending(false)
+    sendingRef.current = false
     inputRef.current?.focus()
   }
 
@@ -450,7 +458,11 @@ export default function TrainerMessagesPage() {
                   className="press shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-white bg-gradient-to-br from-indigo-600 to-violet-600 shadow-[0_4px_12px_-4px_rgba(79,70,229,0.55)] disabled:opacity-40 disabled:shadow-none transition-opacity"
                   aria-label="Senden"
                 >
-                  <span className="w-4 h-4 block translate-x-[1px]">{Icon.send}</span>
+                  {sending ? (
+                    <span className="text-[10px] font-semibold">…</span>
+                  ) : (
+                    <span className="w-4 h-4 block translate-x-[1px]">{Icon.send}</span>
+                  )}
                 </button>
               </div>
               <p className="text-[10.5px] text-gray-400 mt-1.5 px-1 hidden sm:block">
