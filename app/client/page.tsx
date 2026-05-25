@@ -53,6 +53,7 @@ export default function ClientDashboard() {
   const [menuOpenDayId, setMenuOpenDayId] = useState<string | null>(null)
   const [weeklyStats, setWeeklyStats] = useState({ workouts: 0, seconds: 0 })
   const [monthlyStats, setMonthlyStats] = useState({ workouts: 0, seconds: 0 })
+  const [hasWeeklyCheckin, setHasWeeklyCheckin] = useState(false)
   const [loading, setLoading] = useState(true)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -82,13 +83,14 @@ export default function ClientDashboard() {
       const weekStart = monday.toISOString().split('T')[0]
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
 
-      const [assignedRes, logsCountRes, progressRes, weekLogsRes, activeLogsRes, analyseLogsRes] = await Promise.all([
+      const [assignedRes, logsCountRes, progressRes, weekLogsRes, activeLogsRes, analyseLogsRes, checkinRes] = await Promise.all([
         supabase.from('assigned_plans').select('*, plan:workout_plans(*, workout_days(*))').eq('client_id', cl.id).eq('is_active', true).order('assigned_at', { ascending: false }).limit(1),
         supabase.from('workout_logs').select('id', { count: 'exact', head: true }).eq('client_id', cl.id).not('completed_at', 'is', null),
         supabase.from('progress_logs').select('*').eq('client_id', cl.id).order('date', { ascending: false }).limit(1),
         supabase.from('workout_logs').select('day_id').eq('client_id', cl.id).not('completed_at', 'is', null).gte('date', weekStart),
         supabase.from('workout_logs').select('day_id').eq('client_id', cl.id).is('completed_at', null),
         supabase.from('workout_logs').select('id, duration_seconds, date').eq('client_id', cl.id).not('completed_at', 'is', null).gte('date', monthStart),
+        supabase.from('weekly_checkins').select('id').eq('client_id', cl.id).eq('week_start', weekStart).limit(1),
       ])
 
       const assigned = assignedRes.data?.[0] as (AssignedPlan & { plan: WorkoutPlan & { workout_days: WorkoutDay[] } }) | undefined
@@ -111,6 +113,7 @@ export default function ClientDashboard() {
         workouts: analyseLogs.length,
         seconds: analyseLogs.reduce((s, l) => s + (l.duration_seconds ?? 0), 0),
       })
+      setHasWeeklyCheckin((checkinRes.data?.length ?? 0) > 0)
 
       setLoading(false)
     }
@@ -145,6 +148,13 @@ export default function ClientDashboard() {
   const firstName = profile?.full_name?.split(' ')[0] ?? 'Athlet'
   const weeklyGoal = 4
   const weeklyProgressPct = Math.min(100, Math.round((weeklyStats.workouts / weeklyGoal) * 100))
+  const trainingStatusText = !activePlan
+    ? 'Kein aktiver Plan'
+    : activeDayIds.size > 0
+      ? 'Workout läuft'
+      : completedDayIds.size > 0
+        ? `${completedDayIds.size} Tag(e) erledigt`
+        : 'Noch kein Workout'
 
   if (loading) {
     return <div className="flex justify-center p-12"><div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" /></div>
@@ -311,6 +321,25 @@ export default function ClientDashboard() {
           <AnalyseTile label="Diese Woche" sub="Trainingszeit" icon={Icon.clock} value={formatDuration(weeklyStats.seconds)} accent="from-blue-500/10" />
           <AnalyseTile label="Dieser Monat" sub="Trainings" icon={Icon.dumbbell} value={<AnimatedNumber value={monthlyStats.workouts} />} accent="from-violet-500/10" />
           <AnalyseTile label="Dieser Monat" sub="Trainingszeit" icon={Icon.clock} value={formatDuration(monthlyStats.seconds)} accent="from-orange-500/10" />
+        </div>
+      </div>
+
+      {/* Diese Woche */}
+      <div className="bg-white rounded-2xl border border-gray-200/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)] mb-4 overflow-hidden">
+        <div className="px-5 pt-4 pb-3 border-b border-gray-100">
+          <p className="text-[11px] text-gray-500 font-medium uppercase tracking-[0.12em]">Diese Woche</p>
+        </div>
+        <div className="px-5 py-3 space-y-2.5 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-gray-600">Training</span>
+            <span className="font-medium text-gray-900">{trainingStatusText}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-gray-600">Check-in</span>
+            <span className={`font-medium ${hasWeeklyCheckin ? 'text-emerald-700' : 'text-amber-700'}`}>
+              {hasWeeklyCheckin ? 'Erledigt' : 'Offen'}
+            </span>
+          </div>
         </div>
       </div>
 
