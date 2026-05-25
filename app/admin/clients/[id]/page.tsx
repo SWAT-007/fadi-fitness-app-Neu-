@@ -33,6 +33,21 @@ type NutritionAssignmentSummary = {
   plan_name: string | null
 }
 
+type BackendClientPayload = {
+  client?: {
+    id: string
+    name?: string
+    displayName?: string
+    email?: string
+    phone?: string | null
+    notes?: string | null
+    status?: string
+    linked?: boolean
+    createdAt?: string
+    updatedAt?: string
+  }
+}
+
 function formatDuration(seconds: number | null | undefined) {
   if (!seconds) return null
   const m = Math.floor(seconds / 60)
@@ -188,6 +203,37 @@ export default function ClientDetailPage() {
     try {
       setLoading(true)
       setLoadError(null)
+
+      const detailResponse = await fetch(`/api/backend/clients/${id}`, {
+        cache: 'no-store',
+      })
+      if (detailResponse.status === 401) {
+        setLoadError('Backend-Login erforderlich.')
+        return
+      }
+      if (detailResponse.status === 404) {
+        router.push('/admin/clients')
+        return
+      }
+
+      const detailPayload = (await detailResponse.json().catch(() => null)) as BackendClientPayload | null
+      if (!detailResponse.ok || !detailPayload?.client) {
+        setLoadError('Kundendaten konnten gerade nicht geladen werden.')
+        return
+      }
+
+      const backendClient = detailPayload.client
+      const normalizedClient: Client = {
+        id: backendClient.id,
+        trainer_id: '',
+        user_id: null,
+        full_name: (backendClient.name ?? backendClient.displayName ?? '').trim(),
+        email: (backendClient.email ?? '').trim(),
+        phone: backendClient.phone ?? null,
+        notes: backendClient.notes ?? null,
+        created_at: backendClient.createdAt ?? new Date().toISOString(),
+      }
+
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
@@ -205,8 +251,7 @@ export default function ClientDetailPage() {
       chartStart.setDate(monday.getDate() - 49)
       const chartStartStr = chartStart.toISOString().split('T')[0]
 
-      const [clientRes, assignedRes, assignedNutritionRes, plansRes, logsRes, historyRes, progressRes, analyseRes, chartRes, checkinsRes, lastWeekRes] = await Promise.all([
-        supabase.from('clients').select('*').eq('id', id).single(),
+      const [assignedRes, assignedNutritionRes, plansRes, logsRes, historyRes, progressRes, analyseRes, chartRes, checkinsRes, lastWeekRes] = await Promise.all([
         supabase.from('assigned_plans').select('*, plan:workout_plans(*)').eq('client_id', id).order('assigned_at', { ascending: false }),
         supabase
           .from('assigned_nutrition_plans')
@@ -241,18 +286,16 @@ export default function ClientDetailPage() {
           .lt('date', weekStart),
       ])
 
-      if (!clientRes.data) { router.push('/admin/clients'); return }
-
-      const mainError = clientRes.error ?? assignedRes.error ?? plansRes.error ?? logsRes.error ?? progressRes.error
+      const mainError = assignedRes.error ?? plansRes.error ?? logsRes.error ?? progressRes.error
       if (mainError) throw mainError
       if (historyRes.error) console.error('Failed to load workout history', historyRes.error)
       if (analyseRes.error) console.error('Failed to load workout analysis', analyseRes.error)
       if (chartRes.error) console.error('Failed to load chart data', chartRes.error)
 
-      setClient(clientRes.data)
-      setProfileName(clientRes.data.full_name ?? '')
-      setProfilePhone(clientRes.data.phone ?? '')
-      setNotesValue(clientRes.data.notes ?? '')
+      setClient(normalizedClient)
+      setProfileName(normalizedClient.full_name ?? '')
+      setProfilePhone(normalizedClient.phone ?? '')
+      setNotesValue(normalizedClient.notes ?? '')
       setAssignedPlans((assignedRes.data ?? []) as AssignedPlan[])
       const nutritionAssignments: NutritionAssignmentSummary[] = ((assignedNutritionRes.data ?? []) as Array<{
         id: string
@@ -436,21 +479,24 @@ export default function ClientDetailPage() {
 
     setSavingProfile(true)
     try {
-      const response = await fetch('/api/admin/update-client', {
-        method: 'POST',
+      const response = await fetch(`/api/backend/clients/${client.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clientId: client.id,
-          full_name: fullName,
+          name: fullName,
           email,
           phone,
           notes: client.notes ?? '',
         }),
       })
 
-      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      const payload = (await response.json().catch(() => null)) as { error?: string; message?: string } | null
       if (!response.ok) {
-        showToast(payload?.error ?? 'Kundendaten konnten nicht gespeichert werden.', 'danger')
+        if (response.status === 401) {
+          showToast('Backend-Login erforderlich.', 'danger')
+          return
+        }
+        showToast(payload?.message ?? payload?.error ?? 'Kundendaten konnten nicht gespeichert werden.', 'danger')
         return
       }
 
@@ -472,21 +518,24 @@ export default function ClientDetailPage() {
 
     setSavingNotes(true)
     try {
-      const response = await fetch('/api/admin/update-client', {
-        method: 'POST',
+      const response = await fetch(`/api/backend/clients/${client.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clientId: client.id,
-          full_name: fullName,
+          name: fullName,
           email,
           phone,
           notes: notesValue,
         }),
       })
 
-      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      const payload = (await response.json().catch(() => null)) as { error?: string; message?: string } | null
       if (!response.ok) {
-        showToast(payload?.error ?? 'Notiz konnte nicht gespeichert werden.', 'danger')
+        if (response.status === 401) {
+          showToast('Backend-Login erforderlich.', 'danger')
+          return
+        }
+        showToast(payload?.message ?? payload?.error ?? 'Notiz konnte nicht gespeichert werden.', 'danger')
         return
       }
 
