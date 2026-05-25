@@ -1,9 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 const SENTINEL_PASSWORD_HASH = "MIGRATED_NO_PASSWORD_HASH";
 const SENTINEL_AUTH_STATE = "MIGRATED_PASSWORD_REQUIRED";
+const prismaAdapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
 function usage() {
   console.log(
@@ -135,7 +138,7 @@ async function main() {
     ),
   );
 
-  const prisma = new PrismaClient();
+  const prisma = new PrismaClient({ adapter: prismaAdapter });
   let prismaUsers = [];
   let prismaClientProfiles = [];
   let prismaTrainerProfiles = [];
