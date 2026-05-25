@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -54,6 +54,7 @@ export default function WorkoutPlayerPage() {
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [syncingProgress, setSyncingProgress] = useState(false)
   const [complete, setComplete] = useState(false)
   const [error, setError] = useState('')
 
@@ -68,6 +69,7 @@ export default function WorkoutPlayerPage() {
 
   const [bulkKgOpen, setBulkKgOpen] = useState(false)
   const [bulkKgValue, setBulkKgValue] = useState('')
+  const autosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     if (complete) return
@@ -185,6 +187,68 @@ export default function WorkoutPlayerPage() {
       )),
     }))
   }
+
+  const persistProgress = useCallback(async () => {
+    if (!workoutLogId || loading || complete || saving) return
+    setSyncingProgress(true)
+
+    try {
+      const nextExistingLogs: Record<string, Record<number, ExerciseLog>> = { ...existingLogs }
+
+      for (const exercise of exercises) {
+        const exerciseSets = logs[exercise.id] ?? []
+        for (let index = 0; index < exerciseSets.length; index++) {
+          const set = exerciseSets[index]
+          const setNumber = index + 1
+          const payload = {
+            workout_log_id: workoutLogId,
+            exercise_id: exercise.id,
+            actual_weight: set.weight ? parseFloat(set.weight) : null,
+            actual_reps: set.reps || null,
+            sets_done: setNumber,
+            completed: set.completed,
+          }
+
+          const existing = nextExistingLogs[exercise.id]?.[setNumber]
+          if (existing) {
+            await supabase.from('exercise_logs').update(payload).eq('id', existing.id)
+          } else {
+            const { data: inserted } = await supabase
+              .from('exercise_logs')
+              .insert(payload)
+              .select('*')
+              .single()
+            if (inserted) {
+              nextExistingLogs[exercise.id] = {
+                ...(nextExistingLogs[exercise.id] ?? {}),
+                [setNumber]: inserted as ExerciseLog,
+              }
+            }
+          }
+        }
+      }
+
+      setExistingLogs(nextExistingLogs)
+    } catch (syncError) {
+      console.error('Failed to sync workout progress', syncError)
+    } finally {
+      setSyncingProgress(false)
+    }
+  }, [workoutLogId, loading, complete, saving, existingLogs, exercises, logs])
+
+  useEffect(() => {
+    if (!workoutLogId || loading || complete || saving) return
+    if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current)
+    autosaveTimeoutRef.current = setTimeout(() => {
+      void persistProgress()
+    }, 450)
+
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current)
+      }
+    }
+  }, [logs, workoutLogId, loading, complete, saving, persistProgress])
 
   const saveWorkout = async () => {
     if (!clientId || !workoutLogId) return
@@ -407,6 +471,9 @@ export default function WorkoutPlayerPage() {
             <p className="text-xs text-gray-400">Zeit</p>
             <p className="text-sm font-bold text-emerald-600 tabular-nums">{formatTime(elapsed)}</p>
           </div>
+        </div>
+        <div className="max-w-lg mx-auto text-[11px] text-gray-400 mb-2 text-right">
+          {syncingProgress ? 'Speichert…' : 'Fortschritt wird automatisch gespeichert'}
         </div>
         <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden max-w-lg mx-auto">
           <div

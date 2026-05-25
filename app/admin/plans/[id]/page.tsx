@@ -41,8 +41,8 @@ export default function PlanBuilderPage() {
   const [exForm, setExForm] = useState<ExerciseForm>(emptyExForm)
   const [pickerDayId, setPickerDayId] = useState<string | null>(null)
 
-  // Expanded days
-  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
+  // Expanded day (single open accordion behavior)
+  const [expandedDayId, setExpandedDayId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const [planRes, daysRes] = await Promise.all([
@@ -69,7 +69,10 @@ export default function PlanBuilderPage() {
         if (exByDay[ex.day_id]) exByDay[ex.day_id].push(ex)
       })
       setExercises(exByDay)
-      if (dayList.length > 0) setExpandedDays(new Set([dayList[0].id]))
+      setExpandedDayId(prev => (prev && dayList.some(d => d.id === prev) ? prev : null))
+    } else {
+      setExercises({})
+      setExpandedDayId(null)
     }
     setLoading(false)
   }, [id, router])
@@ -126,8 +129,12 @@ export default function PlanBuilderPage() {
     await load()
   }
 
-  const openAddEx = (dayId: string) => { setPickerDayId(dayId) }
+  const openAddEx = (dayId: string) => {
+    setExpandedDayId(dayId)
+    setPickerDayId(dayId)
+  }
   const openEditEx = (ex: Exercise) => {
+    setExpandedDayId(ex.day_id)
     setExModal({ open: true, dayId: ex.day_id, editing: ex })
     setExForm({
       name: ex.name, description: ex.description ?? '', sets: ex.sets, reps: ex.reps,
@@ -184,15 +191,7 @@ export default function PlanBuilderPage() {
   }
 
   const toggleDay = (dayId: string) => {
-    setExpandedDays(prev => {
-      const next = new Set(prev)
-      if (next.has(dayId)) {
-        next.delete(dayId)
-      } else {
-        next.add(dayId)
-      }
-      return next
-    })
+    setExpandedDayId(prev => (prev === dayId ? null : dayId))
   }
 
   if (loading) {
@@ -263,13 +262,13 @@ export default function PlanBuilderPage() {
                 <button onClick={e => { e.stopPropagation(); openEditDay(day) }} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">✏️</button>
                 <button onClick={e => { e.stopPropagation(); deleteDay(day.id) }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">🗑️</button>
               </div>
-              <svg className={`w-4 h-4 text-gray-400 transition-transform ${expandedDays.has(day.id) ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-4 h-4 text-gray-400 transition-transform ${expandedDayId === day.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </div>
 
             {/* Exercises */}
-            <Collapsible open={expandedDays.has(day.id)}>
+            <Collapsible open={expandedDayId === day.id}>
               <div className="border-t border-gray-100">
                 {(exercises[day.id] ?? []).length === 0 ? (
                   <p className="text-sm text-gray-400 px-5 py-4">Noch keine Übungen.</p>
