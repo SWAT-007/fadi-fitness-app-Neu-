@@ -11,6 +11,11 @@ enum UserRole {
   CLIENT
 }
 
+enum UserAuthState {
+  ACTIVE
+  MIGRATED_PASSWORD_REQUIRED
+}
+
 enum NotificationType {
   MESSAGE
   TRAINING_PLAN
@@ -23,17 +28,19 @@ enum NotificationType {
 }
 
 model User {
-  id            String          @id @default(cuid())
-  email         String          @unique
-  passwordHash  String
-  role          UserRole
-  fullName      String
-  isActive      Boolean         @default(true)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  trainerProfile TrainerProfile?
-  clientProfile  ClientProfile?
-  notifications  Notification[]
+  id                      String          @id @default(cuid())
+  email                   String          @unique
+  passwordHash            String
+  role                    UserRole
+  authState               UserAuthState   @default(ACTIVE)
+  fullName                String
+  isActive                Boolean         @default(true)
+  legacySupabaseProfileId String?         @unique
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  trainerProfile          TrainerProfile?
+  clientProfile           ClientProfile?
+  notifications           Notification[]
 }
 
 model TrainerProfile {
@@ -48,19 +55,21 @@ model TrainerProfile {
 }
 
 model ClientProfile {
-  id              String            @id @default(cuid())
-  userId          String?           @unique
-  user            User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
-  trainerId       String
-  trainer         TrainerProfile    @relation(fields: [trainerId], references: [id], onDelete: Restrict)
-  fullName        String
-  email           String
-  phone           String?
-  notes           String?
-  status          String            @default("active")
-  assignedPlans   AssignedPlan[]
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id                     String         @id @default(cuid())
+  userId                 String?        @unique
+  user                   User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  trainerId              String
+  trainer                TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  fullName               String
+  email                  String
+  phone                  String?
+  notes                  String?
+  status                 String         @default("active")
+  legacySupabaseClientId String?        @unique
+  legacySupabaseUserId   String?        @unique
+  assignedPlans          AssignedPlan[]
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
 
   @@index([trainerId])
 }
