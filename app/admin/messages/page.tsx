@@ -47,7 +47,7 @@ function dayLabel(iso: string) {
   const yest = new Date(); yest.setDate(today.getDate() - 1)
   if (isSameDay(iso, today.toISOString())) return 'Heute'
   if (isSameDay(iso, yest.toISOString())) return 'Gestern'
-  return d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 function formatMessageTimestamp(iso: string) {
