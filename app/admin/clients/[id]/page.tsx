@@ -1018,6 +1018,20 @@ export default function ClientDetailPage() {
                 </Link>
               </div>
             </div>
+            <div className="mb-3">
+              {client.user_id ? (
+                <Link
+                  href={`/admin/messages?client=${id}`}
+                  className="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                >
+                  Nachricht an Kunden öffnen
+                </Link>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  Messaging ist verfügbar, sobald der Kunde einen App-Zugang hat.
+                </p>
+              )}
+            </div>
             <div className="grid sm:grid-cols-3 gap-3 text-sm">
               <div className="rounded-lg bg-gray-50 px-3 py-2">
                 <p className="text-xs text-gray-500">Messaging-Status</p>

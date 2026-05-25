@@ -67,6 +67,15 @@ export default function TrainerMessagesPage() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
+  const appendMessage = useCallback((message: Message) => {
+    setMessages(prev => {
+      if (prev.some(existing => existing.id === message.id)) return prev
+      return [...prev, message].sort((a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      )
+    })
+  }, [])
+
   const loadUnreadCounts = useCallback(async (trainerId: string, clientList: Client[]) => {
     const clientUserIds = clientList.map(client => client.user_id).filter(Boolean) as string[]
     if (clientUserIds.length === 0) {
@@ -111,10 +120,31 @@ export default function TrainerMessagesPage() {
         if (found) setSelectedClient(found)
       }
 
-      setLoading(false)
+    setLoading(false)
     }
     init()
   }, [initialClientId, loadUnreadCounts])
+
+  const loadConversation = useCallback(async () => {
+    if (!selectedClient?.user_id || !myProfile) {
+      setMessages([])
+      return
+    }
+
+    const { data } = await supabase
+      .from('messages')
+      .select('*, sender:profiles!messages_sender_id_fkey(*)')
+      .or(`and(sender_id.eq.${myProfile.id},receiver_id.eq.${selectedClient.user_id}),and(sender_id.eq.${selectedClient.user_id},receiver_id.eq.${myProfile.id})`)
+      .order('created_at')
+    setMessages((data ?? []) as Message[])
+    setUnreadByClientId(prev => ({ ...prev, [selectedClient.id]: 0 }))
+    await supabase
+      .from('messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('sender_id', selectedClient.user_id)
+      .eq('receiver_id', myProfile.id)
+      .is('read_at', null)
+  }, [selectedClient, myProfile])
 
   useEffect(() => {
     if (!selectedClient?.user_id || !myProfile) {
@@ -122,22 +152,7 @@ export default function TrainerMessagesPage() {
       return
     }
 
-    const loadMessages = async () => {
-      const { data } = await supabase
-        .from('messages')
-        .select('*, sender:profiles!messages_sender_id_fkey(*)')
-        .or(`and(sender_id.eq.${myProfile.id},receiver_id.eq.${selectedClient.user_id}),and(sender_id.eq.${selectedClient.user_id},receiver_id.eq.${myProfile.id})`)
-        .order('created_at')
-      setMessages((data ?? []) as Message[])
-      setUnreadByClientId(prev => ({ ...prev, [selectedClient.id]: 0 }))
-      await supabase
-        .from('messages')
-        .update({ read_at: new Date().toISOString() })
-        .eq('sender_id', selectedClient.user_id)
-        .eq('receiver_id', myProfile.id)
-        .is('read_at', null)
-    }
-    loadMessages()
+    loadConversation()
 
     const channel = supabase
       .channel(`messages-${selectedClient.id}`)
@@ -147,7 +162,7 @@ export default function TrainerMessagesPage() {
           (msg.sender_id === myProfile.id && msg.receiver_id === selectedClient.user_id) ||
           (msg.sender_id === selectedClient.user_id && msg.receiver_id === myProfile.id)
         ) {
-          setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
+          appendMessage(msg)
           if (msg.sender_id === selectedClient.user_id && msg.receiver_id === myProfile.id) {
             setUnreadByClientId(prev => ({ ...prev, [selectedClient.id]: 0 }))
             supabase
@@ -161,7 +176,25 @@ export default function TrainerMessagesPage() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [selectedClient, myProfile])
+  }, [selectedClient, myProfile, loadConversation, appendMessage])
+
+  useEffect(() => {
+    if (!selectedClient?.user_id || !myProfile) return
+    const refresh = () => { void loadConversation() }
+
+    const intervalId = setInterval(refresh, 8000)
+    window.addEventListener('focus', refresh)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      clearInterval(intervalId)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [selectedClient, myProfile, loadConversation])
 
   useEffect(() => {
     if (!myProfile || clients.length === 0) return
@@ -211,12 +244,17 @@ export default function TrainerMessagesPage() {
     const content = newMessage.trim()
     setSending(true)
     setNewMessage('')
-    const { error } = await supabase.from('messages').insert({
-      sender_id: myProfile.id,
-      receiver_id: selectedClient.user_id,
-      content,
-    })
-    if (!error) {
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        sender_id: myProfile.id,
+        receiver_id: selectedClient.user_id,
+        content,
+      })
+      .select('*, sender:profiles!messages_sender_id_fkey(*)')
+      .single()
+    if (!error && data) {
+      appendMessage(data as Message)
       const notificationBody = content.length > 50 ? `${content.slice(0, 50)}…` : content
       const { error: notificationError } = await supabase.from('notifications').insert({
         client_id: selectedClient.user_id,

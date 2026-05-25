@@ -73,10 +73,28 @@ export default function ClientMessagesPage() {
         .or(`and(sender_id.eq.${prof.id},receiver_id.eq.${trainer.id}),and(sender_id.eq.${trainer.id},receiver_id.eq.${prof.id})`)
         .order('created_at')
       setMessages((msgs ?? []) as Message[])
+
+      await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('client_id', user.id)
+        .eq('type', 'message')
+        .is('is_read', false)
+
       setLoading(false)
     }
     init()
   }, [])
+
+  const loadConversation = useCallback(async () => {
+    if (!myProfile || !trainerProfile) return
+    const { data: msgs } = await supabase
+      .from('messages')
+      .select('*, sender:profiles!messages_sender_id_fkey(*)')
+      .or(`and(sender_id.eq.${myProfile.id},receiver_id.eq.${trainerProfile.id}),and(sender_id.eq.${trainerProfile.id},receiver_id.eq.${myProfile.id})`)
+      .order('created_at')
+    setMessages((msgs ?? []) as Message[])
+  }, [myProfile, trainerProfile])
 
   useEffect(() => {
     if (!myProfile || !trainerProfile) return
@@ -98,6 +116,24 @@ export default function ClientMessagesPage() {
 
     return () => { supabase.removeChannel(channel) }
   }, [myProfile, trainerProfile, appendMessage])
+
+  useEffect(() => {
+    if (!myProfile || !trainerProfile) return
+    const refresh = () => { void loadConversation() }
+
+    const intervalId = setInterval(refresh, 8000)
+    window.addEventListener('focus', refresh)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      clearInterval(intervalId)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [myProfile, trainerProfile, loadConversation])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
