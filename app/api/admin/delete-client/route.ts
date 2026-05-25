@@ -125,5 +125,40 @@ export async function POST(request: NextRequest) {
 
   if (deleteClientError) return deleteError(deleteClientError.message, 500)
 
+  if (client.user_id) {
+    const { count: remainingClientsCount, error: remainingClientsError } = await supabaseAdmin
+      .from('clients')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', client.user_id)
+
+    if (remainingClientsError) {
+      return deleteError('Client-Verknüpfungen konnten nicht geprüft werden.', 500)
+    }
+
+    if ((remainingClientsCount ?? 0) === 0) {
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('role')
+        .eq('id', client.user_id)
+        .maybeSingle()
+
+      const role = typeof profile?.role === 'string' ? profile.role.trim().toLowerCase() : ''
+      if (role === 'client') {
+        const { error: deleteProfileError } = await supabaseAdmin
+          .from('profiles')
+          .delete()
+          .eq('id', client.user_id)
+        if (deleteProfileError && !isMissingTableError(deleteProfileError)) {
+          return deleteError(deleteProfileError.message, 500)
+        }
+
+        const { error: deleteAuthUserError } = await supabaseAdmin.auth.admin.deleteUser(client.user_id)
+        if (deleteAuthUserError) {
+          return deleteError(deleteAuthUserError.message, 500)
+        }
+      }
+    }
+  }
+
   return NextResponse.json({ ok: true })
 }
