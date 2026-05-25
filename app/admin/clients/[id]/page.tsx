@@ -414,11 +414,11 @@ export default function ClientDetailPage() {
     if (!client) return
 
     const fullName = profileName.trim()
-    const email = profileEmail.trim().toLowerCase()
+    const email = client.email.trim().toLowerCase()
     const phone = profilePhone.trim()
 
-    if (!fullName || !email) {
-      showToast('Name und E-Mail sind erforderlich.', 'danger')
+    if (!fullName) {
+      showToast('Name ist erforderlich.', 'danger')
       return
     }
 
@@ -461,7 +461,7 @@ export default function ClientDetailPage() {
   const handleSaveNotesViaAdminRoute = async () => {
     if (!client) return
     const fullName = profileName.trim() || client.full_name
-    const email = profileEmail.trim().toLowerCase() || client.email
+    const email = client.email
     const phone = profilePhone.trim()
 
     setSavingNotes(true)
@@ -671,17 +671,14 @@ export default function ClientDetailPage() {
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">E-Mail</label>
                   <input
-                    value={profileEmail}
-                    onChange={(e) => setProfileEmail(e.target.value)}
-                    disabled={!!client.user_id}
+                    value={client.email}
+                    disabled
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                     placeholder="name@example.com"
                   />
-                  {client.user_id ? (
-                    <p className="text-xs text-gray-500 mt-1">
-                      E-Mail kann nach App-Verknüpfung nicht mehr hier geändert werden.
-                    </p>
-                  ) : null}
+                  <p className="text-xs text-gray-500 mt-1">
+                    E-Mail wird an dieser Stelle nicht bearbeitet.
+                  </p>
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">Telefon</label>
