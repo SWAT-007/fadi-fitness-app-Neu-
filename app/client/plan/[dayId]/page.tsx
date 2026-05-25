@@ -70,10 +70,23 @@ export default function WorkoutDayPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const [dayRes, exRes, clientRes] = await Promise.all([
-        supabase.from('workout_days').select('*').eq('id', dayId).single(),
+      const { data: cl } = await supabase.from('clients').select('id').eq('user_id', user.id).maybeSingle()
+      if (!cl) { setLoading(false); return }
+      setClientId(cl.id)
+
+      const { data: activeAssignments, error: assignmentError } = await supabase
+        .from('assigned_plans')
+        .select('plan_id')
+        .eq('client_id', cl.id)
+        .eq('is_active', true)
+      if (assignmentError) { router.push('/client/plan'); return }
+
+      const planIds = (activeAssignments ?? []).map(a => a.plan_id)
+      if (planIds.length === 0) { router.push('/client/plan'); return }
+
+      const [dayRes, exRes] = await Promise.all([
+        supabase.from('workout_days').select('*').eq('id', dayId).in('plan_id', planIds).maybeSingle(),
         supabase.from('exercises').select('*').eq('day_id', dayId).order('sort_order'),
-        supabase.from('clients').select('id').eq('user_id', user.id).maybeSingle(),
       ])
 
       if (!dayRes.data) { router.push('/client/plan'); return }
@@ -81,10 +94,6 @@ export default function WorkoutDayPage() {
 
       const exList: Exercise[] = exRes.data ?? []
       setExercises(exList)
-
-      const cl = clientRes.data
-      if (!cl) { setLoading(false); return }
-      setClientId(cl.id)
 
       // Resume today's log if it exists
       const today = new Date().toISOString().split('T')[0]

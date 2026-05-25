@@ -15,14 +15,22 @@ export default function ClientPlanPage() {
   const [activeDayIds, setActiveDayIds] = useState<Set<string>>(new Set())
   const [menuOpenDayId, setMenuOpenDayId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
+      try {
+        setErrorMessage(null)
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) {
+        setErrorMessage('Bitte melde dich an, um deinen Trainingsplan zu sehen.')
+        setLoading(false)
+        return
+      }
 
-      const { data: client } = await supabase
+      const { data: client, error: clientError } = await supabase
         .from('clients').select('id').eq('user_id', user.id).maybeSingle()
+      if (clientError) throw clientError
       if (!client) { setLoading(false); return }
 
       // Monday of current week
@@ -52,6 +60,9 @@ export default function ClientPlanPage() {
           .eq('client_id', client.id)
           .is('completed_at', null),
       ])
+      if (plansRes.error) throw plansRes.error
+      if (weekLogsRes.error) throw weekLogsRes.error
+      if (activeLogsRes.error) throw activeLogsRes.error
 
       // Deduplizieren: gleicher Plan darf nur einmal erscheinen
       const all = (plansRes.data ?? []) as (AssignedPlan & { plan: WorkoutPlan & { workout_days: WorkoutDay[] } })[]
@@ -65,6 +76,14 @@ export default function ClientPlanPage() {
       setCompletedDayIds(new Set((weekLogsRes.data ?? []).map(r => r.day_id)))
       setActiveDayIds(new Set((activeLogsRes.data ?? []).map(r => r.day_id)))
       setLoading(false)
+      } catch (error) {
+        console.error('Failed to load client plans', error)
+        setErrorMessage('Dein Trainingsplan konnte gerade nicht geladen werden.')
+        setPlans([])
+        setCompletedDayIds(new Set())
+        setActiveDayIds(new Set())
+        setLoading(false)
+      }
     }
     load()
   }, [])
@@ -80,6 +99,11 @@ export default function ClientPlanPage() {
   return (
     <div className="p-4 max-w-lg mx-auto">
       <h1 className="text-xl font-bold text-gray-900 mb-5">Mein Training</h1>
+      {errorMessage && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {errorMessage}
+        </div>
+      )}
 
       {/* Close menu on outside click */}
       {menuOpenDayId && (
@@ -104,6 +128,9 @@ export default function ClientPlanPage() {
                 <div className="px-5 pt-5 pb-3 border-b border-gray-100">
                   <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Aktueller Plan</p>
                   <h2 className="font-bold text-gray-900 mt-0.5">{ap.plan.name}</h2>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Zugewiesen am {new Date(ap.assigned_at).toLocaleDateString('de-DE')}
+                  </p>
                 </div>
 
                 {/* Days */}
