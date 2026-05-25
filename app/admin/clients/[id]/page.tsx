@@ -150,6 +150,11 @@ export default function ClientDetailPage() {
   const [chartWeeks, setChartWeeks] = useState<WeekBucket[]>([])
   const [tab, setTab] = useState<Tab>('overview')
   // Trainer notes editing
+  const [editingProfile, setEditingProfile] = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileName, setProfileName] = useState('')
+  const [profileEmail, setProfileEmail] = useState('')
+  const [profilePhone, setProfilePhone] = useState('')
   const [editingNotes, setEditingNotes] = useState(false)
   const [notesValue, setNotesValue] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
@@ -219,6 +224,9 @@ export default function ClientDetailPage() {
       if (chartRes.error) console.error('Failed to load chart data', chartRes.error)
 
       setClient(clientRes.data)
+      setProfileName(clientRes.data.full_name ?? '')
+      setProfileEmail(clientRes.data.email ?? '')
+      setProfilePhone(clientRes.data.phone ?? '')
       setNotesValue(clientRes.data.notes ?? '')
       setAssignedPlans((assignedRes.data ?? []) as AssignedPlan[])
       setAvailablePlans(plansRes.data ?? [])
@@ -351,6 +359,60 @@ export default function ClientDetailPage() {
     await load()
   }
 
+  const resetProfileForm = () => {
+    if (!client) return
+    setProfileName(client.full_name ?? '')
+    setProfileEmail(client.email ?? '')
+    setProfilePhone(client.phone ?? '')
+  }
+
+  const handleSaveProfile = async () => {
+    if (!client) return
+
+    const fullName = profileName.trim()
+    const email = profileEmail.trim().toLowerCase()
+    const phone = profilePhone.trim()
+
+    if (!fullName || !email) {
+      showToast('Name und E-Mail sind erforderlich.', 'danger')
+      return
+    }
+
+    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    if (!emailValid) {
+      showToast('Bitte eine gültige E-Mail-Adresse angeben.', 'danger')
+      return
+    }
+
+    setSavingProfile(true)
+    try {
+      const response = await fetch('/api/admin/update-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: client.id,
+          full_name: fullName,
+          email,
+          phone,
+        }),
+      })
+
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      if (!response.ok) {
+        showToast(payload?.error ?? 'Kundendaten konnten nicht gespeichert werden.', 'danger')
+        return
+      }
+
+      showToast('Kundendaten gespeichert ✓', 'success')
+      setEditingProfile(false)
+      await load()
+    } catch {
+      showToast('Netzwerkfehler beim Speichern.', 'danger')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
   if (loading) {
     return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
   }
@@ -444,7 +506,76 @@ export default function ClientDetailPage() {
       {tab === 'overview' && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-            <h3 className="font-semibold text-gray-900 mb-4">Kundendaten</h3>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="font-semibold text-gray-900">Kundendaten</h3>
+              {!editingProfile && (
+                <button
+                  onClick={() => {
+                    resetProfileForm()
+                    setEditingProfile(true)
+                  }}
+                  className="text-xs text-indigo-600 hover:text-indigo-800"
+                >
+                  Bearbeiten
+                </button>
+              )}
+            </div>
+            {editingProfile ? (
+              <div className="space-y-3 mb-5">
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Name</label>
+                  <input
+                    value={profileName}
+                    onChange={(e) => setProfileName(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Vollständiger Name"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">E-Mail</label>
+                  <input
+                    value={profileEmail}
+                    onChange={(e) => setProfileEmail(e.target.value)}
+                    disabled={!!client.user_id}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+                    placeholder="name@example.com"
+                  />
+                  {client.user_id ? (
+                    <p className="text-xs text-gray-500 mt-1">
+                      E-Mail kann nach App-Verknüpfung nicht mehr hier geändert werden.
+                    </p>
+                  ) : null}
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Telefon</label>
+                  <input
+                    value={profilePhone}
+                    onChange={(e) => setProfilePhone(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Optional"
+                  />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      resetProfileForm()
+                      setEditingProfile(false)
+                    }}
+                    disabled={savingProfile}
+                    className="flex-1 py-2 border border-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-50 disabled:opacity-60"
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    onClick={handleSaveProfile}
+                    disabled={savingProfile}
+                    className="flex-1 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-60"
+                  >
+                    {savingProfile ? 'Speichere...' : 'Speichern'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <dl className="space-y-3">
               <div className="flex gap-4">
                 <dt className="text-sm text-gray-500 w-24 flex-shrink-0">Name</dt>
