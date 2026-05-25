@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Client } from '@/lib/types'
@@ -12,25 +12,62 @@ export default function ClientsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [loadError, setLoadError] = useState('')
 
-  useEffect(() => {
-    const load = async () => {
+  const loadClients = useCallback(async () => {
+    try {
+      setLoadError('')
       const {
         data: { user },
       } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) {
+        setClients([])
+        return
+      }
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('clients')
         .select('*')
         .eq('trainer_id', user.id)
         .order('full_name')
+      if (error) {
+        setLoadError('Kunden konnten nicht geladen werden.')
+        return
+      }
 
       setClients(data ?? [])
+    } catch {
+      setLoadError('Kunden konnten nicht geladen werden.')
+    } finally {
       setLoading(false)
     }
-    load()
   }, [])
+
+  useEffect(() => {
+    void loadClients()
+
+    const onFocus = () => {
+      void loadClients()
+    }
+    const onPageShow = () => {
+      void loadClients()
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void loadClients()
+      }
+    }
+
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('pageshow', onPageShow)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('pageshow', onPageShow)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [loadClients])
 
   const handleDelete = async () => {
     if (!deleteId) return
@@ -80,6 +117,11 @@ export default function ClientsPage() {
       {deleteError ? (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {deleteError}
+        </div>
+      ) : null}
+      {loadError ? (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {loadError}
         </div>
       ) : null}
 
