@@ -305,6 +305,7 @@ async function main() {
     }
 
     let mappedClientUser = null;
+    let clientUserMappingConflict = false;
     if (!linkedUserProfile) {
       report.diagnostics.clientsMissingUserProfileMapping.push({
         clientId: supaClientId,
@@ -322,14 +323,16 @@ async function main() {
       const byEmail = prismaUsersByEmail.get(linkedEmail);
 
       if (byLegacy) {
-        mappedClientUser = byLegacy;
         if (byLegacy.role !== "CLIENT") {
+          clientUserMappingConflict = true;
           addConflict(report.conflicts, "ROLE_CONFLICT", "Legacy client user mapped to non-client role", {
             clientId: supaClientId,
             supabaseProfileId: linkedSupaUserId,
             prismaUserId: byLegacy.id,
             prismaRole: byLegacy.role,
           });
+        } else {
+          mappedClientUser = byLegacy;
         }
       } else if (byEmail) {
         report.diagnostics.potentialPrismaUserEmailMatches.push({
@@ -338,8 +341,8 @@ async function main() {
           prismaRole: byEmail.role,
           supabaseProfileId: linkedSupaUserId,
         });
-        mappedClientUser = byEmail;
         if (byEmail.role !== "CLIENT") {
+          clientUserMappingConflict = true;
           addConflict(report.conflicts, "EMAIL_ROLE_CONFLICT", "Client email matches Prisma user with different role", {
             clientId: supaClientId,
             supabaseProfileId: linkedSupaUserId,
@@ -350,6 +353,7 @@ async function main() {
           byEmail.legacySupabaseProfileId &&
           byEmail.legacySupabaseProfileId !== linkedSupaUserId
         ) {
+          clientUserMappingConflict = true;
           addConflict(report.conflicts, "LEGACY_ID_CONFLICT", "Client email match has different legacySupabaseProfileId", {
             clientId: supaClientId,
             supabaseProfileId: linkedSupaUserId,
@@ -357,6 +361,7 @@ async function main() {
             existingLegacySupabaseProfileId: byEmail.legacySupabaseProfileId,
           });
         } else {
+          mappedClientUser = byEmail;
           pushAction(
             report.plannedActions,
             "updateExistingClientUserWithLegacy",
@@ -388,6 +393,21 @@ async function main() {
         report.summary.wouldCreateUsers += 1;
         mappedClientUser = { id: `(planned:new-client-user:${linkedSupaUserId})`, role: "CLIENT" };
       }
+    }
+
+    if (clientUserMappingConflict) {
+      pushAction(
+        report.plannedActions,
+        "skipClientProfileDueToClientUserConflict",
+        "client user mapping has role/legacy conflict",
+        {
+          clientId: supaClientId,
+          trainerSupabaseProfileId: clientRow.trainer_id,
+          linkedSupabaseUserId: clientRow.user_id ?? null,
+        },
+      );
+      report.summary.skipped += 1;
+      continue;
     }
 
     const existingByLegacyClientId = prismaClientByLegacyClientId.get(supaClientId);
