@@ -287,7 +287,7 @@ function CalorieRing({ current, target }: { current: number; target: number }) {
   }, [current])
 
   return (
-    <div className="relative w-32 h-32">
+    <div className="relative w-24 h-24">
       <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
         <circle cx="60" cy="60" r={r} fill="none" stroke="#fff" strokeOpacity="0.5" strokeWidth="8" />
         <circle
@@ -852,11 +852,11 @@ export default function ClientNutritionPage() {
   return (
     <div className="p-4 max-w-2xl mx-auto space-y-4">
       {/* ─── Header: Plan + Tagesübersicht ───────────────────────────────── */}
-      <div className={`${goalMeta.bg} rounded-3xl p-5`}>
+      <div className={`${goalMeta.bg} rounded-3xl p-4`}>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[10px] uppercase tracking-wide text-gray-500 font-medium">{goalMeta.label}</p>
-            <h1 className="text-xl font-bold text-gray-900 mt-0.5">{plan.name}</h1>
+            <h1 className="text-lg font-bold text-gray-900 mt-0.5">{plan.name}</h1>
           </div>
           <CalorieRing current={dayTotals.cal} target={plan.target_calories} />
         </div>
@@ -927,7 +927,7 @@ export default function ClientNutritionPage() {
               {/* Mahlzeit-Header — always visible, click to expand/collapse */}
               <button
                 onClick={() => toggleCard(meal.id)}
-                className="w-full text-left px-5 pt-4 pb-3 border-b border-gray-50 hover:bg-gray-50/60 transition-colors"
+                className="w-full text-left px-5 py-3 border-b border-gray-50 hover:bg-gray-50/60 transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <h2 className="font-semibold text-gray-900">
@@ -946,7 +946,7 @@ export default function ClientNutritionPage() {
                     </svg>
                   </div>
                 </div>
-                <div className="mt-2 grid grid-cols-3 gap-2">
+                <div className="mt-1.5 grid grid-cols-3 gap-2">
                   {macroLines.map(m => {
                     const diff = m.tgt - m.cur
                     const over = diff < 0
