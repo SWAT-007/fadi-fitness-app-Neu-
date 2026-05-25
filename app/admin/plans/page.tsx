@@ -49,6 +49,18 @@ export default function PlansPage() {
     setAssignError('')
     setAssignSuccess('')
 
+    const { error: deactivateError } = await supabase
+      .from('assigned_plans')
+      .update({ is_active: false })
+      .eq('client_id', assignClientId)
+      .eq('is_active', true)
+
+    if (deactivateError) {
+      setAssignError(deactivateError.message)
+      setAssigning(false)
+      return
+    }
+
     const { error } = await supabase.from('assigned_plans').insert({
       client_id: assignClientId,
       plan_id: assignPlanId,

@@ -349,7 +349,23 @@ export default function ClientDetailPage() {
   const handleAssignPlan = async () => {
     if (!selectedPlanId) return
     setAssigning(true)
+    const { error: deactivateError } = await supabase
+      .from('assigned_plans')
+      .update({ is_active: false })
+      .eq('client_id', id)
+      .eq('is_active', true)
+    if (deactivateError) {
+      showToast('Plan konnte nicht zugewiesen werden.', 'danger')
+      setAssigning(false)
+      return
+    }
+
     const { error } = await supabase.from('assigned_plans').insert({ client_id: id, plan_id: selectedPlanId, is_active: true })
+    if (error) {
+      showToast('Plan konnte nicht zugewiesen werden.', 'danger')
+      setAssigning(false)
+      return
+    }
     if (!error && client?.user_id) {
       const assignedPlan = availablePlans.find(plan => plan.id === selectedPlanId)
       await supabase.from('notifications').insert({
@@ -934,6 +950,39 @@ export default function ClientDetailPage() {
                     ? new Date(assignedNutritionPlans[0].assigned_at).toLocaleDateString('de-DE')
                     : 'Noch keine'}
                 </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="font-semibold text-gray-900">Nachrichten & Kontakt</h3>
+              <div className="flex flex-wrap gap-2">
+                <Link href={`/admin/messages?client=${id}`} className="text-xs text-indigo-600 hover:underline">
+                  Chat öffnen
+                </Link>
+                <Link href="/admin/messages" className="text-xs text-indigo-600 hover:underline">
+                  Inbox
+                </Link>
+              </div>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-3 text-sm">
+              <div className="rounded-lg bg-gray-50 px-3 py-2">
+                <p className="text-xs text-gray-500">Messaging-Status</p>
+                <p className="font-medium text-gray-900 mt-0.5">
+                  {client.user_id ? 'Verfügbar' : 'Noch nicht verfügbar'}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {client.user_id ? 'Kunde hat App-Zugang.' : 'Kein App-Zugang verknüpft.'}
+                </p>
+              </div>
+              <div className="rounded-lg bg-gray-50 px-3 py-2">
+                <p className="text-xs text-gray-500">E-Mail</p>
+                <p className="font-medium text-gray-900 mt-0.5 break-all">{client.email}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 px-3 py-2">
+                <p className="text-xs text-gray-500">Telefon</p>
+                <p className="font-medium text-gray-900 mt-0.5">{client.phone ?? 'Nicht hinterlegt'}</p>
               </div>
             </div>
           </div>
