@@ -76,6 +76,13 @@ export default function ClientMessagesPage() {
       setMessages((msgs ?? []) as Message[])
 
       await supabase
+        .from('messages')
+        .update({ read_at: new Date().toISOString() })
+        .eq('sender_id', trainer.id)
+        .eq('receiver_id', prof.id)
+        .is('read_at', null)
+
+      await supabase
         .from('notifications')
         .update({ is_read: true })
         .eq('client_id', user.id)
@@ -95,6 +102,18 @@ export default function ClientMessagesPage() {
       .or(`and(sender_id.eq.${myProfile.id},receiver_id.eq.${trainerProfile.id}),and(sender_id.eq.${trainerProfile.id},receiver_id.eq.${myProfile.id})`)
       .order('created_at')
     setMessages((msgs ?? []) as Message[])
+    await supabase
+      .from('messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('sender_id', trainerProfile.id)
+      .eq('receiver_id', myProfile.id)
+      .is('read_at', null)
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('client_id', myProfile.id)
+      .eq('type', 'message')
+      .eq('is_read', false)
   }, [myProfile, trainerProfile])
 
   useEffect(() => {
@@ -301,6 +320,7 @@ function MessageList({ messages, myId, accent }: { messages: Message[]; myId: st
                 isMe={isMe}
                 content={msg.content}
                 createdAt={msg.created_at}
+                readAt={msg.read_at}
                 isFirstOfRun={isFirstOfRun}
                 isLastOfRun={isLastOfRun}
                 accent={accent}
@@ -314,9 +334,10 @@ function MessageList({ messages, myId, accent }: { messages: Message[]; myId: st
 }
 
 function Bubble({
-  isMe, content, createdAt, isFirstOfRun, isLastOfRun, accent,
+  isMe, content, createdAt, readAt, isFirstOfRun, isLastOfRun, accent,
 }: {
   isMe: boolean; content: string; createdAt: string;
+  readAt?: string | null;
   isFirstOfRun: boolean; isLastOfRun: boolean;
   accent: 'indigo' | 'emerald'
 }) {
@@ -334,9 +355,17 @@ function Bubble({
       <div className={`bubble-in max-w-[80%] sm:max-w-[68%] px-3.5 py-2 ${radius} ${isMe ? meBg : themBg}`}>
         <p className="text-[14px] leading-relaxed whitespace-pre-wrap break-words">{content}</p>
         {isLastOfRun && (
-          <p className={`text-[10.5px] mt-1 tabular-nums ${isMe ? 'text-white/70' : 'text-gray-400'}`}>
-            {new Date(createdAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-          </p>
+          <div className={`flex items-center gap-1 mt-1 ${isMe ? 'text-white/70' : 'text-gray-400'}`}>
+            <span className="text-[10.5px] tabular-nums">
+              {new Date(createdAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {isMe && (
+              <svg className={readAt ? 'text-sky-300' : 'text-white/40'} viewBox="0 0 20 12" width="18" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="1,7 4.5,10.5 10.5,2.5" />
+                <polyline points="7,7 10.5,10.5 16.5,2.5" />
+              </svg>
+            )}
+          </div>
         )}
       </div>
     </div>
