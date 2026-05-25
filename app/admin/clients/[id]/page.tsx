@@ -405,8 +405,17 @@ export default function ClientDetailPage() {
             <h1 className="text-2xl font-bold text-gray-900">{client.full_name}</h1>
             <p className="text-gray-500 text-sm">{client.email}{client.phone ? ` · ${client.phone}` : ''}</p>
           </div>
-          <Link href={`/admin/messages?client=${id}`} className="ml-auto bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-medium px-4 py-2 rounded-xl transition-colors">
-            💬 Nachricht
+          <Link href="/admin/clients" className="ml-auto inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            Kundenliste
+          </Link>
+          <Link href="/admin/plans" className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            Trainingspläne
+          </Link>
+          <Link href="/admin/nutrition" className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            Ernährung
+          </Link>
+          <Link href={`/admin/messages?client=${id}`} className="inline-flex items-center rounded-lg bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100">
+            Nachricht
           </Link>
         </div>
         {loadError && (
