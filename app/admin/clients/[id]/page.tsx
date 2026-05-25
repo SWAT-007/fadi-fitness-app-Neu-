@@ -25,6 +25,13 @@ type WorkoutLogDetail = Omit<WorkoutLog, 'exercise_logs' | 'workout_day'> & {
   exercise_logs: ExerciseLogDetail[]
 }
 
+type NutritionAssignmentSummary = {
+  id: string
+  assigned_at: string
+  is_active: boolean
+  plan_name: string | null
+}
+
 function formatDuration(seconds: number | null | undefined) {
   if (!seconds) return null
   const m = Math.floor(seconds / 60)
@@ -135,6 +142,7 @@ export default function ClientDetailPage() {
 
   const [client, setClient] = useState<Client | null>(null)
   const [assignedPlans, setAssignedPlans] = useState<AssignedPlan[]>([])
+  const [assignedNutritionPlans, setAssignedNutritionPlans] = useState<NutritionAssignmentSummary[]>([])
   const [availablePlans, setAvailablePlans] = useState<WorkoutPlan[]>([])
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([])
   const [historyLogs, setHistoryLogs] = useState<WorkoutLogDetail[]>([])
@@ -188,9 +196,14 @@ export default function ClientDetailPage() {
       chartStart.setDate(monday.getDate() - 49)
       const chartStartStr = chartStart.toISOString().split('T')[0]
 
-      const [clientRes, assignedRes, plansRes, logsRes, historyRes, progressRes, analyseRes, chartRes, checkinsRes, lastWeekRes] = await Promise.all([
+      const [clientRes, assignedRes, assignedNutritionRes, plansRes, logsRes, historyRes, progressRes, analyseRes, chartRes, checkinsRes, lastWeekRes] = await Promise.all([
         supabase.from('clients').select('*').eq('id', id).single(),
         supabase.from('assigned_plans').select('*, plan:workout_plans(*)').eq('client_id', id).order('assigned_at', { ascending: false }),
+        supabase
+          .from('assigned_nutrition_plans')
+          .select('id, client_id, plan_id, assigned_at, is_active, plan:nutrition_plans(id, name)')
+          .eq('client_id', id)
+          .order('assigned_at', { ascending: false }),
         supabase.from('workout_plans').select('*').eq('trainer_id', user.id).order('name'),
         supabase.from('workout_logs').select('id', { count: 'exact', head: true }).eq('client_id', id).not('completed_at', 'is', null),
         supabase.from('workout_logs')
@@ -233,6 +246,23 @@ export default function ClientDetailPage() {
       setProfilePhone(clientRes.data.phone ?? '')
       setNotesValue(clientRes.data.notes ?? '')
       setAssignedPlans((assignedRes.data ?? []) as AssignedPlan[])
+      const nutritionAssignments: NutritionAssignmentSummary[] = ((assignedNutritionRes.data ?? []) as Array<{
+        id: string
+        assigned_at: string
+        is_active: boolean
+        plan: Array<{ name: string }> | { name: string } | null
+      }>).map((row) => {
+        const planName = Array.isArray(row.plan)
+          ? (row.plan[0]?.name ?? null)
+          : (row.plan?.name ?? null)
+        return {
+          id: row.id,
+          assigned_at: row.assigned_at,
+          is_active: row.is_active,
+          plan_name: planName,
+        }
+      })
+      setAssignedNutritionPlans(nutritionAssignments)
       setAvailablePlans(plansRes.data ?? [])
       setWorkoutLogs(Array.from({ length: logsRes.count ?? 0 }) as WorkoutLog[])
       setHistoryLogs((historyRes.data ?? []) as WorkoutLogDetail[])
@@ -524,6 +554,13 @@ export default function ClientDetailPage() {
     setAdminLightboxIdx(startIndex)
   }
 
+  const activeTrainingPlan = assignedPlans.find((plan) => plan.is_active)
+  const activeNutritionPlan = assignedNutritionPlans.find((plan) => plan.is_active)
+  const lastProgress = progressLogs[0]
+  const lastWorkout = historyLogs[0]
+  const latestCheckin = checkins[0]
+  const notesPreview = (client.notes ?? '').trim()
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       {adminLightboxUrls.length > 0 && (
@@ -796,6 +833,55 @@ export default function ClientDetailPage() {
               </div>
               <div className="text-gray-500 text-xs mt-1">Letztes Gewicht</div>
             </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="font-semibold text-gray-900">Aktueller Status</h3>
+              <div className="flex flex-wrap gap-2">
+                <Link href="/admin/plans" className="text-xs text-indigo-600 hover:underline">Trainingspläne</Link>
+                <Link href="/admin/nutrition" className="text-xs text-indigo-600 hover:underline">Ernährung</Link>
+                <Link href={`/admin/messages?client=${id}`} className="text-xs text-indigo-600 hover:underline">Nachrichten</Link>
+              </div>
+            </div>
+            <dl className="grid sm:grid-cols-2 gap-3 text-sm">
+              <div className="rounded-lg bg-gray-50 px-3 py-2">
+                <dt className="text-gray-500 text-xs">Training</dt>
+                <dd className="text-gray-900 font-medium mt-0.5">
+                  {activeTrainingPlan?.plan?.name ?? 'Kein aktiver Plan'}
+                </dd>
+                <p className="text-xs text-gray-500 mt-1">{assignedPlans.length} Plan-Zuweisungen gesamt</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 px-3 py-2">
+                <dt className="text-gray-500 text-xs">Ernährung</dt>
+                <dd className="text-gray-900 font-medium mt-0.5">
+                  {activeNutritionPlan?.plan_name ?? 'Kein aktiver Ernährungsplan'}
+                </dd>
+                <p className="text-xs text-gray-500 mt-1">{assignedNutritionPlans.length} Zuweisungen gesamt</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 px-3 py-2">
+                <dt className="text-gray-500 text-xs">Letzte Aktivität</dt>
+                <dd className="text-gray-900 font-medium mt-0.5">
+                  {lastWorkout
+                    ? new Date(lastWorkout.date).toLocaleDateString('de-DE')
+                    : 'Noch kein abgeschlossenes Training'}
+                </dd>
+                <p className="text-xs text-gray-500 mt-1">
+                  Fortschritt: {lastProgress?.body_weight ? `${lastProgress.body_weight} kg` : 'kein Gewichtseintrag'}
+                </p>
+              </div>
+              <div className="rounded-lg bg-gray-50 px-3 py-2">
+                <dt className="text-gray-500 text-xs">Check-ins & Notizen</dt>
+                <dd className="text-gray-900 font-medium mt-0.5">
+                  {latestCheckin
+                    ? `Letzter Check-in: ${new Date(latestCheckin.week_start).toLocaleDateString('de-DE')}`
+                    : 'Noch kein Check-in'}
+                </dd>
+                <p className="text-xs text-gray-500 mt-1 truncate">
+                  {notesPreview ? `Notiz: ${notesPreview}` : 'Keine interne Notiz'}
+                </p>
+              </div>
+            </dl>
           </div>
         </div>
       )}
