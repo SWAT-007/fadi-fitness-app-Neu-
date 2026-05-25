@@ -572,6 +572,8 @@ export default function ClientDetailPage() {
 
   const activeTrainingPlan = assignedPlans.find((plan) => plan.is_active)
   const activeNutritionPlan = assignedNutritionPlans.find((plan) => plan.is_active)
+  const latestNutritionAssignment = assignedNutritionPlans[0]
+  const nutritionManagePlanId = activeNutritionPlan?.plan_id ?? latestNutritionAssignment?.plan_id ?? null
   const lastProgress = progressLogs[0]
   const lastWorkout = historyLogs[0]
   const latestCheckin = checkins[0]
@@ -959,6 +961,15 @@ export default function ClientDetailPage() {
             <div className="flex items-center justify-between gap-3 mb-3">
               <h3 className="font-semibold text-gray-900">Ernährungsübersicht</h3>
               <div className="flex flex-wrap gap-2">
+                {nutritionManagePlanId ? (
+                  <Link href={`/admin/nutrition/${nutritionManagePlanId}`} className="text-xs text-indigo-600 hover:underline">
+                    Für Kunden verwalten
+                  </Link>
+                ) : (
+                  <Link href="/admin/nutrition/new" className="text-xs text-indigo-600 hover:underline">
+                    Plan erstellen
+                  </Link>
+                )}
                 <Link href="/admin/nutrition" className="text-xs text-indigo-600 hover:underline">Pläne</Link>
                 <Link href="/admin/nutrition/foods" className="text-xs text-indigo-600 hover:underline">Lebensmittel</Link>
                 {activeNutritionPlan?.plan_id ? (
@@ -986,6 +997,11 @@ export default function ClientDetailPage() {
                     ? new Date(assignedNutritionPlans[0].assigned_at).toLocaleDateString('de-DE')
                     : 'Noch keine'}
                 </p>
+                {nutritionManagePlanId ? (
+                  <Link href={`/admin/nutrition/${nutritionManagePlanId}`} className="inline-flex mt-2 text-xs text-indigo-600 hover:underline">
+                    Zuweisung bearbeiten
+                  </Link>
+                ) : null}
               </div>
             </div>
           </div>
