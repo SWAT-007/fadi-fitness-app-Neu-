@@ -251,7 +251,7 @@ export default function ClientDetailPage() {
       chartStart.setDate(monday.getDate() - 49)
       const chartStartStr = chartStart.toISOString().split('T')[0]
 
-      const [assignedRes, assignedNutritionRes, plansRes, logsRes, historyRes, progressRes, analyseRes, chartRes, checkinsRes, lastWeekRes] = await Promise.all([
+      const [assignedResult, assignedNutritionResult, plansResult, logsResult, historyResult, progressResult, analyseResult, chartResult, checkinsResult, lastWeekResult] = await Promise.allSettled([
         supabase.from('assigned_plans').select('*, plan:workout_plans(*)').eq('client_id', id).order('assigned_at', { ascending: false }),
         supabase
           .from('assigned_nutrition_plans')
@@ -286,24 +286,48 @@ export default function ClientDetailPage() {
           .lt('date', weekStart),
       ])
 
-      const mainError = assignedRes.error ?? plansRes.error ?? logsRes.error ?? progressRes.error
-      if (mainError) throw mainError
-      if (historyRes.error) console.error('Failed to load workout history', historyRes.error)
-      if (analyseRes.error) console.error('Failed to load workout analysis', analyseRes.error)
-      if (chartRes.error) console.error('Failed to load chart data', chartRes.error)
+      const resolveLegacy = <T,>(result: PromiseSettledResult<T>, scope: string): T | null => {
+        if (result.status === 'rejected') {
+          console.warn(`[client-detail:legacy] ${scope} unavailable`, result.reason)
+          return null
+        }
+        return result.value
+      }
+
+      const assignedRes = resolveLegacy(assignedResult, 'assigned_plans')
+      const assignedNutritionRes = resolveLegacy(assignedNutritionResult, 'assigned_nutrition_plans')
+      const plansRes = resolveLegacy(plansResult, 'workout_plans')
+      const logsRes = resolveLegacy(logsResult, 'workout_logs_count')
+      const historyRes = resolveLegacy(historyResult, 'workout_logs_history')
+      const progressRes = resolveLegacy(progressResult, 'progress_logs')
+      const analyseRes = resolveLegacy(analyseResult, 'workout_logs_analyse')
+      const chartRes = resolveLegacy(chartResult, 'workout_logs_chart')
+      const checkinsRes = resolveLegacy(checkinsResult, 'weekly_checkins')
+      const lastWeekRes = resolveLegacy(lastWeekResult, 'workout_logs_last_week')
+
+      if (assignedRes?.error) console.warn('[client-detail:legacy] assigned_plans unavailable', assignedRes.error)
+      if (assignedNutritionRes?.error) console.warn('[client-detail:legacy] assigned_nutrition_plans unavailable', assignedNutritionRes.error)
+      if (plansRes?.error) console.warn('[client-detail:legacy] workout_plans unavailable', plansRes.error)
+      if (logsRes?.error) console.warn('[client-detail:legacy] workout_logs_count unavailable', logsRes.error)
+      if (historyRes?.error) console.warn('[client-detail:legacy] workout_logs_history unavailable', historyRes.error)
+      if (progressRes?.error) console.warn('[client-detail:legacy] progress_logs unavailable', progressRes.error)
+      if (analyseRes?.error) console.warn('[client-detail:legacy] workout_logs_analyse unavailable', analyseRes.error)
+      if (chartRes?.error) console.warn('[client-detail:legacy] workout_logs_chart unavailable', chartRes.error)
+      if (checkinsRes?.error) console.warn('[client-detail:legacy] weekly_checkins unavailable', checkinsRes.error)
+      if (lastWeekRes?.error) console.warn('[client-detail:legacy] workout_logs_last_week unavailable', lastWeekRes.error)
 
       setClient(normalizedClient)
       setProfileName(normalizedClient.full_name ?? '')
       setProfilePhone(normalizedClient.phone ?? '')
       setNotesValue(normalizedClient.notes ?? '')
-      setAssignedPlans((assignedRes.data ?? []) as AssignedPlan[])
-      const nutritionAssignments: NutritionAssignmentSummary[] = ((assignedNutritionRes.data ?? []) as Array<{
+      setAssignedPlans(((assignedRes?.data ?? []) as AssignedPlan[]))
+      const nutritionAssignments: NutritionAssignmentSummary[] = (((assignedNutritionRes?.data ?? []) as Array<{
         id: string
         plan_id: string
         assigned_at: string
         is_active: boolean
         plan: Array<{ name: string }> | { name: string } | null
-      }>).map((row) => {
+      }>)).map((row) => {
         const planName = Array.isArray(row.plan)
           ? (row.plan[0]?.name ?? null)
           : (row.plan?.name ?? null)
@@ -316,11 +340,11 @@ export default function ClientDetailPage() {
         }
       })
       setAssignedNutritionPlans(nutritionAssignments)
-      setAvailablePlans(plansRes.data ?? [])
-      setWorkoutLogs(Array.from({ length: logsRes.count ?? 0 }) as WorkoutLog[])
-      setHistoryLogs((historyRes.data ?? []) as WorkoutLogDetail[])
-      setProgressLogs(progressRes.data ?? [])
-      const checkinsData = (checkinsRes.data ?? []) as WeeklyCheckin[]
+      setAvailablePlans(plansRes?.data ?? [])
+      setWorkoutLogs(Array.from({ length: logsRes?.count ?? 0 }) as WorkoutLog[])
+      setHistoryLogs((historyRes?.data ?? []) as WorkoutLogDetail[])
+      setProgressLogs(progressRes?.data ?? [])
+      const checkinsData = (checkinsRes?.data ?? []) as WeeklyCheckin[]
       setCheckins(checkinsData)
 
       // Batch signed URLs for all check-in images
@@ -339,7 +363,7 @@ export default function ClientDetailPage() {
       }
 
       type AnalyseLog = { id: string; duration_seconds: number | null; date: string; exercise_logs: Array<{ id: string; completed: boolean }> }
-      const analyseLogs = (analyseRes.data ?? []) as AnalyseLog[]
+      const analyseLogs = (analyseRes?.data ?? []) as AnalyseLog[]
       const weekLogs = analyseLogs.filter(l => l.date >= weekStart)
       setWeeklyStats({
         workouts: weekLogs.length,
@@ -353,7 +377,7 @@ export default function ClientDetailPage() {
       })
 
       type LastWeekLog = { id: string; duration_seconds: number | null; exercise_logs: Array<{ id: string; completed: boolean }> }
-      const lwLogs = (lastWeekRes.data ?? []) as LastWeekLog[]
+      const lwLogs = (lastWeekRes?.data ?? []) as LastWeekLog[]
       setLastWeekStats({
         workouts: lwLogs.length,
         seconds: lwLogs.reduce((s, l) => s + (l.duration_seconds ?? 0), 0),
@@ -362,7 +386,7 @@ export default function ClientDetailPage() {
 
       // 8-week chart buckets
       type ChartLog = { date: string; duration_seconds: number | null }
-      const rawChartLogs = (chartRes.data ?? []) as ChartLog[]
+      const rawChartLogs = (chartRes?.data ?? []) as ChartLog[]
       const buckets = Array.from({ length: 8 }, (_, i) => {
         const wMon = new Date(monday)
         wMon.setDate(monday.getDate() - (7 - i) * 7)
