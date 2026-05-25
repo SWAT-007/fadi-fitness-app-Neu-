@@ -762,6 +762,7 @@ export default function ClientNutritionPage() {
         ...prev.filter(c => c.meal_id !== targetMeal.id),
         ...(inserted as CmfWithFood[]),
       ])
+      showToast('info', 'Mahlzeit übernommen. Getränke ggf. neu eintragen und bei Bedarf Mengen berechnen.')
     }
 
     setReusingHistoryId(null)
@@ -1291,6 +1292,9 @@ export default function ClientNutritionPage() {
       {/* ─── Vorherige Mahlzeiten ────────────────────────────────────────── */}
       {mealHistory.length > 0 && (
         <div className="border-t border-gray-100 pt-6">
+          <p className="text-[11px] text-gray-500 mb-2">
+            Hinweis: Getränke werden nicht in der Mahlzeiten-Historie gespeichert. Nach dem Wiederverwenden bitte Getränke ggf. neu eintragen und Mengen bei Bedarf neu berechnen.
+          </p>
           <MealHistorySection
             history={mealHistory}
             reusingId={reusingHistoryId}
