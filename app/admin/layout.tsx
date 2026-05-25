@@ -222,7 +222,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Sidebar */}
       <aside
         className={`
-          fixed inset-y-0 left-0 z-30 w-[260px] flex flex-col
+          fixed inset-y-0 left-0 z-30 w-[260px] flex flex-col overflow-visible
           bg-[#0b0c0f] text-gray-300
           border-r border-white/[0.06]
           transition-transform duration-300
@@ -279,8 +279,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </nav>
 
         {/* Profile + Logout */}
-        <div className="px-3 py-3 border-t border-white/[0.06]">
-          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] mb-1 pr-2">
+        <div className="px-3 py-3 border-t border-white/[0.06] shrink-0 overflow-visible">
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] pr-2">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-[13px] font-semibold ring-1 ring-white/20">
               {profile?.full_name?.charAt(0)?.toUpperCase() ?? 'A'}
             </div>
@@ -288,6 +288,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <div className="text-white text-[13px] font-medium truncate">{profile?.full_name}</div>
               <div className="text-gray-500 text-[11px] truncate">{profile?.email}</div>
             </div>
+          </div>
+          <div className="mt-2 mb-1 px-2 py-2 rounded-lg bg-white/[0.02] border border-white/[0.06] flex items-center justify-between overflow-visible">
+            <span className="text-[12px] text-gray-400">Benachrichtigungen</span>
             {profile && <TrainerNotificationBell trainerId={profile.id} />}
           </div>
           <button

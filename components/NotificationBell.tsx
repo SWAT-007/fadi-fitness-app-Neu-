@@ -35,7 +35,11 @@ function timeAgo(value: string) {
   return new Date(value).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })
 }
 
-export default function NotificationBell({ clientUserId }: { clientUserId: string }) {
+export default function NotificationBell({
+  clientUserId,
+}: {
+  clientUserId: string
+}) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])

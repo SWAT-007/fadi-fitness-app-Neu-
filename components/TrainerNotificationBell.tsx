@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Notification, NotificationType } from '@/lib/types'
+const trainerBellTypes = ['workout', 'checkin', 'training_plan', 'workout_plan', 'nutrition_plan', 'request'] as const
+type TrainerBellType = typeof trainerBellTypes[number]
+const isTrainerBellNotification = (notification: Notification): notification is Notification & { type: TrainerBellType } =>
+  trainerBellTypes.includes(notification.type as TrainerBellType)
 
 const stroke = {
   fill: 'none' as const,
@@ -103,6 +107,7 @@ export default function TrainerNotificationBell({ trainerId, theme = 'dark' }: {
   const channelIdRef = useRef<string | null>(null)
 
   const append = useCallback((n: Notification) => {
+    if (!isTrainerBellNotification(n)) return
     setNotifications(prev => {
       if (prev.some(x => x.id === n.id)) return prev
       return [n, ...prev].sort((a, b) =>
@@ -116,9 +121,10 @@ export default function TrainerNotificationBell({ trainerId, theme = 'dark' }: {
       .from('notifications')
       .select('*')
       .eq('client_id', trainerId)
+      .in('type', [...trainerBellTypes])
       .order('created_at', { ascending: false })
       .limit(20)
-      .then(({ data }) => setNotifications((data ?? []) as Notification[]))
+      .then(({ data }) => setNotifications(((data ?? []) as Notification[]).filter(isTrainerBellNotification)))
   }, [trainerId])
 
   useEffect(() => {
@@ -223,7 +229,7 @@ export default function TrainerNotificationBell({ trainerId, theme = 'dark' }: {
                 <p className="text-[13px] text-gray-500">Keine Benachrichtigungen</p>
               </div>
             ) : (
-              notifications.map((n, i) => (
+              notifications.filter(isTrainerBellNotification).map((n, i) => (
                 <button
                   key={n.id}
                   type="button"
