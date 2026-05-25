@@ -266,7 +266,7 @@ export default function ClientMessagesPage() {
           <div className="flex items-center justify-center h-full">
             <div className="text-center px-6">
               <p className="text-gray-500 text-[13px] font-medium">Noch keine Nachrichten</p>
-              <p className="text-gray-400 text-[12px] mt-1">Schreib deinem Trainer die erste Nachricht!</p>
+              <p className="text-gray-400 text-[12px] mt-1">Schreibe die erste Nachricht.</p>
             </div>
           </div>
         ) : (

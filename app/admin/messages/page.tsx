@@ -435,7 +435,10 @@ export default function TrainerMessagesPage() {
             <div className="flex-1 overflow-y-auto px-3 lg:px-6 py-5 bg-gradient-to-b from-gray-50 to-white">
               {messages.length === 0 ? (
                 <div className="flex items-center justify-center h-full">
-                  <p className="text-gray-400 text-[13px]">Noch keine Nachrichten. Schreib die erste!</p>
+                  <div className="text-center px-6">
+                    <p className="text-gray-500 text-[13px] font-medium">Noch keine Nachrichten</p>
+                    <p className="text-gray-400 text-[12px] mt-1">Schreibe die erste Nachricht.</p>
+                  </div>
                 </div>
               ) : (
                 <MessageList messages={messages} myId={myProfile?.id ?? ''} accent="indigo" />
