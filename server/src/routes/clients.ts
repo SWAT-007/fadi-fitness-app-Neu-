@@ -177,4 +177,139 @@ clientsRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) =>
   }
 });
 
+clientsRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!clientId) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  const hasName = Object.prototype.hasOwnProperty.call(req.body ?? {}, "name");
+  const hasEmail = Object.prototype.hasOwnProperty.call(req.body ?? {}, "email");
+  const hasPhone = Object.prototype.hasOwnProperty.call(req.body ?? {}, "phone");
+  const hasNotes = Object.prototype.hasOwnProperty.call(req.body ?? {}, "notes");
+  const hasStatus = Object.prototype.hasOwnProperty.call(req.body ?? {}, "status");
+
+  const name = normalizeString(req.body?.name);
+  if (hasName && !name) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  const email = normalizeOptionalString(req.body?.email)?.toLowerCase() ?? "";
+  const phone = normalizeOptionalString(req.body?.phone);
+  const notes = normalizeOptionalString(req.body?.notes);
+  const status = normalizeString(req.body?.status);
+  if (hasStatus && !status) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  const updateData: {
+    fullName?: string;
+    email?: string;
+    phone?: string | null;
+    notes?: string | null;
+    status?: string;
+  } = {};
+
+  if (hasName) updateData.fullName = name;
+  if (hasEmail) updateData.email = email;
+  if (hasPhone) updateData.phone = phone;
+  if (hasNotes) updateData.notes = notes;
+  if (hasStatus) updateData.status = status;
+
+  if (Object.keys(updateData).length === 0) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existing = await prisma.clientProfile.findFirst({
+      where: {
+        id: clientId,
+        trainerId: trainerProfile.id,
+      },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const client = await prisma.clientProfile.update({
+      where: { id: existing.id },
+      data: updateData,
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        notes: true,
+        status: true,
+        userId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.json({ client: mapClientProfile(client) });
+  } catch (error) {
+    console.error("[clients:update] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+clientsRouter.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!clientId) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existing = await prisma.clientProfile.findFirst({
+      where: {
+        id: clientId,
+        trainerId: trainerProfile.id,
+      },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await prisma.clientProfile.delete({
+      where: { id: existing.id },
+    });
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("[clients:delete] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 export { clientsRouter };
