@@ -27,6 +27,7 @@ type WorkoutLogDetail = Omit<WorkoutLog, 'exercise_logs' | 'workout_day'> & {
 
 type NutritionAssignmentSummary = {
   id: string
+  plan_id: string
   assigned_at: string
   is_active: boolean
   plan_name: string | null
@@ -248,6 +249,7 @@ export default function ClientDetailPage() {
       setAssignedPlans((assignedRes.data ?? []) as AssignedPlan[])
       const nutritionAssignments: NutritionAssignmentSummary[] = ((assignedNutritionRes.data ?? []) as Array<{
         id: string
+        plan_id: string
         assigned_at: string
         is_active: boolean
         plan: Array<{ name: string }> | { name: string } | null
@@ -257,6 +259,7 @@ export default function ClientDetailPage() {
           : (row.plan?.name ?? null)
         return {
           id: row.id,
+          plan_id: row.plan_id,
           assigned_at: row.assigned_at,
           is_active: row.is_active,
           plan_name: planName,
@@ -866,6 +869,14 @@ export default function ClientDetailPage() {
                   {activeNutritionPlan?.plan_name ?? 'Kein aktiver Ernährungsplan'}
                 </dd>
                 <p className="text-xs text-gray-500 mt-1">{assignedNutritionPlans.length} Zuweisungen gesamt</p>
+                {activeNutritionPlan?.plan_id ? (
+                  <Link
+                    href={`/admin/nutrition/${activeNutritionPlan.plan_id}`}
+                    className="inline-flex mt-2 text-xs text-indigo-600 hover:underline"
+                  >
+                    Aktiven Ernährungsplan öffnen
+                  </Link>
+                ) : null}
               </div>
               <div className="rounded-lg bg-gray-50 px-3 py-2">
                 <dt className="text-gray-500 text-xs">Letzte Aktivität</dt>
@@ -890,6 +901,41 @@ export default function ClientDetailPage() {
                 </p>
               </div>
             </dl>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="font-semibold text-gray-900">Ernährungsübersicht</h3>
+              <div className="flex flex-wrap gap-2">
+                <Link href="/admin/nutrition" className="text-xs text-indigo-600 hover:underline">Pläne</Link>
+                <Link href="/admin/nutrition/foods" className="text-xs text-indigo-600 hover:underline">Lebensmittel</Link>
+                {activeNutritionPlan?.plan_id ? (
+                  <Link href={`/admin/nutrition/${activeNutritionPlan.plan_id}`} className="text-xs text-indigo-600 hover:underline">
+                    Aktiver Plan
+                  </Link>
+                ) : null}
+              </div>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-3 text-sm">
+              <div className="rounded-lg bg-gray-50 px-3 py-2">
+                <p className="text-xs text-gray-500">Status</p>
+                <p className="font-medium text-gray-900 mt-0.5">
+                  {activeNutritionPlan ? 'Aktiver Plan zugewiesen' : 'Kein aktiver Plan'}
+                </p>
+              </div>
+              <div className="rounded-lg bg-gray-50 px-3 py-2">
+                <p className="text-xs text-gray-500">Zuweisungen</p>
+                <p className="font-medium text-gray-900 mt-0.5">{assignedNutritionPlans.length}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 px-3 py-2">
+                <p className="text-xs text-gray-500">Letzte Zuweisung</p>
+                <p className="font-medium text-gray-900 mt-0.5">
+                  {assignedNutritionPlans[0]
+                    ? new Date(assignedNutritionPlans[0].assigned_at).toLocaleDateString('de-DE')
+                    : 'Noch keine'}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}
