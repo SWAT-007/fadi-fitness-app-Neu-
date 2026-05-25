@@ -178,11 +178,14 @@ export default function MealsPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="p-4 max-w-lg mx-auto pb-8">
-      <h1 className="text-xl font-bold text-gray-900 mb-5">Mahlzeiten</h1>
+      <h1 className="text-xl font-bold text-gray-900">Freies Protokoll</h1>
+      <p className="text-sm text-gray-500 mt-1 mb-5">
+        Für freie Einträge. Dein Haupt-Ernährungsplan ist unter Ernährung.
+      </p>
 
       {/* ── Log Form ────────────────────────────────────────────────────────── */}
       <div ref={formRef} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
-        <h2 className="font-semibold text-gray-900 mb-4">Neue Mahlzeit</h2>
+        <h2 className="font-semibold text-gray-900 mb-4">Neuer Eintrag</h2>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-3">
