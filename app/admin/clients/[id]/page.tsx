@@ -851,6 +851,14 @@ export default function ClientDetailPage() {
                   {activeTrainingPlan?.plan?.name ?? 'Kein aktiver Plan'}
                 </dd>
                 <p className="text-xs text-gray-500 mt-1">{assignedPlans.length} Plan-Zuweisungen gesamt</p>
+                {activeTrainingPlan?.plan?.id ? (
+                  <Link
+                    href={`/admin/plans/${activeTrainingPlan.plan.id}`}
+                    className="inline-flex mt-2 text-xs text-indigo-600 hover:underline"
+                  >
+                    Aktiven Plan öffnen
+                  </Link>
+                ) : null}
               </div>
               <div className="rounded-lg bg-gray-50 px-3 py-2">
                 <dt className="text-gray-500 text-xs">Ernährung</dt>
@@ -889,6 +897,32 @@ export default function ClientDetailPage() {
       {/* Plans */}
       {tab === 'plans' && (
         <div className="space-y-4">
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-gray-900">Aktiver Trainingsplan</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {activeTrainingPlan?.plan?.name ?? 'Aktuell ist kein Plan aktiv.'}
+                </p>
+              </div>
+              {activeTrainingPlan?.plan?.id ? (
+                <Link
+                  href={`/admin/plans/${activeTrainingPlan.plan.id}`}
+                  className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Plan öffnen
+                </Link>
+              ) : (
+                <Link
+                  href="/admin/plans"
+                  className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Zu Plänen
+                </Link>
+              )}
+            </div>
+          </div>
+
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
             <h3 className="font-semibold text-gray-900 mb-3">Plan zuweisen</h3>
             <div className="flex gap-3">
@@ -938,6 +972,14 @@ export default function ClientDetailPage() {
                     <button onClick={() => togglePlanActive(ap.id, ap.is_active)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100">
                       {ap.is_active ? 'Deaktivieren' : 'Aktivieren'}
                     </button>
+                    {(ap.plan as WorkoutPlan | undefined)?.id ? (
+                      <Link
+                        href={`/admin/plans/${(ap.plan as WorkoutPlan).id}`}
+                        className="text-xs text-indigo-600 hover:text-indigo-700 px-2 py-1 rounded-lg hover:bg-indigo-50"
+                      >
+                        Öffnen
+                      </Link>
+                    ) : null}
                     <button onClick={() => removePlan(ap.id)} className="text-xs text-red-500 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">
                       Entfernen
                     </button>
