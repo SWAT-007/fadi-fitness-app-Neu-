@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt'
 import crypto from 'crypto'
 import { NextResponse } from 'next/server'
 import { Prisma, UserRole } from '@prisma/client'
+import { createClient } from '@supabase/supabase-js'
 import { prisma } from '../../../../server/src/db'
 
 const normalizeEmail = (value: unknown) =>
@@ -45,6 +46,136 @@ const isInviteExpired = (expiresAt: Date) => expiresAt.getTime() <= Date.now()
 
 const invalidInvite = (message: string, status: number) =>
   NextResponse.json({ ok: false, message }, { status })
+
+const getSupabaseAdminClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return { client: null, error: 'Server-Konfigurationsfehler: Supabase-Umgebungsvariablen fehlen.' } as const
+  }
+
+  return {
+    client: createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    }),
+    error: null,
+  } as const
+}
+
+const findSupabaseUserByEmail = async (supabaseAdmin: ReturnType<typeof createClient<any>>, email: string) => {
+  for (let page = 1; page <= 10; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 })
+    if (error) throw new Error(`Supabase Auth user lookup fehlgeschlagen: ${error.message}`)
+
+    const users = data?.users ?? []
+    const match = users.find((user) => (user.email ?? '').toLowerCase() === email)
+    if (match) return match
+    if (users.length < 200) break
+  }
+
+  return null
+}
+
+const ensureSupabaseBridge = async (params: {
+  email: string
+  fullName: string
+  password: string
+  trainerEmail: string
+}) => {
+  const { client: supabaseAdmin, error: configError } = getSupabaseAdminClient()
+  if (!supabaseAdmin) {
+    throw new Error(configError)
+  }
+
+  const normalizedEmail = params.email.toLowerCase()
+  const normalizedTrainerEmail = params.trainerEmail.toLowerCase()
+
+  const trainerUser = await findSupabaseUserByEmail(supabaseAdmin, normalizedTrainerEmail)
+  if (!trainerUser?.id) {
+    throw new Error('Trainerkonto in Supabase nicht gefunden.')
+  }
+
+  let clientUser = await findSupabaseUserByEmail(supabaseAdmin, normalizedEmail)
+
+  if (!clientUser) {
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email: normalizedEmail,
+      password: params.password,
+      email_confirm: true,
+      user_metadata: { full_name: params.fullName, role: 'client' },
+    })
+
+    if (error || !data.user?.id) {
+      throw new Error(`Supabase-Clientkonto konnte nicht erstellt werden: ${error?.message ?? 'Unbekannter Fehler'}`)
+    }
+
+    clientUser = data.user
+  } else {
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(clientUser.id, {
+      password: params.password,
+      email_confirm: true,
+      user_metadata: {
+        ...(clientUser.user_metadata ?? {}),
+        full_name: params.fullName,
+        role: 'client',
+      },
+    })
+    if (error) {
+      throw new Error(`Supabase-Clientkonto konnte nicht aktualisiert werden: ${error.message}`)
+    }
+  }
+
+  const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
+    id: clientUser.id,
+    email: normalizedEmail,
+    full_name: params.fullName,
+    role: 'client',
+  })
+  if (profileError) {
+    throw new Error(`Supabase-Profil konnte nicht erstellt werden: ${profileError.message}`)
+  }
+
+  const { data: existingClient, error: clientLookupError } = await supabaseAdmin
+    .from('clients')
+    .select('id, user_id')
+    .eq('trainer_id', trainerUser.id)
+    .eq('email', normalizedEmail)
+    .limit(1)
+    .maybeSingle()
+
+  if (clientLookupError) {
+    throw new Error(`Supabase-Clientdatensatz konnte nicht geladen werden: ${clientLookupError.message}`)
+  }
+
+  if (existingClient?.id) {
+    const { error: updateClientError } = await supabaseAdmin
+      .from('clients')
+      .update({
+        user_id: clientUser.id,
+        full_name: params.fullName,
+        email: normalizedEmail,
+      })
+      .eq('id', existingClient.id)
+
+    if (updateClientError) {
+      throw new Error(`Supabase-Clientdatensatz konnte nicht aktualisiert werden: ${updateClientError.message}`)
+    }
+  } else {
+    const { error: insertClientError } = await supabaseAdmin
+      .from('clients')
+      .insert({
+        trainer_id: trainerUser.id,
+        user_id: clientUser.id,
+        full_name: params.fullName,
+        email: normalizedEmail,
+      })
+
+    if (insertClientError) {
+      throw new Error(`Supabase-Clientdatensatz konnte nicht erstellt werden: ${insertClientError.message}`)
+    }
+  }
+}
 
 export async function GET(
   _request: Request,
@@ -214,12 +345,24 @@ export async function POST(
         clientProfileId,
         email: user.email,
         fullName,
+        trainerEmail: invite.trainer.user.email,
       }
+    })
+
+    await ensureSupabaseBridge({
+      email: result.email,
+      fullName: result.fullName,
+      password,
+      trainerEmail: result.trainerEmail,
     })
 
     return NextResponse.json({
       ok: true,
-      client: result,
+      client: {
+        clientProfileId: result.clientProfileId,
+        email: result.email,
+        fullName: result.fullName,
+      },
       message: 'Einladung erfolgreich angenommen.',
     })
   } catch (error) {
@@ -231,6 +374,7 @@ export async function POST(
       ? error.message
       : 'Einladung konnte nicht angenommen werden.'
 
-    return invalidInvite(message, 400)
+    const status = message.startsWith('Server-Konfigurationsfehler') ? 500 : 400
+    return invalidInvite(message, status)
   }
 }
