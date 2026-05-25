@@ -58,6 +58,15 @@ function formatMinutes(min: number): string {
   return rem === 0 ? `${h}h` : `${h}h${rem}m`
 }
 
+function getWeekStartKey(date: Date): string {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  d.setDate(d.getDate() + diff)
+  d.setHours(0, 0, 0, 0)
+  return d.toISOString().slice(0, 10)
+}
+
 type WeekBucket = { label: string; workouts: number; minutes: number }
 
 function SvgLineChart({ data }: { data: { label: string; value: number }[] }) {
@@ -577,6 +586,8 @@ export default function ClientDetailPage() {
   const lastProgress = progressLogs[0]
   const lastWorkout = historyLogs[0]
   const latestCheckin = checkins[0]
+  const thisWeekStart = getWeekStartKey(new Date())
+  const hasCheckinThisWeek = checkins.some((checkin) => checkin.week_start === thisWeekStart)
   const notesPreview = (client.notes ?? '').trim()
   const recentWorkouts = historyLogs.slice(0, 5)
 
@@ -909,6 +920,9 @@ export default function ClientDetailPage() {
                     ? `Letzter Check-in: ${new Date(latestCheckin.week_start).toLocaleDateString('de-DE')}`
                     : 'Noch kein Check-in'}
                 </dd>
+                <p className={`text-xs mt-1 font-medium ${hasCheckinThisWeek ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {hasCheckinThisWeek ? 'Diese Woche erledigt' : 'Diese Woche fehlt'}
+                </p>
                 <p className="text-xs text-gray-500 mt-1 truncate">
                   {notesPreview ? `Notiz: ${notesPreview}` : 'Keine interne Notiz'}
                 </p>

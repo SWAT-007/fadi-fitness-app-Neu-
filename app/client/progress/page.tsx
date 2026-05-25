@@ -233,6 +233,7 @@ export default function ProgressPage() {
   const [ciSleep, setCiSleep] = useState(0)
   const [ciHunger, setCiHunger] = useState(0)
   const [ciStress, setCiStress] = useState(0)
+  const [ciWeight, setCiWeight] = useState('')
   const [ciComment, setCiComment] = useState('')
   const [savingCheckin, setSavingCheckin] = useState(false)
   const [uploadProgress, setUploadProgress] = useState('')
@@ -337,6 +338,7 @@ export default function ProgressPage() {
       setCiSleep(thisWeekCheckin.sleep_quality ?? 0)
       setCiHunger(thisWeekCheckin.hunger ?? 0)
       setCiStress(thisWeekCheckin.stress ?? 0)
+      setCiWeight(thisWeekCheckin.body_weight ? String(thisWeekCheckin.body_weight) : '')
       setCiComment(thisWeekCheckin.comment ?? '')
     }
     setCiFiles([])
@@ -377,9 +379,23 @@ export default function ProgressPage() {
       return
     }
 
+    const rawWeight = ciWeight.trim()
+    const normalizedWeight = rawWeight.replace(',', '.')
+    let safeWeight: number | null = null
+
+    if (normalizedWeight) {
+      const parsedWeight = Number(normalizedWeight)
+      if (!Number.isFinite(parsedWeight) || parsedWeight <= 0) {
+        setCheckinError('Bitte gib ein gültiges Gewicht ein (z. B. 82,5 oder 82.5).')
+        return
+      }
+      safeWeight = parsedWeight
+    }
+
     setSavingCheckin(true)
 
     try {
+
       // 1. Upsert check-in and retrieve its id
       const { data: savedCheckin, error: upsertError } = await supabase
         .from('weekly_checkins')
@@ -392,6 +408,7 @@ export default function ProgressPage() {
             sleep_quality: ciSleep || null,
             hunger: ciHunger || null,
             stress: ciStress || null,
+            body_weight: safeWeight,
             comment: ciComment || null,
           },
           { onConflict: 'client_id,week_start' }
@@ -442,7 +459,7 @@ export default function ProgressPage() {
 
       // 3. Reset form
       setCiMood(0); setCiEnergy(0); setCiSleep(0)
-      setCiHunger(0); setCiStress(0); setCiComment('')
+      setCiHunger(0); setCiStress(0); setCiWeight(''); setCiComment('')
       ciPreviews.forEach(p => URL.revokeObjectURL(p))
       setCiFiles([])
       setCiPreviews([])
@@ -719,8 +736,9 @@ export default function ProgressPage() {
               <div className="flex items-start gap-3">
                 <span className="text-2xl">✅</span>
                 <div className="flex-1">
-                  <div className="font-semibold text-emerald-800 text-sm">Check-in diese Woche erledigt</div>
+                  <div className="font-semibold text-emerald-800 text-sm">Check-in für diese Woche erledigt</div>
                   <p className="text-xs text-emerald-600 mt-0.5">Woche ab {new Date(thisWeekStart).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}</p>
+                  <p className="text-xs text-emerald-700 mt-1">Du kannst diesen Check-in bei Bedarf bearbeiten, es wird kein separater neuer Wochen-Check-in erstellt.</p>
                   <button onClick={openEditCheckin} className="text-xs text-emerald-700 underline mt-2 hover:text-emerald-900">
                     Bearbeiten
                   </button>
@@ -730,7 +748,7 @@ export default function ProgressPage() {
           ) : !showCheckinForm ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
               <h3 className="font-semibold text-gray-900 mb-1">Wöchentlicher Check-in</h3>
-              <p className="text-sm text-gray-500 mb-4">Berichte deinem Trainer, wie die Woche war – Stimmung, Energie, Schlaf und mehr.</p>
+              <p className="text-sm text-gray-500 mb-4">Berichte deinem Trainer 1x pro Woche, wie deine Woche war – Stimmung, Energie, Schlaf und mehr.</p>
               <button
                 onClick={() => { setCheckinError(null); setCheckinSuccess(false); setShowCheckinForm(true) }}
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors"
@@ -770,6 +788,20 @@ export default function ProgressPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Stress</label>
                 <RatingButtons value={ciStress} onChange={setCiStress} emojis={['😤', '😰', '😶', '😌', '🧘']} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Gewicht (kg, optional)</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.1"
+                  value={ciWeight}
+                  onChange={e => setCiWeight(e.target.value)}
+                  placeholder="z. B. 78.4"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
               </div>
 
               <div>
@@ -916,7 +948,7 @@ export default function ProgressPage() {
                 >
                   {savingCheckin
                     ? (uploadProgress || 'Speichern…')
-                    : 'Check-in senden'}
+                    : thisWeekCheckin ? 'Check-in aktualisieren' : 'Check-in senden'}
                 </button>
               </div>
             </form>
