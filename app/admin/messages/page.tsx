@@ -66,6 +66,7 @@ export default function TrainerMessagesPage() {
   const [unreadByClientId, setUnreadByClientId] = useState<Record<string, number>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const prevMessageCountRef = useRef(0)
 
   const appendMessage = useCallback((message: Message) => {
     setMessages(prev => {
@@ -243,7 +244,17 @@ export default function TrainerMessagesPage() {
   }, [myProfile, clients, loadUnreadCounts])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    prevMessageCountRef.current = 0
+  }, [selectedClient?.id])
+
+  useEffect(() => {
+    const prev = prevMessageCountRef.current
+    prevMessageCountRef.current = messages.length
+    if (messages.length === 0) return
+    bottomRef.current?.scrollIntoView({
+      behavior: prev === 0 ? 'instant' : 'smooth',
+      block: 'end',
+    })
   }, [messages])
 
   // Auto-grow textarea

@@ -40,6 +40,7 @@ export default function ClientMessagesPage() {
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const prevMessageCountRef = useRef(0)
 
   const appendMessage = useCallback((message: Message) => {
     setMessages(prev => {
@@ -136,7 +137,13 @@ export default function ClientMessagesPage() {
   }, [myProfile, trainerProfile, loadConversation])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    const prev = prevMessageCountRef.current
+    prevMessageCountRef.current = messages.length
+    if (messages.length === 0) return
+    bottomRef.current?.scrollIntoView({
+      behavior: prev === 0 ? 'instant' : 'smooth',
+      block: 'end',
+    })
   }, [messages])
 
   useEffect(() => {
