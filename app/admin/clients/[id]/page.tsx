@@ -353,15 +353,6 @@ export default function ClientDetailPage() {
     })
   }
 
-  const handleSaveNotes = async () => {
-    if (!client) return
-    setSavingNotes(true)
-    await supabase.from('clients').update({ notes: notesValue || null }).eq('id', client.id)
-    showToast('Notiz gespeichert ✓', 'success')
-    setSavingNotes(false)
-    setEditingNotes(false)
-    await load()
-  }
 
   const resetProfileForm = () => {
     if (!client) return
@@ -398,6 +389,7 @@ export default function ClientDetailPage() {
           full_name: fullName,
           email,
           phone,
+          notes: client.notes ?? '',
         }),
       })
 
@@ -414,6 +406,42 @@ export default function ClientDetailPage() {
       showToast('Netzwerkfehler beim Speichern.', 'danger')
     } finally {
       setSavingProfile(false)
+    }
+  }
+
+  const handleSaveNotesViaAdminRoute = async () => {
+    if (!client) return
+    const fullName = profileName.trim() || client.full_name
+    const email = profileEmail.trim().toLowerCase() || client.email
+    const phone = profilePhone.trim()
+
+    setSavingNotes(true)
+    try {
+      const response = await fetch('/api/admin/update-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: client.id,
+          full_name: fullName,
+          email,
+          phone,
+          notes: notesValue,
+        }),
+      })
+
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      if (!response.ok) {
+        showToast(payload?.error ?? 'Notiz konnte nicht gespeichert werden.', 'danger')
+        return
+      }
+
+      showToast('Notiz gespeichert ✓', 'success')
+      setEditingNotes(false)
+      await load()
+    } catch {
+      showToast('Netzwerkfehler beim Speichern der Notiz.', 'danger')
+    } finally {
+      setSavingNotes(false)
     }
   }
 
@@ -740,7 +768,7 @@ export default function ClientDetailPage() {
                     <button onClick={() => { setEditingNotes(false); setNotesValue(client.notes ?? '') }} className="flex-1 py-2 border border-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-50">
                       Abbrechen
                     </button>
-                    <button onClick={handleSaveNotes} disabled={savingNotes} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg disabled:opacity-60">
+                    <button onClick={handleSaveNotesViaAdminRoute} disabled={savingNotes} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg disabled:opacity-60">
                       {savingNotes ? 'Speichern…' : 'Speichern'}
                     </button>
                   </div>

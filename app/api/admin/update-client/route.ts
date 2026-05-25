@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
         full_name?: unknown
         email?: unknown
         phone?: unknown
+        notes?: unknown
       }
     | null
 
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
   const fullName = typeof body?.full_name === 'string' ? body.full_name.trim() : ''
   const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : ''
   const phone = typeof body?.phone === 'string' ? body.phone.trim() : ''
+  const notes = typeof body?.notes === 'string' ? body.notes.trim() : ''
 
   if (!clientId) return badRequest('Ungültige Anfrage.')
   if (!fullName) return badRequest('Name ist erforderlich.')
@@ -54,9 +56,10 @@ export async function POST(request: NextRequest) {
   if (clientError) return NextResponse.json({ ok: false, error: clientError.message }, { status: 400 })
   if (!client) return NextResponse.json({ ok: false, error: 'Kunde nicht gefunden.' }, { status: 404 })
 
-  const updatePayload: { full_name: string; phone: string | null; email?: string } = {
+  const updatePayload: { full_name: string; phone: string | null; notes: string | null; email?: string } = {
     full_name: fullName,
     phone: phone || null,
+    notes: notes || null,
   }
 
   const canUpdateEmail = !client.user_id
