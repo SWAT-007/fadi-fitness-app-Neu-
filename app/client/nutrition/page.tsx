@@ -1287,14 +1287,10 @@ export default function ClientNutritionPage() {
         })}
       </div>
 
-      <p className="text-[11px] text-center text-gray-400 px-4 pt-2 pb-4">Hauptquellen wählen, Zusatz ergänzen, dann berechnen.</p>
 
       {/* ─── Vorherige Mahlzeiten ────────────────────────────────────────── */}
       {mealHistory.length > 0 && (
-        <div className="border-t border-gray-100 pt-6">
-          <p className="text-[11px] text-gray-500 mb-2">
-            Hinweis: Getränke werden nicht in der Mahlzeiten-Historie gespeichert. Nach dem Wiederverwenden bitte Getränke ggf. neu eintragen und Mengen bei Bedarf neu berechnen.
-          </p>
+        <div className="border-t border-gray-100 pt-4">
           <MealHistorySection
             history={mealHistory}
             reusingId={reusingHistoryId}
@@ -1305,8 +1301,8 @@ export default function ClientNutritionPage() {
       )}
 
       {/* ─── Rezeptvorschläge ─────────────────────────────────────────────── */}
-      <div className="border-t border-gray-100 pt-6">
-        <p className="text-[11px] text-gray-500 mb-2">Rezepte dienen nur als Inspiration.</p>
+      <div className="border-t border-gray-100 pt-4">
+        <p className="text-[11px] text-gray-500 mb-1.5">Rezepte dienen nur als Inspiration.</p>
         <RecipeSuggestions targetCalories={plan.target_calories} />
       </div>
 
