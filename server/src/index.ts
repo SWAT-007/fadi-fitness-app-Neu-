@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { authRouter } from "./routes/auth";
 import { clientLinkTokensRouter } from "./routes/clientLinkTokens";
+import { clientsRouter } from "./routes/clients";
 import { meRouter } from "./routes/me";
 
 const app = express();
@@ -20,6 +21,7 @@ app.use(cors({
 app.use(express.json());
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/client-link-tokens", clientLinkTokensRouter);
+app.use("/api/v1/clients", clientsRouter);
 app.use("/api/v1/me", meRouter);
 
 app.get("/health", (_req, res) => {
