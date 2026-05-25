@@ -34,6 +34,22 @@ function groupByDate(history: MealHistoryEntry[]) {
     .map(([key, items]) => ({ label: humanLabel(key), items }))
 }
 
+function formatEntryTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+}
+
+function entryMacroSummary(entry: MealHistoryEntry) {
+  return entry.ingredients.reduce(
+    (acc, ing) => ({
+      calories: acc.calories + (ing.calories ?? 0),
+      protein: acc.protein + (ing.protein ?? 0),
+      carbs: acc.carbs + (ing.carbs ?? 0),
+      fat: acc.fat + (ing.fat ?? 0),
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 },
+  )
+}
+
 // ─── Collapsible ──────────────────────────────────────────────────────────────
 
 function Collapsible({ open, children }: { open: boolean; children: React.ReactNode }) {
@@ -77,6 +93,7 @@ interface Props {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function MealHistorySection({ history, reusingId, onReuse, onDelete }: Props) {
+  const [sectionOpen, setSectionOpen] = useState(false)
   // Collapsible state per entry id
   const [openIds, setOpenIds]         = useState<Set<string>>(new Set())
   // Which entry is showing the "Wirklich löschen?" prompt
@@ -104,11 +121,27 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
   }
 
   return (
-    <div className="space-y-4">
-      <h2 className="font-bold text-gray-900">Vorherige Mahlzeiten</h2>
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <button
+        onClick={() => setSectionOpen(o => !o)}
+        className="w-full text-left flex items-center justify-between gap-2 px-5 py-4 hover:bg-gray-50/60 transition-colors"
+      >
+        <div>
+          <h2 className="font-bold text-gray-900">Vorherige Mahlzeiten</h2>
+          <p className="text-xs text-gray-400 mt-0.5">{history.length} Einträge</p>
+        </div>
+        <svg
+          className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform duration-200 ${sectionOpen ? 'rotate-180' : ''}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
 
+      <Collapsible open={sectionOpen}>
+        <div className="px-4 pb-4 space-y-4 border-t border-gray-100">
       {grouped.map(group => (
-        <div key={group.label} className="space-y-3">
+        <div key={group.label} className="space-y-3 pt-3">
           {/* Date label */}
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">
             {group.label}
@@ -118,6 +151,7 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
             const isOpen    = openIds.has(entry.id)
             const isConfirm = confirmId === entry.id
             const isDeleting = deletingId === entry.id
+            const summary = entryMacroSummary(entry)
 
             return (
               <div
@@ -132,21 +166,24 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggle(entry.id) }}
                   className="w-full text-left flex items-center justify-between gap-3 px-5 py-3 hover:bg-gray-50/60 transition-colors cursor-pointer"
                 >
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-900 text-sm leading-tight truncate">
-                      {entry.meal_name}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold text-gray-900 text-sm leading-tight truncate">
+                        {entry.meal_name}
+                      </p>
+                      <span className="text-[10px] text-gray-400 flex-shrink-0 mt-0.5">{formatEntryTime(entry.logged_at)}</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1 tabular-nums truncate">
+                      {Math.round(entry.total_calories ?? summary.calories)} kcal · {Math.round(summary.protein)}P · {Math.round(summary.carbs)}K · {Math.round(summary.fat)}F
                     </p>
-                    {entry.total_calories != null && (
-                      <p className="text-xs text-gray-500 mt-0.5">{entry.total_calories} kcal gesamt</p>
-                    )}
                   </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
                     {/* Reuse button */}
                     <button
                       onClick={e => { e.stopPropagation(); onReuse(entry) }}
                       disabled={!!reusingId || isDeleting}
-                      className="text-xs font-semibold text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 px-3 py-1.5 rounded-xl transition-colors disabled:opacity-40 whitespace-nowrap"
+                      className="text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1.5 rounded-lg transition-colors hover:bg-green-100 disabled:opacity-40 whitespace-nowrap"
                     >
                       {reusingId === entry.id ? '…' : '↺ Wieder verwenden'}
                     </button>
@@ -224,6 +261,8 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
           })}
         </div>
       ))}
+        </div>
+      </Collapsible>
     </div>
   )
 }
