@@ -2,12 +2,17 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
-import type { Client } from '@/lib/types'
 import { AnimatedNumber, StaggerItem } from '@/components/Motion'
 
+type AdminClientListItem = {
+  id: string
+  full_name: string
+  email: string
+  phone: string | null
+}
+
 export default function ClientsPage() {
-  const [clients, setClients] = useState<Client[]>([])
+  const [clients, setClients] = useState<AdminClientListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -17,25 +22,30 @@ export default function ClientsPage() {
   const loadClients = useCallback(async () => {
     try {
       setLoadError('')
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) {
-        setClients([])
+      const response = await fetch('/api/backend/clients', { cache: 'no-store' })
+      const payload = await response.json().catch(() => null) as
+        | { clients?: Array<{ id: string; name?: string; displayName?: string; email?: string; phone?: string | null }> }
+        | { message?: string }
+        | null
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setLoadError('Backend-Login erforderlich.')
+        } else {
+          setLoadError('Kunden konnten nicht geladen werden.')
+        }
         return
       }
 
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('trainer_id', user.id)
-        .order('full_name')
-      if (error) {
-        setLoadError('Kunden konnten nicht geladen werden.')
-        return
-      }
-
-      setClients(data ?? [])
+      const mappedClients = (payload && 'clients' in payload ? payload.clients : []) ?? []
+      setClients(
+        mappedClients.map((client) => ({
+          id: client.id,
+          full_name: client.displayName ?? client.name ?? 'Unbenannt',
+          email: client.email ?? '',
+          phone: client.phone ?? null,
+        })),
+      )
     } catch {
       setLoadError('Kunden konnten nicht geladen werden.')
     } finally {
@@ -75,15 +85,15 @@ export default function ClientsPage() {
     setDeleteError('')
 
     try {
-      const response = await fetch('/api/admin/delete-client', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: deleteId }),
-      })
+      const response = await fetch(`/api/backend/clients/${deleteId}`, { method: 'DELETE' })
 
       const payload = await response.json().catch(() => null) as { error?: string } | null
       if (!response.ok) {
-        setDeleteError(payload?.error ?? 'Kunde konnte nicht gelöscht werden.')
+        if (response.status === 401) {
+          setDeleteError('Backend-Login erforderlich.')
+        } else {
+          setDeleteError(payload?.error ?? 'Kunde konnte nicht gelöscht werden.')
+        }
         setDeleting(false)
         return
       }
