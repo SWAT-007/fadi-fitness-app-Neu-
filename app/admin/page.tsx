@@ -63,6 +63,23 @@ export default function TrainerDashboard() {
         if (!user) return
         setTrainerName((user.user_metadata?.full_name as string)?.split(' ')[0] ?? '')
 
+        const backendClientsRes = await fetch('/api/backend/clients', { cache: 'no-store' })
+        if (backendClientsRes.status === 401) {
+          setStats((prev) => ({ ...prev, clients: 0 }))
+          setRecentClients([])
+          setErrorMessage('Backend-Login erforderlich.')
+          return
+        }
+        const backendClientsPayload = (await backendClientsRes.json().catch(() => null)) as
+          | { clients?: Array<{ id: string; name?: string; displayName?: string; email?: string; createdAt?: string }> }
+          | null
+        const backendClients = Array.isArray(backendClientsPayload?.clients)
+          ? backendClientsPayload.clients
+          : []
+        if (!backendClientsRes.ok) {
+          throw new Error('Backend clients request failed')
+        }
+
         const clientIdsRes = await supabase
           .from('clients')
           .select('id')
@@ -86,32 +103,43 @@ export default function TrainerDashboard() {
             .eq('status', 'pending')
           : Promise.resolve({ count: 0, error: null })
 
-        const [clientsRes, activeAssignmentsRes, nutritionPlansRes, pendingRequestsRes, unreadMessagesRes, recentRes] = await Promise.all([
-          supabase.from('clients').select('id', { count: 'exact', head: true }).eq('trainer_id', user.id),
+        const [activeAssignmentsRes, nutritionPlansRes, pendingRequestsRes, unreadMessagesRes] = await Promise.all([
           activeAssignmentsQuery,
           supabase.from('nutrition_plans').select('id', { count: 'exact', head: true }).eq('trainer_id', user.id),
           pendingRequestsQuery,
           supabase.from('messages').select('id', { count: 'exact', head: true }).eq('receiver_id', user.id).is('read_at', null),
-          supabase.from('clients').select('*').eq('trainer_id', user.id).order('created_at', { ascending: false }).limit(5),
         ])
 
         const firstError =
-          clientsRes.error ??
           activeAssignmentsRes.error ??
           nutritionPlansRes.error ??
           pendingRequestsRes.error ??
-          unreadMessagesRes.error ??
-          recentRes.error
+          unreadMessagesRes.error
         if (firstError) throw firstError
 
+        const mappedRecentClients: Client[] = backendClients
+          .slice()
+          .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
+          .slice(0, 5)
+          .map((client) => ({
+            id: client.id,
+            trainer_id: '',
+            user_id: null,
+            full_name: client.name ?? client.displayName ?? '',
+            email: client.email ?? '',
+            phone: null,
+            notes: null,
+            created_at: client.createdAt ?? new Date(0).toISOString(),
+          }))
+
         setStats({
-          clients: clientsRes.count ?? 0,
+          clients: backendClients.length,
           activePlanAssignments: activeAssignmentsRes.count ?? 0,
           nutritionPlans: nutritionPlansRes.count ?? 0,
           pendingRequests: pendingRequestsRes.count ?? 0,
           unreadMessages: unreadMessagesRes.count ?? 0,
         })
-        setRecentClients(recentRes.data ?? [])
+        setRecentClients(mappedRecentClients)
       } catch (error) {
         console.error('Failed to load admin dashboard', error)
         setStats({
