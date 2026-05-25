@@ -8,8 +8,10 @@ import { AnimatedNumber, StaggerItem } from '@/components/Motion'
 
 interface Stats {
   clients: number
-  plans: number
-  logsToday: number
+  activePlanAssignments: number
+  nutritionPlans: number
+  pendingRequests: number
+  unreadMessages: number
 }
 
 const stroke = {
@@ -40,7 +42,13 @@ type StatCard = {
 }
 
 export default function TrainerDashboard() {
-  const [stats, setStats] = useState<Stats>({ clients: 0, plans: 0, logsToday: 0 })
+  const [stats, setStats] = useState<Stats>({
+    clients: 0,
+    activePlanAssignments: 0,
+    nutritionPlans: 0,
+    pendingRequests: 0,
+    unreadMessages: 0,
+  })
   const [recentClients, setRecentClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -55,7 +63,6 @@ export default function TrainerDashboard() {
         if (!user) return
         setTrainerName((user.user_metadata?.full_name as string)?.split(' ')[0] ?? '')
 
-        const today = new Date().toISOString().split('T')[0]
         const clientIdsRes = await supabase
           .from('clients')
           .select('id')
@@ -64,33 +71,56 @@ export default function TrainerDashboard() {
         if (clientIdsRes.error) throw clientIdsRes.error
 
         const clientIds = clientIdsRes.data?.map(client => client.id) ?? []
-        const logsTodayQuery = clientIds.length
+        const activeAssignmentsQuery = clientIds.length
           ? supabase
-            .from('workout_logs')
+            .from('assigned_plans')
             .select('id', { count: 'exact', head: true })
             .in('client_id', clientIds)
-            .eq('date', today)
+            .eq('is_active', true)
+          : Promise.resolve({ count: 0, error: null })
+        const pendingRequestsQuery = clientIds.length
+          ? supabase
+            .from('exercise_change_requests')
+            .select('id', { count: 'exact', head: true })
+            .in('client_id', clientIds)
+            .eq('status', 'pending')
           : Promise.resolve({ count: 0, error: null })
 
-        const [clientsRes, plansRes, logsRes, recentRes] = await Promise.all([
+        const [clientsRes, activeAssignmentsRes, nutritionPlansRes, pendingRequestsRes, unreadMessagesRes, recentRes] = await Promise.all([
           supabase.from('clients').select('id', { count: 'exact', head: true }).eq('trainer_id', user.id),
-          supabase.from('workout_plans').select('id', { count: 'exact', head: true }).eq('trainer_id', user.id),
-          logsTodayQuery,
+          activeAssignmentsQuery,
+          supabase.from('nutrition_plans').select('id', { count: 'exact', head: true }).eq('trainer_id', user.id),
+          pendingRequestsQuery,
+          supabase.from('messages').select('id', { count: 'exact', head: true }).eq('receiver_id', user.id).is('read_at', null),
           supabase.from('clients').select('*').eq('trainer_id', user.id).order('created_at', { ascending: false }).limit(5),
         ])
 
-        const firstError = clientsRes.error ?? plansRes.error ?? logsRes.error ?? recentRes.error
+        const firstError =
+          clientsRes.error ??
+          activeAssignmentsRes.error ??
+          nutritionPlansRes.error ??
+          pendingRequestsRes.error ??
+          unreadMessagesRes.error ??
+          recentRes.error
         if (firstError) throw firstError
 
         setStats({
           clients: clientsRes.count ?? 0,
-          plans: plansRes.count ?? 0,
-          logsToday: logsRes.count ?? 0,
+          activePlanAssignments: activeAssignmentsRes.count ?? 0,
+          nutritionPlans: nutritionPlansRes.count ?? 0,
+          pendingRequests: pendingRequestsRes.count ?? 0,
+          unreadMessages: unreadMessagesRes.count ?? 0,
         })
         setRecentClients(recentRes.data ?? [])
       } catch (error) {
         console.error('Failed to load admin dashboard', error)
-        setStats({ clients: 0, plans: 0, logsToday: 0 })
+        setStats({
+          clients: 0,
+          activePlanAssignments: 0,
+          nutritionPlans: 0,
+          pendingRequests: 0,
+          unreadMessages: 0,
+        })
         setRecentClients([])
         setErrorMessage('Dashboard-Daten konnten gerade nicht geladen werden.')
       } finally {
@@ -107,14 +137,24 @@ export default function TrainerDashboard() {
       iconBg: 'bg-indigo-50', iconColor: 'text-indigo-600', icon: Icon.users,
     },
     {
-      label: 'Trainingspläne', value: stats.plans, href: '/admin/plans',
+      label: 'Aktive Trainingspläne', value: stats.activePlanAssignments, href: '/admin/plans',
       accent: 'from-violet-500/10 to-transparent',
       iconBg: 'bg-violet-50', iconColor: 'text-violet-600', icon: Icon.plans,
     },
     {
-      label: 'Trainings heute', value: stats.logsToday, href: '/admin/clients',
+      label: 'Ernährungspläne', value: stats.nutritionPlans, href: '/admin/nutrition',
       accent: 'from-orange-500/10 to-transparent',
       iconBg: 'bg-orange-50', iconColor: 'text-orange-600', icon: Icon.flame,
+    },
+    {
+      label: 'Offene Anfragen', value: stats.pendingRequests, href: '/admin/requests',
+      accent: 'from-emerald-500/10 to-transparent',
+      iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600', icon: Icon.sparkle,
+    },
+    {
+      label: 'Ungelesene Nachrichten', value: stats.unreadMessages, href: '/admin/messages',
+      accent: 'from-cyan-500/10 to-transparent',
+      iconBg: 'bg-cyan-50', iconColor: 'text-cyan-600', icon: Icon.arrow,
     },
   ]
 
@@ -154,7 +194,7 @@ export default function TrainerDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4 mb-6">
         {statCards.map((card, i) => (
           <StaggerItem key={card.label} index={i}>
             <Link
