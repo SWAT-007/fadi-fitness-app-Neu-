@@ -327,57 +327,27 @@ function MiniBar({ current, target, color }: { current: number; target: number; 
 // ─── Slot-Picker ──────────────────────────────────────────────────────────────
 
 function SlotPicker({
-  category, foods, onPick, onCancel,
+  category, foods, onPick,
 }: {
   category: FoodCategory
   foods: Food[]
   onPick: (food: Food) => void
-  onCancel: () => void
 }) {
-  const [query, setQuery] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const norm = (s: string) =>
-    s.toLowerCase().replace(/ä/g, 'a').replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ß/g, 'ss')
-  const q = norm(query.trim())
   const list = foods
     .filter(f => f.category === category)
-    .filter(f => q.length === 0 || norm(f.name).includes(q))
-
-  // Focus the input without scrolling the page when the picker opens.
-  useEffect(() => {
-    inputRef.current?.focus({ preventScroll: true })
-  }, [])
 
   const handlePick = (food: Food) => {
-    // 1. Blur the input BEFORE the component unmounts.
-    //    If the input is still the active element when SlotPicker unmounts,
-    //    the browser moves focus to the next focusable element and scrolls there.
-    inputRef.current?.blur()
     onPick(food)
   }
 
   return (
-    <div className="border-t border-gray-100 bg-gray-50/50 p-3 space-y-2">
-      <div className="flex items-center gap-2">
-        <input
-          ref={inputRef}
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder={`${SLOT_LABEL[category]}quelle suchen…`}
-          className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
-        />
-        <button onClick={onCancel} className="text-xs text-gray-400 hover:text-gray-600 px-2">✕</button>
-      </div>
+    <div className="border-t border-gray-100 bg-gray-50/50 p-2">
       {list.length > 0 ? (
         <ul className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm max-h-64 overflow-y-auto">
           {list.map(f => (
             <li key={f.id}>
               <button
                 type="button"
-                // onMouseDown prevents the browser from blurring the input
-                // and immediately re-focusing the button before onClick fires.
-                onMouseDown={e => e.preventDefault()}
                 onClick={() => handlePick(f)}
                 className="w-full flex items-center gap-3 px-3 py-2 hover:bg-green-50 text-left transition-colors"
               >
@@ -849,7 +819,7 @@ export default function ClientNutritionPage() {
       }
     }
     // Add today's drink calories to the daily total
-    const drinkCal = drinkLogs.reduce((s, d) => s + (d.calories ?? 0), 0)
+    const drinkCal = drinkLogs.reduce((s, d) => s + Number(d.calories ?? 0), 0)
     return { p: base.p + ep, k: base.k + ek, f: base.f + ef, cal: base.cal + ecal + drinkCal }
   }, [cmf, extraSlots, drinkLogs])
   const slotsByMeal = useMemo(() => {
@@ -937,7 +907,7 @@ export default function ClientNutritionPage() {
           // Add this meal's drink calories to the per-meal total
           const mealDrinkCal = drinkLogs
             .filter(d => d.meal_number === i)
-            .reduce((s, d) => s + (d.calories ?? 0), 0)
+            .reduce((s, d) => s + Number(d.calories ?? 0), 0)
           const tAdj = { p: t.p + mEP, k: t.k + mEK, f: t.f + mEF, cal: t.cal + mECal + mealDrinkCal }
 
           const macroLines = [
@@ -946,14 +916,7 @@ export default function ClientNutritionPage() {
             { cat: 'fat'     as FoodCategory, cur: tAdj.f, tgt: meal.target_fat     },
           ].filter(m => allowed.includes(m.cat))
 
-          // Mismatch-Hinweis: Mahlzeit ist berechnet, aber ein Makro liegt
-          // nennenswert daneben → Lebensmittel-Kombi unpassend.
           const allCalculated = items.length > 0 && items.every(it => (it.amount_g ?? 0) > 0)
-          const mismatch = allCalculated
-            ? macroLines
-                .map(m => ({ ...m, diff: m.cur - m.tgt }))
-                .filter(m => m.tgt > 0 && Math.abs(m.diff) >= Math.max(2, m.tgt * 0.10))
-            : []
 
           const isOpen = openCards.has(meal.id)
           const isFlashing = saveFlash.has(meal.id)
@@ -1012,39 +975,9 @@ export default function ClientNutritionPage() {
               {/* Collapsible body */}
               <Collapsible open={isOpen}>
 
-              {/* Mismatch-Hinweis — wenn Makros nach Berechnung deutlich daneben */}
-              {mismatch.length > 0 && (() => {
-                const proteinSlot = items.find(it => it.food.category === 'protein')
-                const carbsSlot   = items.find(it => it.food.category === 'carbs')
-                const fatSlot     = items.find(it => it.food.category === 'fat')
-                const tips: string[] = []
-                for (const m of mismatch) {
-                  if (m.cat === 'fat' && m.diff > 0 && proteinSlot && proteinSlot.food.fat_per_100g > 5) {
-                    tips.push(`„${proteinSlot.food.name}" liefert viel Fett — wähle eine fettärmere Eiweißquelle.`)
-                  }
-                  if (m.cat === 'protein' && m.diff > 0 && carbsSlot && carbsSlot.food.protein_per_100g > 5) {
-                    tips.push(`„${carbsSlot.food.name}" liefert viel Eiweiß — wähle eine eiweiß-ärmere Kohlenhydratquelle.`)
-                  }
-                  if (m.cat === 'carbs' && m.diff > 0 && fatSlot && fatSlot.food.carbs_per_100g > 10) {
-                    tips.push(`„${fatSlot.food.name}" liefert viel Kohlenhydrate — wähle eine reinere Fettquelle.`)
-                  }
-                }
-                if (tips.length === 0) {
-                  tips.push('Diese Lebensmittel-Kombi passt nicht exakt zum Mahlzeit-Ziel — probier eine andere Quelle.')
-                }
-                return (
-                  <div className="mx-5 mt-3 mb-1 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
-                    <p className="text-[11px] font-semibold text-amber-800 mb-0.5">⚠ Ziel kann nicht exakt getroffen werden</p>
-                    <ul className="text-[10px] text-amber-700 space-y-0.5 list-disc list-inside">
-                      {tips.slice(0, 2).map((t, i) => <li key={i}>{t}</li>)}
-                    </ul>
-                  </div>
-                )
-              })()}
-
               {/* Makro-Slots */}
               <div className="divide-y divide-gray-50">
-                {allowed.map(cat => {
+                {allowed.map((cat, idx) => {
                   const picked = slots[cat]
                   const c = SLOT_COLOR[cat]
                   const calculated = picked ? picked.amount_g > 0 : false
@@ -1104,11 +1037,11 @@ export default function ClientNutritionPage() {
                           category={cat}
                           foods={foods}
                           onPick={(food) => pickSlot(meal.id, food)}
-                          onCancel={() => setOpenPicker(null)}
                         />
                       )}
 
                       {/* ── Zusatzquelle row ── */}
+                      {idx === 0 && <div className="px-5 py-1 bg-gray-50/70 border-t border-dashed border-gray-100" />}
                       {(() => {
                         const extraSlot = extraSlots[meal.id]?.[cat]
                         const extraPickerOpen = openExtraPicker?.mealId === meal.id && openExtraPicker?.cat === cat
@@ -1136,7 +1069,6 @@ export default function ClientNutritionPage() {
                                     setExtraSlot(meal.id, cat, { food, grams: '30' })
                                     setOpenExtraPicker(null)
                                   }}
-                                  onCancel={() => setOpenExtraPicker(null)}
                                 />
                               )}
                             </>
@@ -1197,7 +1129,6 @@ export default function ClientNutritionPage() {
                                   setExtraSlot(meal.id, cat, { food, grams: extraSlot.grams })
                                   setOpenExtraPicker(null)
                                 }}
-                                onCancel={() => setOpenExtraPicker(null)}
                               />
                             )}
                           </>
@@ -1262,7 +1193,6 @@ export default function ClientNutritionPage() {
                             category={cat}
                             foods={foods}
                             onPick={(food) => pickSlot(meal.id, food)}
-                            onCancel={() => setOpenPicker(null)}
                           />
                         )}
                       </div>
@@ -1291,7 +1221,7 @@ export default function ClientNutritionPage() {
                       >
                         Mengen berechnen
                       </button>
-                      <p className="text-[10px] text-center text-gray-400 mt-1.5">Wir rechnen die Gramm so aus, dass alle Mahlzeit-Ziele exakt aufgehen.</p>
+                      <p className="text-[10px] text-center text-gray-500 mt-1.5">Zielwerte werden mit Zusatz neu verrechnet.</p>
                     </div>
                   )
                 }
@@ -1356,9 +1286,7 @@ export default function ClientNutritionPage() {
         })}
       </div>
 
-      <p className="text-[11px] text-center text-gray-400 px-4 pt-2 pb-4">
-        {'Wähle Lebensmittel — am Ende klick auf „Mengen berechnen". Wir rechnen die Gramm so aus, dass alle Ziel-Makros der Mahlzeit zusammen aufgehen.'}
-      </p>
+      <p className="text-[11px] text-center text-gray-400 px-4 pt-2 pb-4">Hauptquellen wählen, Zusatz ergänzen, dann berechnen.</p>
 
       {/* ─── Vorherige Mahlzeiten ────────────────────────────────────────── */}
       {mealHistory.length > 0 && (
@@ -1374,6 +1302,7 @@ export default function ClientNutritionPage() {
 
       {/* ─── Rezeptvorschläge ─────────────────────────────────────────────── */}
       <div className="border-t border-gray-100 pt-6">
+        <p className="text-[11px] text-gray-500 mb-2">Rezepte dienen nur als Inspiration.</p>
         <RecipeSuggestions targetCalories={plan.target_calories} />
       </div>
 
