@@ -41,6 +41,8 @@ model User {
   trainerProfile          TrainerProfile?
   clientProfile           ClientProfile?
   notifications           Notification[]
+  sentMessages            Message[]       @relation("MessageSender")
+  receivedMessages        Message[]       @relation("MessageReceiver")
 }
 
 model TrainerProfile {
@@ -95,6 +97,7 @@ model WorkoutPlan {
   name          String
   description   String?
   isActive      Boolean         @default(true)
+  legacySupabasePlanId String?  @unique
   days          WorkoutDay[]
   assignedPlans AssignedPlan[]
   createdAt     DateTime        @default(now())
@@ -109,6 +112,7 @@ model AssignedPlan {
   planId     String
   assignedAt DateTime      @default(now())
   active     Boolean       @default(true)
+  legacySupabaseAssignedPlanId String? @unique
   client     ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
   plan       WorkoutPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
 
@@ -124,6 +128,7 @@ model WorkoutDay {
   name        String
   description String?
   sortOrder   Int         @default(0)
+  legacySupabaseDayId String? @unique
   exercises   Exercise[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -144,6 +149,7 @@ model Exercise {
   note           String?
   sortOrder      Int         @default(0)
   imageUrl       String?
+  legacySupabaseExerciseId String? @unique
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -162,4 +168,18 @@ model Notification {
   readAt    DateTime?
 
   @@index([userId, isRead, createdAt])
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  content    String
+  createdAt  DateTime @default(now())
+  readAt     DateTime?
+  sender     User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  receiver   User     @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([senderId])
+  @@index([receiverId, readAt])
 }
