@@ -52,6 +52,9 @@ model TrainerProfile {
   clients     ClientProfile[]
   linkTokens  ClientLinkToken[]
   workoutPlans WorkoutPlan[]
+  foods       Food[]
+  recipes     Recipe[]
+  nutritionPlans NutritionPlan[]
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 }
@@ -70,6 +73,11 @@ model ClientProfile {
   legacySupabaseClientId String?        @unique
   legacySupabaseUserId   String?        @unique
   assignedPlans          AssignedPlan[]
+  assignedNutritionPlans AssignedNutritionPlan[]
+  clientMealFoods        ClientMealFood[]
+  mealHistory            MealHistory[]
+  mealLogs               MealLog[]
+  drinkLogs              DrinkLog[]
   workoutLogs            WorkoutLog[]
   exerciseChangeRequests ExerciseChangeRequest[]
   createdAt              DateTime       @default(now())
@@ -172,6 +180,148 @@ model ExerciseLibrary {
   updatedAt   DateTime @updatedAt
 
   @@index([name])
+}
+
+model Food {
+  id                   String            @id @default(cuid())
+  trainerId            String?
+  trainer              TrainerProfile?   @relation(fields: [trainerId], references: [id], onDelete: SetNull)
+  name                 String
+  caloriesPer100g      Float?
+  proteinPer100g       Float?
+  carbsPer100g         Float?
+  fatPer100g           Float?
+  unit                 String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  legacySupabaseFoodId String?           @unique
+  clientMealFoods      ClientMealFood[]
+
+  @@index([trainerId])
+  @@index([name])
+}
+
+model Recipe {
+  id                     String          @id @default(cuid())
+  trainerId              String?
+  trainer                TrainerProfile? @relation(fields: [trainerId], references: [id], onDelete: SetNull)
+  name                   String
+  description            String?
+  instructions           String?
+  imageUrl               String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  legacySupabaseRecipeId String?         @unique
+
+  @@index([trainerId])
+  @@index([name])
+}
+
+model NutritionPlan {
+  id                             String                  @id @default(cuid())
+  trainerId                      String
+  trainer                        TrainerProfile          @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  name                           String
+  description                    String?
+  createdAt                      DateTime                @default(now())
+  updatedAt                      DateTime                @updatedAt
+  legacySupabaseNutritionPlanId  String?                 @unique
+  meals                          NutritionMeal[]
+  assignedNutritionPlans         AssignedNutritionPlan[]
+
+  @@index([trainerId])
+}
+
+model NutritionMeal {
+  id                             String            @id @default(cuid())
+  planId                         String
+  plan                           NutritionPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  name                           String
+  description                    String?
+  sortOrder                      Int               @default(0)
+  createdAt                      DateTime          @default(now())
+  updatedAt                      DateTime          @updatedAt
+  legacySupabaseNutritionMealId  String?           @unique
+  clientMealFoods                ClientMealFood[]
+
+  @@index([planId, sortOrder])
+}
+
+model AssignedNutritionPlan {
+  id                                       String         @id @default(cuid())
+  clientId                                 String
+  client                                   ClientProfile  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  planId                                   String
+  plan                                     NutritionPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  active                                   Boolean        @default(true)
+  assignedAt                               DateTime       @default(now())
+  legacySupabaseAssignedNutritionPlanId    String?        @unique
+
+  @@unique([clientId, planId])
+  @@index([clientId, active])
+  @@index([planId])
+}
+
+model ClientMealFood {
+  id                                String          @id @default(cuid())
+  clientId                          String
+  client                            ClientProfile   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  mealId                            String?
+  meal                              NutritionMeal?  @relation(fields: [mealId], references: [id], onDelete: SetNull)
+  foodId                            String?
+  food                              Food?           @relation(fields: [foodId], references: [id], onDelete: SetNull)
+  category                          String?
+  amountG                           Float?
+  createdAt                         DateTime        @default(now())
+  updatedAt                         DateTime        @updatedAt
+  legacySupabaseClientMealFoodId    String?         @unique
+
+  @@index([clientId])
+  @@index([mealId])
+  @@index([foodId])
+}
+
+model MealHistory {
+  id                           String        @id @default(cuid())
+  clientId                     String
+  client                       ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name                         String?
+  category                     String?
+  amountG                      Float?
+  calories                     Float?
+  protein                      Float?
+  carbs                        Float?
+  fat                          Float?
+  loggedAt                     DateTime      @default(now())
+  legacySupabaseMealHistoryId  String?       @unique
+
+  @@index([clientId, loggedAt])
+}
+
+model MealLog {
+  id                       String        @id @default(cuid())
+  clientId                 String
+  client                   ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  date                     String
+  mealType                 String?
+  notes                    String?
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+  legacySupabaseMealLogId  String?       @unique
+
+  @@index([clientId, date])
+}
+
+model DrinkLog {
+  id                        String        @id @default(cuid())
+  clientId                  String
+  client                    ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  drinkType                 String?
+  amountMl                  Float?
+  loggedAt                  DateTime      @default(now())
+  legacySupabaseDrinkLogId  String?       @unique
+
+  @@index([clientId, loggedAt])
 }
 
 model Notification {
