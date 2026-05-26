@@ -6,11 +6,22 @@ import { supabase } from '@/lib/supabase'
 import type { Client, WorkoutPlan } from '@/lib/types'
 import { AnimatedNumber, StaggerItem, SuccessButton, useToast } from '@/components/Motion'
 
+type BackendPlan = {
+  id: string
+  name: string
+  title?: string
+  description: string | null
+  createdAt: string
+  updatedAt: string
+  dayCount?: number
+}
+
 export default function PlansPage() {
   const { showToast } = useToast()
   const [plans, setPlans] = useState<WorkoutPlan[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [assigning, setAssigning] = useState(false)
   const [assignClientId, setAssignClientId] = useState('')
   const [assignPlanId, setAssignPlanId] = useState('')
@@ -20,23 +31,50 @@ export default function PlansPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
   const load = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const [plansRes, clientsRes] = await Promise.all([
-      supabase
-        .from('workout_plans')
-        .select('*, workout_days(id)')
-        .eq('trainer_id', user.id)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('clients')
-        .select('*')
-        .eq('trainer_id', user.id)
-        .order('full_name'),
-    ])
-    setPlans(plansRes.data ?? [])
-    setClients(clientsRes.data ?? [])
-    setLoading(false)
+    setLoading(true)
+    setError('')
+    try {
+      const plansResponse = await fetch('/api/backend/plans', { cache: 'no-store' })
+      const plansPayload = await plansResponse.json().catch(() => null)
+      if (!plansResponse.ok) {
+        if (plansResponse.status === 401) {
+          setError('Backend-Login erforderlich.')
+        } else {
+          setError((plansPayload && typeof plansPayload.message === 'string' && plansPayload.message) || 'Pläne konnten nicht geladen werden.')
+        }
+        setPlans([])
+      } else {
+        const backendPlans = Array.isArray(plansPayload?.plans) ? plansPayload.plans as BackendPlan[] : []
+        setPlans(
+          backendPlans.map((plan) => ({
+            id: plan.id,
+            name: plan.name ?? plan.title ?? '',
+            description: plan.description,
+            created_at: plan.createdAt,
+            workout_days: Array.from({ length: plan.dayCount ?? 0 }, (_, idx) => ({ id: `day-${idx}` })),
+          })) as WorkoutPlan[],
+        )
+      }
+
+      // Keep existing assignment UI source unchanged for now.
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('trainer_id', user.id)
+          .order('full_name')
+        setClients(data ?? [])
+      } else {
+        setClients([])
+      }
+    } catch {
+      setError('Pläne konnten nicht geladen werden.')
+      setPlans([])
+      setClients([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { load() }, [])
@@ -181,6 +219,10 @@ export default function PlansPage() {
       {loading ? (
         <div className="flex justify-center py-12">
           <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : error ? (
+        <div className="bg-white rounded-2xl border border-red-100 py-10 text-center">
+          <p className="text-red-600 text-sm">{error}</p>
         </div>
       ) : plans.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 py-16 text-center">
