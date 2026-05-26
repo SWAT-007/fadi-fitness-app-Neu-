@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
-import type { Client, WorkoutPlan } from '@/lib/types'
+import type { WorkoutPlan } from '@/lib/types'
 import { AnimatedNumber, StaggerItem, SuccessButton, useToast } from '@/components/Motion'
 
 type BackendPlan = {
@@ -16,10 +15,16 @@ type BackendPlan = {
   dayCount?: number
 }
 
+type BackendClient = {
+  id: string
+  name?: string
+  displayName?: string
+}
+
 export default function PlansPage() {
   const { showToast } = useToast()
   const [plans, setPlans] = useState<WorkoutPlan[]>([])
-  const [clients, setClients] = useState<Client[]>([])
+  const [clients, setClients] = useState<BackendClient[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [assigning, setAssigning] = useState(false)
@@ -56,17 +61,16 @@ export default function PlansPage() {
         )
       }
 
-      // Keep existing assignment UI source unchanged for now.
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data } = await supabase
-          .from('clients')
-          .select('*')
-          .eq('trainer_id', user.id)
-          .order('full_name')
-        setClients(data ?? [])
-      } else {
+      const clientsResponse = await fetch('/api/backend/clients', { cache: 'no-store' })
+      const clientsPayload = await clientsResponse.json().catch(() => null)
+      if (!clientsResponse.ok) {
+        if (clientsResponse.status === 401 && !error) {
+          setError('Backend-Login erforderlich.')
+        }
         setClients([])
+      } else {
+        const backendClients = Array.isArray(clientsPayload?.clients) ? clientsPayload.clients as BackendClient[] : []
+        setClients(backendClients)
       }
     } catch {
       setError('Pläne konnten nicht geladen werden.')
@@ -87,39 +91,21 @@ export default function PlansPage() {
     setAssignError('')
     setAssignSuccess('')
 
-    const { error: deactivateError } = await supabase
-      .from('assigned_plans')
-      .update({ is_active: false })
-      .eq('client_id', assignClientId)
-      .eq('is_active', true)
-
-    if (deactivateError) {
-      setAssignError(deactivateError.message)
-      setAssigning(false)
-      return
-    }
-
-    const { error } = await supabase.from('assigned_plans').insert({
-      client_id: assignClientId,
-      plan_id: assignPlanId,
-      is_active: true,
+    const response = await fetch(`/api/backend/plans/${assignPlanId}/assignments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: assignClientId }),
+      cache: 'no-store',
     })
-
-    if (error) {
-      setAssignError(error.message)
+    const payload = await response.json().catch(() => null)
+    if (!response.ok) {
+      if (response.status === 401) {
+        setAssignError('Backend-Login erforderlich.')
+      } else {
+        setAssignError((payload && typeof payload.message === 'string' && payload.message) || 'Plan konnte nicht zugewiesen werden.')
+      }
       setAssigning(false)
       return
-    }
-
-    const assignedClient = clients.find(client => client.id === assignClientId)
-    const assignedPlan = plans.find(plan => plan.id === assignPlanId)
-    if (assignedClient?.user_id) {
-      await supabase.from('notifications').insert({
-        client_id: assignedClient.user_id,
-        type: 'workout_plan',
-        title: 'Neuer Trainingsplan zugewiesen',
-        body: assignedPlan?.name ?? null,
-      })
     }
 
     setAssignClientId('')
@@ -197,7 +183,7 @@ export default function PlansPage() {
           >
             <option value="">Client auswaehlen</option>
             {clients.map(client => (
-              <option key={client.id} value={client.id}>{client.full_name}</option>
+              <option key={client.id} value={client.id}>{client.displayName ?? client.name ?? 'Unbenannt'}</option>
             ))}
           </select>
 
