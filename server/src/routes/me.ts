@@ -121,6 +121,88 @@ meRouter.get("/active-plan", requireAuth, async (req: AuthenticatedRequest, res)
   }
 });
 
+meRouter.get("/plan-days/:dayId", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const dayId = Array.isArray(req.params.dayId) ? req.params.dayId[0] : req.params.dayId;
+  if (!dayId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  try {
+    const clientProfile = await prisma.clientProfile.findFirst({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!clientProfile) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const assignment = await prisma.assignedPlan.findFirst({
+      where: { clientId: clientProfile.id, active: true },
+      orderBy: { assignedAt: "desc" },
+      select: { planId: true },
+    });
+
+    if (!assignment) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const day = await prisma.workoutDay.findFirst({
+      where: { id: dayId, planId: assignment.planId },
+      select: {
+        id: true,
+        planId: true,
+        name: true,
+        description: true,
+        sortOrder: true,
+        exercises: {
+          orderBy: { sortOrder: "asc" },
+          select: {
+            id: true,
+            dayId: true,
+            name: true,
+            description: true,
+            sets: true,
+            reps: true,
+            targetWeightKg: true,
+            restSeconds: true,
+            note: true,
+            sortOrder: true,
+            imageUrl: true,
+          },
+        },
+      },
+    });
+
+    if (!day) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const planDays = await prisma.workoutDay.findMany({
+      where: { planId: assignment.planId },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, sortOrder: true },
+    });
+
+    return res.json({
+      day: {
+        ...day,
+        exercises: day.exercises.map((ex) => ({ ...ex, libraryId: null })),
+      },
+      planDays,
+      workoutLog: null,    // WorkoutLog model deferred
+      exerciseLogs: [],    // ExerciseLog model deferred
+    });
+  } catch (error) {
+    console.error("[me:plan-days] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 // WorkoutLog model does not exist in the current schema — deferred migration
 meRouter.get("/workout-logs/week", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "client") {

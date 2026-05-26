@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
-import type { WorkoutDay, Exercise, ExerciseLog } from '@/lib/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -14,6 +12,30 @@ interface LogEntry {
   weight: string
   reps: string
   completed: boolean
+}
+
+type BackendExercise = {
+  id: string
+  dayId: string
+  name: string
+  description: string | null
+  sets: number
+  reps: string
+  targetWeightKg: number | null
+  restSeconds: number | null
+  note: string | null
+  sortOrder: number
+  imageUrl: string | null
+  libraryId: string | null
+}
+
+type BackendDay = {
+  id: string
+  planId: string
+  name: string
+  description: string | null
+  sortOrder: number
+  exercises: BackendExercise[]
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -46,13 +68,11 @@ export default function WorkoutDayPage() {
   const router = useRouter()
 
   // Data
-  const [day, setDay] = useState<WorkoutDay | null>(null)
-  const [exercises, setExercises] = useState<Exercise[]>([])
-  const [clientId, setClientId] = useState<string | null>(null)
+  const [day, setDay] = useState<BackendDay | null>(null)
+  const [exercises, setExercises] = useState<BackendExercise[]>([])
   const [logs, setLogs] = useState<Record<string, LogEntry[]>>({})
-  const [workoutLogId, setWorkoutLogId] = useState<string | null>(null)
-  const [existingLogs, setExistingLogs] = useState<Record<string, Record<number, ExerciseLog>>>({})
   const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   // Phase & timer
   const [phase, setPhase] = useState<Phase>('preview')
@@ -67,85 +87,45 @@ export default function WorkoutDayPage() {
   // ── Load data ────────────────────────────────────────────────────────────
   useEffect(() => {
     const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      try {
+        const res = await fetch(`/api/backend/me/plan-days/${dayId}`, { cache: 'no-store' })
 
-      const { data: cl } = await supabase.from('clients').select('id').eq('user_id', user.id).maybeSingle()
-      if (!cl) { setLoading(false); return }
-      setClientId(cl.id)
+        if (res.status === 401) {
+          setErrorMessage('Bitte melde dich an, um dein Training zu sehen.')
+          setLoading(false)
+          return
+        }
 
-      const { data: activeAssignments, error: assignmentError } = await supabase
-        .from('assigned_plans')
-        .select('plan_id')
-        .eq('client_id', cl.id)
-        .eq('is_active', true)
-      if (assignmentError) { router.push('/client/plan'); return }
+        if (res.status === 404) {
+          router.push('/client/plan')
+          return
+        }
 
-      const planIds = (activeAssignments ?? []).map(a => a.plan_id)
-      if (planIds.length === 0) { router.push('/client/plan'); return }
+        if (!res.ok) throw new Error(`plan-days: ${res.status}`)
 
-      const [dayRes, exRes] = await Promise.all([
-        supabase.from('workout_days').select('*').eq('id', dayId).in('plan_id', planIds).maybeSingle(),
-        supabase.from('exercises').select('*').eq('day_id', dayId).order('sort_order'),
-      ])
+        const data = await res.json() as { day: BackendDay; exerciseLogs: [] }
 
-      if (!dayRes.data) { router.push('/client/plan'); return }
-      setDay(dayRes.data)
+        const exList = data.day.exercises ?? []
+        setDay(data.day)
+        setExercises(exList)
 
-      const exList: Exercise[] = exRes.data ?? []
-      setExercises(exList)
-
-      // Resume today's log if it exists
-      const today = new Date().toISOString().split('T')[0]
-      const { data: existingWLog } = await supabase
-        .from('workout_logs')
-        .select('id')
-        .eq('client_id', cl.id)
-        .eq('day_id', dayId)
-        .eq('date', today)
-        .maybeSingle()
-
-      let prevExLogs: ExerciseLog[] = []
-      if (existingWLog) {
-        setWorkoutLogId(existingWLog.id)
-        const { data: fetched } = await supabase
-          .from('exercise_logs')
-          .select('*')
-          .eq('workout_log_id', existingWLog.id)
-        prevExLogs = fetched ?? []
-        const map: Record<string, Record<number, ExerciseLog>> = {}
-        prevExLogs.forEach((log, index) => {
-          const setNumber = log.sets_done ?? index + 1
-          map[log.exercise_id] = { ...map[log.exercise_id], [setNumber]: log }
+        // Initialize logs from trainer targets.
+        // exerciseLogs are deferred until WorkoutLog model is migrated.
+        const init: Record<string, LogEntry[]> = {}
+        exList.forEach(ex => {
+          init[ex.id] = Array.from({ length: Math.max(1, ex.sets) }, () => ({
+            weight: ex.targetWeightKg?.toString() ?? '',
+            reps: ex.reps,
+            completed: false,
+          }))
         })
-        setExistingLogs(map)
+        setLogs(init)
+        setLoading(false)
+      } catch (err) {
+        console.error('Failed to load workout day', err)
+        setErrorMessage('Das Training konnte nicht geladen werden.')
+        setLoading(false)
       }
-
-      // Pre-fill from trainer targets or previous log
-      const logsByExercise: Record<string, ExerciseLog[]> = {}
-      prevExLogs.forEach(log => {
-        logsByExercise[log.exercise_id] = [...(logsByExercise[log.exercise_id] ?? []), log]
-      })
-
-      const init: Record<string, LogEntry[]> = {}
-      exList.forEach(ex => {
-        const previous = logsByExercise[ex.id] ?? []
-        const legacyLog = previous.length === 1 ? previous[0] : undefined
-        const savedSetCount = legacyLog?.sets_done && legacyLog.sets_done > 1 ? legacyLog.sets_done : previous.length
-        const setCount = Math.max(1, ex.sets, savedSetCount)
-
-        init[ex.id] = Array.from({ length: setCount }, (_, index) => {
-          const setNumber = index + 1
-          const prev = previous.find(log => log.sets_done === setNumber) ?? previous[index] ?? legacyLog
-          return {
-            weight: prev?.actual_weight?.toString() ?? ex.target_weight?.toString() ?? '',
-            reps: prev?.actual_reps ?? ex.reps,
-            completed: prev?.completed ?? false,
-          }
-        })
-      })
-      setLogs(init)
-      setLoading(false)
     }
     load()
   }, [dayId, router])
@@ -174,57 +154,10 @@ export default function WorkoutDayPage() {
     }))
 
   const handleComplete = async () => {
-    if (!clientId) return
+    // workout_log and exercise_log writes are deferred — handled by the play page
     setSaving(true)
     setError('')
-
     const duration = startedAt ? Math.floor((Date.now() - startedAt.getTime()) / 1000) : 0
-    const today = new Date().toISOString().split('T')[0]
-    const now = new Date().toISOString()
-
-    // Create or update workout_log
-    let wLogId = workoutLogId
-    if (!wLogId) {
-      const { data, error: err } = await supabase
-        .from('workout_logs')
-        .insert({ client_id: clientId, day_id: dayId, date: today, completed_at: now, duration_seconds: duration })
-        .select()
-        .single()
-      if (err || !data) { setError(err?.message ?? 'Fehler beim Speichern.'); setSaving(false); return }
-      wLogId = data.id
-      setWorkoutLogId(wLogId)
-    } else {
-      await supabase
-        .from('workout_logs')
-        .update({ completed_at: now, duration_seconds: duration })
-        .eq('id', wLogId)
-    }
-
-    // Upsert exercise_logs
-    for (const ex of exercises) {
-      const entries = logs[ex.id]
-      if (!entries) continue
-
-      for (let index = 0; index < entries.length; index++) {
-        const entry = entries[index]
-        const setNumber = index + 1
-        const payload = {
-          workout_log_id: wLogId,
-          exercise_id:    ex.id,
-          actual_weight:  entry.weight ? parseFloat(entry.weight) : null,
-          actual_reps:    entry.reps   || null,
-          sets_done:      setNumber,
-          completed:      entry.completed,
-        }
-        const existing = existingLogs[ex.id]?.[setNumber]
-        if (existing) {
-          await supabase.from('exercise_logs').update(payload).eq('id', existing.id)
-        } else {
-          await supabase.from('exercise_logs').insert(payload)
-        }
-      }
-    }
-
     setFinalDuration(duration)
     setSaving(false)
     setPhase('complete')
@@ -236,6 +169,17 @@ export default function WorkoutDayPage() {
     return (
       <div className="flex justify-center p-12">
         <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (errorMessage) {
+    return (
+      <div className="p-4 max-w-lg mx-auto">
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {errorMessage}
+        </div>
+        <Link href="/client/plan" className="text-sm text-emerald-600">← Zurück zum Plan</Link>
       </div>
     )
   }
@@ -288,7 +232,7 @@ export default function WorkoutDayPage() {
               <div className="font-medium text-gray-900 text-sm">{ex.name}</div>
               <div className="text-xs text-gray-400 mt-0.5">
                 {ex.sets} Sätze × {ex.reps}
-                {ex.target_weight ? ` · ${ex.target_weight} kg` : ''}
+                {ex.targetWeightKg ? ` · ${ex.targetWeightKg} kg` : ''}
               </div>
             </div>
           </div>
@@ -354,7 +298,7 @@ export default function WorkoutDayPage() {
                   <div className="font-semibold text-gray-900">{ex.name}</div>
                   <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-x-3">
                     <span>Vorgabe: {ex.sets}×{ex.reps}</span>
-                    {ex.target_weight && <span>{ex.target_weight} kg</span>}
+                    {ex.targetWeightKg && <span>{ex.targetWeightKg} kg</span>}
                   </div>
                   {ex.note && <div className="text-xs text-emerald-600 mt-1">💡 {ex.note}</div>}
                 </div>
