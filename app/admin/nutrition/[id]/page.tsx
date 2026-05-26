@@ -363,10 +363,37 @@ export default function NutritionEditorPage() {
   // ─── Plan settings ────────────────────────────────────────────────────────
 
   const saveSettings = async () => {
+    if (!name.trim()) {
+      setSettingsMsg('Name ist erforderlich.')
+      return
+    }
     setSavingSettings(true)
-    showDeferredWriteMessage('settings')
-    setSavingSettings(false)
-    return
+    setSettingsMsg('')
+    try {
+      const response = await fetch(`/api/backend/nutrition/plans/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), description: desc.trim() || null }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        setSettingsMsg(payload?.message ?? 'Fehler beim Speichern.')
+        setSavingSettings(false)
+        return
+      }
+      const updated = payload?.plan as { id: string; name: string; description: string | null; createdAt: string; updatedAt: string } | undefined
+      if (updated) {
+        setPlan((prev) => prev ? { ...prev, name: updated.name, description: updated.description } : prev)
+        setName(updated.name)
+        setDesc(updated.description ?? '')
+      }
+      setSettingsMsg('✓ Gespeichert')
+      setTimeout(() => setSettingsMsg(''), 3000)
+    } catch {
+      setSettingsMsg('Backend nicht erreichbar.')
+    } finally {
+      setSavingSettings(false)
+    }
   }
 
   // ─── Meals ────────────────────────────────────────────────────────────────

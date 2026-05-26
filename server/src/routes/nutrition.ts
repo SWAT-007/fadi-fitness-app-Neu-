@@ -556,4 +556,71 @@ nutritionRouter.get("/plans/:id", requireAuth, async (req: AuthenticatedRequest,
   }
 });
 
+nutritionRouter.patch("/plans/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const idParam = req.params.id;
+  const planId = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!planId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const data: { name?: string; description?: string | null } = {};
+
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "name")) {
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    if (!name) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.name = name;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "description")) {
+    const desc = req.body?.description;
+    if (!(desc === null || desc === undefined || typeof desc === "string")) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.description = typeof desc === "string" ? desc.trim() || null : null;
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existingPlan = await prisma.nutritionPlan.findFirst({
+      where: { id: planId, trainerId: trainerProfile.id },
+      select: { id: true },
+    });
+
+    if (!existingPlan) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const plan = await prisma.nutritionPlan.update({
+      where: { id: existingPlan.id },
+      data,
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.json({ plan });
+  } catch (error) {
+    console.error("[nutrition:plans:update] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 export { nutritionRouter };
