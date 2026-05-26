@@ -37,6 +37,20 @@ const mapNutritionPlan = (plan: {
   assignmentCount: plan._count.assignedNutritionPlans,
 });
 
+const mapNutritionPlanDetail = (plan: {
+  id: string;
+  name: string;
+  description: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) => ({
+  id: plan.id,
+  name: plan.name,
+  description: plan.description,
+  createdAt: plan.createdAt,
+  updatedAt: plan.updatedAt,
+});
+
 nutritionRouter.get("/foods", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });
@@ -439,6 +453,105 @@ nutritionRouter.delete("/plans/:id", requireAuth, async (req: AuthenticatedReque
     return res.json({ deleted: true, id: existingPlan.id });
   } catch (error) {
     console.error("[nutrition:plans:delete] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+nutritionRouter.get("/plans/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const idParam = req.params.id;
+  const planId = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!planId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const plan = await prisma.nutritionPlan.findFirst({
+      where: {
+        id: planId,
+        trainerId: trainerProfile.id,
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!plan) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const [meals, assignments, clients] = await Promise.all([
+      prisma.nutritionMeal.findMany({
+        where: { planId: plan.id },
+        orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          planId: true,
+          name: true,
+          description: true,
+          sortOrder: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.assignedNutritionPlan.findMany({
+        where: {
+          planId: plan.id,
+          client: {
+            trainerId: trainerProfile.id,
+          },
+        },
+        orderBy: { assignedAt: "desc" },
+        select: {
+          id: true,
+          clientId: true,
+          planId: true,
+          active: true,
+          assignedAt: true,
+          client: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+        },
+      }),
+      prisma.clientProfile.findMany({
+        where: { trainerId: trainerProfile.id },
+        orderBy: { fullName: "asc" },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+        },
+      }),
+    ]);
+
+    return res.json({
+      plan: mapNutritionPlanDetail(plan),
+      meals,
+      assignments,
+      clients,
+    });
+  } catch (error) {
+    console.error("[nutrition:plans:detail] error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 });

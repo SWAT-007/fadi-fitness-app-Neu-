@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 import {
   type Client, type FoodCategory,
   type NutritionGoal, type NutritionMeal, type NutritionPlan,
@@ -15,7 +14,7 @@ type AssignedRow = {
   id: string
   client_id: string
   is_active: boolean
-  client: { id: string; full_name: string }
+  client: { id: string; full_name: string; email?: string | null }
 }
 
 const GOAL_LABEL: Record<NutritionGoal, string> = {
@@ -205,34 +204,158 @@ export default function NutritionEditorPage() {
   const [assigning, setAssigning] = useState(false)
   const [assignMsg, setAssignMsg] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
 
   const newMealRef = useRef<HTMLInputElement>(null)
+  const DEFERRED_WRITE_MESSAGE = 'Diese Aktion wird im nächsten Migrationsschritt auf das Backend umgestellt.'
+
+  const showDeferredWriteMessage = (target: 'settings' | 'assign' | 'all' = 'all') => {
+    if (target === 'settings' || target === 'all') {
+      setSettingsMsg(DEFERRED_WRITE_MESSAGE)
+      setTimeout(() => setSettingsMsg(''), 4000)
+    }
+    if (target === 'assign' || target === 'all') {
+      setAssignMsg(DEFERRED_WRITE_MESSAGE)
+      setTimeout(() => setAssignMsg(''), 4000)
+    }
+  }
 
   // ─── Load ────────────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    setLoading(true)
+    setLoadError('')
+    try {
+      const response = await fetch(`/api/backend/nutrition/plans/${id}`, {
+        method: 'GET',
+        cache: 'no-store',
+      })
 
-    const [planRes, mealsRes, clientsRes, assignedRes] = await Promise.all([
-      supabase.from('nutrition_plans').select('*').eq('id', id).single(),
-      supabase.from('nutrition_meals').select('*').eq('plan_id', id).order('sort_order'),
-      supabase.from('clients').select('*').eq('trainer_id', user.id).order('full_name'),
-      supabase.from('assigned_nutrition_plans').select('id, client_id, is_active, client:clients(id, full_name)').eq('plan_id', id),
-    ])
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            plan?: {
+              id: string
+              name: string
+              description: string | null
+              createdAt: string
+            }
+            meals?: Array<{
+              id: string
+              planId: string
+              name: string
+              description: string | null
+              sortOrder: number
+              createdAt: string
+            }>
+            assignments?: Array<{
+              id: string
+              clientId: string
+              active: boolean
+              client: { id: string; fullName: string; email: string | null }
+            }>
+            clients?: Array<{
+              id: string
+              fullName: string
+              email: string | null
+            }>
+            message?: string
+          }
+        | null
 
-    if (!planRes.data) { router.push('/admin/nutrition'); return }
+      if (!response.ok) {
+        if (response.status === 401) {
+          setLoadError('Backend-Login erforderlich.')
+        } else if (response.status === 404) {
+          router.push('/admin/nutrition')
+          return
+        } else {
+          setLoadError(payload?.message ?? 'Fehler beim Laden.')
+        }
+        setPlan(null)
+        setMeals([])
+        setClients([])
+        setAssigned([])
+        return
+      }
 
-    const p = planRes.data as NutritionPlan
-    setPlan(p); setName(p.name); setDesc(p.description ?? '')
-    setGoal(p.goal); setTCal(String(p.target_calories))
-    setTP(String(p.target_protein)); setTK(String(p.target_carbs)); setTF(String(p.target_fat))
+      if (!payload?.plan) {
+        setLoadError('Fehler beim Laden.')
+        setPlan(null)
+        setMeals([])
+        setClients([])
+        setAssigned([])
+        return
+      }
 
-    setMeals((mealsRes.data ?? []) as NutritionMeal[])
-    setClients(clientsRes.data ?? [])
-    setAssigned((assignedRes.data ?? []) as unknown as AssignedRow[])
+      const planData: NutritionPlan = {
+        id: payload.plan.id,
+        trainer_id: '',
+        name: payload.plan.name,
+        description: payload.plan.description,
+        goal: 'maintain',
+        target_calories: 2000,
+        target_protein: 150,
+        target_carbs: 200,
+        target_fat: 70,
+        created_at: payload.plan.createdAt,
+      }
 
-    setLoading(false)
+      setPlan(planData)
+      setName(payload.plan.name)
+      setDesc(payload.plan.description ?? '')
+      setGoal('maintain')
+      setTCal('2000')
+      setTP('150')
+      setTK('200')
+      setTF('70')
+
+      const mappedMeals: NutritionMeal[] = (payload.meals ?? []).map((meal) => ({
+        id: meal.id,
+        plan_id: meal.planId,
+        name: meal.name,
+        sort_order: meal.sortOrder,
+        target_kcal: 0,
+        target_protein: 0,
+        target_carbs: 0,
+        target_fat: 0,
+        target_vegetable_g: 0,
+        allowed_categories: ['protein', 'carbs', 'fat', 'vegetable'],
+        created_at: meal.createdAt,
+      }))
+      setMeals(mappedMeals)
+
+      const mappedClients: Client[] = (payload.clients ?? []).map((client) => ({
+        id: client.id,
+        trainer_id: '',
+        user_id: null,
+        full_name: client.fullName,
+        email: client.email ?? '',
+        phone: null,
+        notes: null,
+        created_at: '',
+      }))
+      setClients(mappedClients)
+
+      const mappedAssignments: AssignedRow[] = (payload.assignments ?? []).map((row) => ({
+        id: row.id,
+        client_id: row.clientId,
+        is_active: row.active,
+        client: {
+          id: row.client.id,
+          full_name: row.client.fullName,
+          email: row.client.email,
+        },
+      }))
+      setAssigned(mappedAssignments)
+    } catch {
+      setLoadError('Fehler beim Laden.')
+      setPlan(null)
+      setMeals([])
+      setClients([])
+      setAssigned([])
+    } finally {
+      setLoading(false)
+    }
   }, [id, router])
 
   useEffect(() => { load() }, [load])
@@ -240,34 +363,17 @@ export default function NutritionEditorPage() {
   // ─── Plan settings ────────────────────────────────────────────────────────
 
   const saveSettings = async () => {
-    setSavingSettings(true); setSettingsMsg('')
-    const { error } = await supabase.from('nutrition_plans').update({
-      name: name.trim(), description: desc.trim() || null, goal,
-      target_calories: Number(tCal) || 2000, target_protein: Number(tP) || 150,
-      target_carbs: Number(tK) || 200, target_fat: Number(tF) || 70,
-    }).eq('id', id)
+    setSavingSettings(true)
+    showDeferredWriteMessage('settings')
     setSavingSettings(false)
-    setSettingsMsg(error ? `Fehler: ${error.message}` : '✓ Gespeichert')
-    setTimeout(() => setSettingsMsg(''), 3000)
+    return
   }
 
   // ─── Meals ────────────────────────────────────────────────────────────────
 
   const addMeal = async () => {
     if (!newMealName.trim()) return
-    const { data, error } = await supabase.from('nutrition_meals').insert({
-      plan_id: id, name: newMealName.trim(), sort_order: meals.length,
-      target_kcal: 0, target_protein: 0, target_carbs: 0, target_fat: 0,
-      target_vegetable_g: 0,
-      allowed_categories: ['protein', 'carbs', 'fat'],
-    }).select('*').single()
-    if (error) {
-      console.error('[meal create]', error)
-      alert(`Fehler: ${error.message}\n\nFalls die Spalten target_* fehlen, führe migration_macro_meals.sql aus.`)
-      return
-    }
-    setMeals(prev => [...prev, data as NutritionMeal])
-    setNewMealName(''); setAddingMeal(false)
+    showDeferredWriteMessage('settings')
   }
 
   // Verteilt die noch offenen (oder über-verteilten) Makros gleichmäßig auf
@@ -277,105 +383,41 @@ export default function NutritionEditorPage() {
   const distributeRest = async (
     targets: Array<'protein' | 'carbs' | 'fat'>,
   ) => {
+    void targets
     if (meals.length === 0) return
-    const dailyP = Number(tP) || 0
-    const dailyK = Number(tK) || 0
-    const dailyF = Number(tF) || 0
-    const sumP = meals.reduce((s, m) => s + (m.target_protein ?? 0), 0)
-    const sumK = meals.reduce((s, m) => s + (m.target_carbs   ?? 0), 0)
-    const sumF = meals.reduce((s, m) => s + (m.target_fat     ?? 0), 0)
-    const diffP = targets.includes('protein') ? (dailyP - sumP) / meals.length : 0
-    const diffK = targets.includes('carbs')   ? (dailyK - sumK) / meals.length : 0
-    const diffF = targets.includes('fat')     ? (dailyF - sumF) / meals.length : 0
-
-    const updates = meals.map(m => {
-      const p = Math.max(0, Math.round((m.target_protein ?? 0) + diffP))
-      const k = Math.max(0, Math.round((m.target_carbs   ?? 0) + diffK))
-      const f = Math.max(0, Math.round((m.target_fat     ?? 0) + diffF))
-      const kcal = Math.round(p * 4 + k * 4 + f * 9)
-      return { ...m, target_protein: p, target_carbs: k, target_fat: f, target_kcal: kcal }
-    })
-
-    setMeals(updates)
-    await Promise.all(updates.map(m =>
-      supabase.from('nutrition_meals').update({
-        target_protein: m.target_protein,
-        target_carbs:   m.target_carbs,
-        target_fat:     m.target_fat,
-        target_kcal:    m.target_kcal,
-      }).eq('id', m.id)
-    ))
+    showDeferredWriteMessage('settings')
   }
 
   const updateMeal = async (mealId: string, patch: Partial<NutritionMeal>) => {
-    setMeals(prev => prev.map(m => m.id === mealId ? { ...m, ...patch } : m))
-    const { error } = await supabase.from('nutrition_meals').update(patch).eq('id', mealId)
-    if (error) {
-      console.warn('[meal update]', error)
-      // Spalten fehlen → klar an User melden, sonst „verschwindet" der Wert
-      // einfach beim nächsten Reload und Bug ist unsichtbar.
-      if (/column.*does not exist|schema cache/i.test(error.message)) {
-        alert(
-          `Speichern fehlgeschlagen: Spalte fehlt in der Datenbank.\n\n` +
-          `${error.message}\n\n` +
-          `Lösung — im Supabase SQL-Editor ausführen:\n\n` +
-          `alter table nutrition_meals add column if not exists target_vegetable_g numeric not null default 0;`
-        )
-      }
-    }
+    void mealId
+    void patch
+    showDeferredWriteMessage('settings')
   }
 
   const deleteMeal = async (mid: string) => {
+    void mid
     if (!confirm('Mahlzeit löschen?')) return
-    await supabase.from('nutrition_meals').delete().eq('id', mid)
-    setMeals(prev => prev.filter(m => m.id !== mid))
+    showDeferredWriteMessage('settings')
   }
 
   // ─── Assignment ───────────────────────────────────────────────────────────
 
   const assignPlan = async () => {
     if (!assignClientId) return
-    setAssigning(true); setAssignMsg('')
-    const payload = { client_id: assignClientId, plan_id: id, is_active: true }
-    const previousAssignment = assigned.find(row => row.client_id === assignClientId)
-    const { error } = await supabase
-      .from('assigned_nutrition_plans')
-      .upsert(payload, { onConflict: 'client_id,plan_id' })
-      .select('*')
-    if (error) {
-      setAssignMsg(`Fehler: ${error.message}`)
-    } else {
-      const cli = clients.find(c => c.id === assignClientId)
-      const linkedRes = await supabase.from('clients').select('user_id').eq('id', assignClientId).single()
-      if (!linkedRes.data?.user_id) {
-        setAssignMsg(`✓ Zugewiesen — aber „${cli?.full_name}" hat noch kein Konto. Sobald sich der Kunde mit „${cli?.email}" registriert, wird der Plan sichtbar.`)
-      } else {
-        if (!previousAssignment?.is_active) {
-          await supabase.from('notifications').insert({
-            client_id: linkedRes.data.user_id,
-            type: 'nutrition_plan',
-            title: 'Neuer Ernährungsplan zugewiesen',
-            body: plan?.name ?? null,
-            is_read: false,
-          })
-        }
-        setAssignMsg(`✓ Plan an „${cli?.full_name}" zugewiesen.`)
-      }
-      setAssignClientId('')
-      await load()
-    }
+    setAssigning(true)
+    showDeferredWriteMessage('assign')
     setAssigning(false)
-    setTimeout(() => setAssignMsg(''), 6000)
   }
 
   const toggleAssignment = async (rowId: string, current: boolean) => {
-    await supabase.from('assigned_nutrition_plans').update({ is_active: !current }).eq('id', rowId)
-    setAssigned(prev => prev.map(a => a.id === rowId ? { ...a, is_active: !current } : a))
+    void rowId
+    void current
+    showDeferredWriteMessage('assign')
   }
 
   const removeAssignment = async (rowId: string) => {
-    await supabase.from('assigned_nutrition_plans').delete().eq('id', rowId)
-    setAssigned(prev => prev.filter(a => a.id !== rowId))
+    void rowId
+    showDeferredWriteMessage('assign')
   }
 
   // ─── Derived ─────────────────────────────────────────────────────────────
@@ -385,6 +427,7 @@ export default function NutritionEditorPage() {
   const numTK = Number(tK) || 1, numTF = Number(tF) || 1
 
   if (loading) return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin" /></div>
+  if (loadError) return <div className="p-8 text-sm text-red-600">{loadError}</div>
   if (!plan) return null
 
   return (
