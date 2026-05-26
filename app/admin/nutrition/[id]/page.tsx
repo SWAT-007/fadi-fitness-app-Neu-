@@ -499,19 +499,64 @@ export default function NutritionEditorPage() {
   const assignPlan = async () => {
     if (!assignClientId) return
     setAssigning(true)
-    showDeferredWriteMessage('assign')
-    setAssigning(false)
+    setAssignMsg('')
+    try {
+      const response = await fetch(`/api/backend/nutrition/plans/${id}/assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: assignClientId }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        setAssignMsg(payload?.message ?? 'Fehler beim Zuweisen.')
+        return
+      }
+      setAssignClientId('')
+      await load()
+    } catch {
+      setAssignMsg('Backend nicht erreichbar.')
+    } finally {
+      setAssigning(false)
+    }
   }
 
   const toggleAssignment = async (rowId: string, current: boolean) => {
-    void rowId
-    void current
-    showDeferredWriteMessage('assign')
+    try {
+      const response = await fetch(`/api/backend/nutrition/assignments/${rowId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !current }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        setAssignMsg(payload?.message ?? 'Fehler beim Aktualisieren.')
+        return
+      }
+      const updated = payload?.assignment as { id: string; active: boolean } | undefined
+      if (updated) {
+        setAssigned((prev) =>
+          prev.map((a) => a.id === rowId ? { ...a, is_active: updated.active } : a),
+        )
+      }
+    } catch {
+      setAssignMsg('Backend nicht erreichbar.')
+    }
   }
 
   const removeAssignment = async (rowId: string) => {
-    void rowId
-    showDeferredWriteMessage('assign')
+    try {
+      const response = await fetch(`/api/backend/nutrition/assignments/${rowId}`, {
+        method: 'DELETE',
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        setAssignMsg(payload?.message ?? 'Fehler beim Entfernen.')
+        return
+      }
+      setAssigned((prev) => prev.filter((a) => a.id !== rowId))
+    } catch {
+      setAssignMsg('Backend nicht erreichbar.')
+    }
   }
 
   // ─── Derived ─────────────────────────────────────────────────────────────

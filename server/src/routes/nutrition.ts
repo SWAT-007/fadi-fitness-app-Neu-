@@ -792,4 +792,189 @@ nutritionRouter.delete("/meals/:mealId", requireAuth, async (req: AuthenticatedR
   }
 });
 
+// ─── Assignment select shape reused across POST/PATCH ────────────────────────
+
+const assignmentSelect = {
+  id: true,
+  clientId: true,
+  planId: true,
+  active: true,
+  assignedAt: true,
+  client: { select: { id: true, fullName: true, email: true } },
+  plan: { select: { id: true, name: true, description: true } },
+} as const;
+
+nutritionRouter.post("/plans/:id/assignments", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const idParam = req.params.id;
+  const planId = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!planId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const clientId = typeof req.body?.clientId === "string" ? req.body.clientId.trim() : "";
+  if (!clientId) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const [plan, client] = await Promise.all([
+      prisma.nutritionPlan.findFirst({
+        where: { id: planId, trainerId: trainerProfile.id },
+        select: { id: true, name: true },
+      }),
+      prisma.clientProfile.findFirst({
+        where: { id: clientId, trainerId: trainerProfile.id },
+        select: { id: true, userId: true },
+      }),
+    ]);
+
+    if (!plan) return res.status(404).json({ message: "Not found" });
+    if (!client) return res.status(404).json({ message: "Client not found" });
+
+    const { assignmentId, notificationCreated } = await prisma.$transaction(async (tx) => {
+      await tx.assignedNutritionPlan.updateMany({
+        where: { clientId: client.id, active: true, planId: { not: plan.id } },
+        data: { active: false },
+      });
+
+      const upserted = await tx.assignedNutritionPlan.upsert({
+        where: { clientId_planId: { clientId: client.id, planId: plan.id } },
+        create: { clientId: client.id, planId: plan.id, active: true, assignedAt: new Date() },
+        update: { active: true, assignedAt: new Date() },
+        select: { id: true },
+      });
+
+      let notificationCreated = false;
+      if (client.userId) {
+        await tx.notification.create({
+          data: {
+            userId: client.userId,
+            type: "NUTRITION_PLAN",
+            title: "Neuer Ernährungsplan",
+            body: `Dir wurde der Ernährungsplan "${plan.name}" zugewiesen.`,
+          },
+        });
+        notificationCreated = true;
+      }
+
+      return { assignmentId: upserted.id, notificationCreated };
+    });
+
+    const assignment = await prisma.assignedNutritionPlan.findUnique({
+      where: { id: assignmentId },
+      select: assignmentSelect,
+    });
+    if (!assignment) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    return res.status(201).json({ assignment, notificationCreated });
+  } catch (error) {
+    console.error("[nutrition:assignments:create] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+nutritionRouter.patch("/assignments/:assignmentId", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const assignmentIdParam = req.params.assignmentId;
+  const assignmentId = Array.isArray(assignmentIdParam) ? assignmentIdParam[0] : assignmentIdParam;
+  if (!assignmentId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const activeValue = req.body?.active;
+  if (typeof activeValue !== "boolean") {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existing = await prisma.assignedNutritionPlan.findFirst({
+      where: {
+        id: assignmentId,
+        client: { trainerId: trainerProfile.id },
+        plan: { trainerId: trainerProfile.id },
+      },
+      select: { id: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const assignment = await prisma.assignedNutritionPlan.update({
+      where: { id: existing.id },
+      data: { active: activeValue },
+      select: assignmentSelect,
+    });
+
+    return res.json({ assignment });
+  } catch (error) {
+    console.error("[nutrition:assignments:update] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+nutritionRouter.delete("/assignments/:assignmentId", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const assignmentIdParam = req.params.assignmentId;
+  const assignmentId = Array.isArray(assignmentIdParam) ? assignmentIdParam[0] : assignmentIdParam;
+  if (!assignmentId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existing = await prisma.assignedNutritionPlan.findFirst({
+      where: {
+        id: assignmentId,
+        client: { trainerId: trainerProfile.id },
+        plan: { trainerId: trainerProfile.id },
+      },
+      select: { id: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await prisma.assignedNutritionPlan.delete({ where: { id: existing.id } });
+    return res.json({ deleted: true, assignmentId: existing.id });
+  } catch (error) {
+    console.error("[nutrition:assignments:delete] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 export { nutritionRouter };
