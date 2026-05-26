@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import type { Exercise, ExerciseLog, WorkoutDay } from '@/lib/types'
 import { useToast } from '@/components/Motion'
 
 type SetLog = {
@@ -13,7 +11,49 @@ type SetLog = {
   completed: boolean
 }
 
-type ExerciseWithImage = Exercise
+type BackendExercise = {
+  id: string
+  dayId: string
+  name: string
+  description: string | null
+  sets: number
+  reps: string
+  targetWeightKg: number | null
+  restSeconds: number | null
+  note: string | null
+  sortOrder: number
+  imageUrl: string | null
+  libraryId: string | null
+}
+
+type BackendDay = {
+  id: string
+  name: string
+  description: string | null
+  sortOrder: number
+}
+
+type BackendExerciseLog = {
+  id: string
+  workoutLogId: string
+  exerciseId: string
+  actualWeight: number | null
+  actualReps: string | null
+  setsDone: number | null
+  completed: boolean
+  createdAt: string
+}
+
+type BackendWorkoutLog = {
+  id: string
+  dayId: string
+  date: string
+  completedAt: string | null
+  durationSeconds: number | null
+  createdAt: string
+}
+
+type ExerciseWithImage = BackendExercise
 
 function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60)
@@ -43,13 +83,9 @@ export default function WorkoutPlayerPage() {
   const { showToast } = useToast()
   const freshStart = searchParams.get('fresh') === '1'
 
-  const [workout, setWorkout] = useState<WorkoutDay | null>(null)
+  const [workout, setWorkout] = useState<BackendDay | null>(null)
   const [exercises, setExercises] = useState<ExerciseWithImage[]>([])
   const [logs, setLogs] = useState<Record<string, SetLog[]>>({})
-  const [existingLogs, setExistingLogs] = useState<Record<string, Record<number, ExerciseLog>>>({})
-  const [clientId, setClientId] = useState<string | null>(null)
-  const [clientTrainerId, setClientTrainerId] = useState<string | null>(null)
-  const [clientName, setClientName] = useState<string>('')
   const [workoutLogId, setWorkoutLogId] = useState<string | null>(null)
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -83,97 +119,69 @@ export default function WorkoutPlayerPage() {
 
   useEffect(() => {
     const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      try {
+        const playRes = await fetch(`/api/backend/me/workouts/${id}/play`, { cache: 'no-store' })
+        if (playRes.status === 401) { router.push('/login'); return }
+        if (!playRes.ok) { router.push('/client/plan'); return }
 
-      const [workoutRes, exercisesRes, clientRes] = await Promise.all([
-        supabase.from('workout_days').select('*').eq('id', id).single(),
-        supabase.from('exercises').select('*').eq('day_id', id).order('sort_order'),
-        supabase.from('clients').select('id, trainer_id, full_name').eq('user_id', user.id).maybeSingle(),
-      ])
+        const playData = await playRes.json() as {
+          day: BackendDay & { exercises: BackendExercise[] }
+          exercises: BackendExercise[]
+          workoutLog: BackendWorkoutLog | null
+          exerciseLogs: BackendExerciseLog[]
+        }
 
-      if (!workoutRes.data) { router.push('/client/plan'); return }
+        if (!playData.day) { router.push('/client/plan'); return }
+        setWorkout(playData.day)
+        const exerciseList = playData.exercises
+        setExercises(exerciseList)
 
-      const exerciseList = (exercisesRes.data ?? []) as ExerciseWithImage[]
-      setWorkout(workoutRes.data)
-      setExercises(exerciseList)
-
-      const client = clientRes.data
-      if (!client) { setLoading(false); return }
-      setClientId(client.id)
-      setClientTrainerId((client as typeof client & { trainer_id: string }).trainer_id ?? null)
-      setClientName((client as typeof client & { full_name: string }).full_name ?? '')
-
-      const today = new Date().toISOString().split('T')[0]
-
-      let activeLogId: string | null = null
-      let activeLogCreatedAt: string | null = null
-
-      if (!freshStart) {
-        const { data: existingWorkoutLog } = await supabase
-          .from('workout_logs')
-          .select('id, created_at')
-          .eq('client_id', client.id)
-          .eq('day_id', id)
-          .is('completed_at', null)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-        activeLogId = existingWorkoutLog?.id ?? null
-        activeLogCreatedAt = existingWorkoutLog?.created_at ?? null
-      }
-
-      if (!activeLogId) {
-        const { data: newLog } = await supabase
-          .from('workout_logs')
-          .insert({ client_id: client.id, day_id: id, date: today })
-          .select('id, created_at')
-          .single()
-        activeLogId = newLog?.id ?? null
-        activeLogCreatedAt = newLog?.created_at ?? null
-      }
-      if (activeLogId) setWorkoutLogId(activeLogId)
-      if (activeLogCreatedAt) {
-        startedAtRef.current = new Date(activeLogCreatedAt).getTime()
-      }
-
-      let previousLogs: ExerciseLog[] = []
-      if (activeLogId && !freshStart) {
-        const { data } = await supabase
-          .from('exercise_logs')
-          .select('*')
-          .eq('workout_log_id', activeLogId)
-        previousLogs = data ?? []
-      }
-
-      const existingByExercise: Record<string, Record<number, ExerciseLog>> = {}
-      const logsByExercise: Record<string, ExerciseLog[]> = {}
-
-      previousLogs.forEach((log, index) => {
-        const setNumber = log.sets_done ?? index + 1
-        existingByExercise[log.exercise_id] = { ...existingByExercise[log.exercise_id], [setNumber]: log }
-        logsByExercise[log.exercise_id] = [...(logsByExercise[log.exercise_id] ?? []), log]
-      })
-
-      const initialLogs: Record<string, SetLog[]> = {}
-      exerciseList.forEach(exercise => {
-        const previous = logsByExercise[exercise.id] ?? []
-        const setCount = Math.max(1, exercise.sets)
-
-        initialLogs[exercise.id] = Array.from({ length: setCount }, (_, index) => {
-          const setNumber = index + 1
-          const previousSet = previous.find(log => log.sets_done === setNumber) ?? previous[index]
-          return {
-            weight: previousSet?.actual_weight?.toString() ?? exercise.target_weight?.toString() ?? '',
-            reps: previousSet?.actual_reps ?? exercise.reps,
-            completed: previousSet?.completed ?? false,
-          }
+        const logRes = await fetch('/api/backend/me/workout-logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dayId: id, fresh: freshStart }),
         })
-      })
+        if (logRes.status === 401) { router.push('/login'); return }
+        if (!logRes.ok) { router.push('/client/plan'); return }
 
-      setExistingLogs(existingByExercise)
-      setLogs(initialLogs)
-      setLoading(false)
+        const logData = await logRes.json() as { workoutLog: BackendWorkoutLog; resumed: boolean }
+        const wLog = logData.workoutLog
+        setWorkoutLogId(wLog.id)
+        if (wLog.createdAt) {
+          startedAtRef.current = new Date(wLog.createdAt).getTime()
+        }
+
+        // Use exercise logs from play response when resuming an existing incomplete log
+        const sourceLogs = (logData.resumed && !freshStart) ? playData.exerciseLogs : []
+
+        const logsByExercise: Record<string, BackendExerciseLog[]> = {}
+        sourceLogs.forEach(log => {
+          logsByExercise[log.exerciseId] = [...(logsByExercise[log.exerciseId] ?? []), log]
+        })
+
+        const initialLogs: Record<string, SetLog[]> = {}
+        exerciseList.forEach(exercise => {
+          const previous = logsByExercise[exercise.id] ?? []
+          const setCount = Math.max(1, exercise.sets)
+
+          initialLogs[exercise.id] = Array.from({ length: setCount }, (_, index) => {
+            const setNumber = index + 1
+            const previousSet = previous.find(log => log.setsDone === setNumber) ?? previous[index]
+            return {
+              weight: previousSet?.actualWeight?.toString() ?? exercise.targetWeightKg?.toString() ?? '',
+              reps: previousSet?.actualReps ?? exercise.reps,
+              completed: previousSet?.completed ?? false,
+            }
+          })
+        })
+
+        setLogs(initialLogs)
+        setLoading(false)
+      } catch (err) {
+        console.error('Failed to load workout', err)
+        setError('Workout konnte nicht geladen werden.')
+        setLoading(false)
+      }
     }
 
     load()
@@ -193,48 +201,28 @@ export default function WorkoutPlayerPage() {
     setSyncingProgress(true)
 
     try {
-      const nextExistingLogs: Record<string, Record<number, ExerciseLog>> = { ...existingLogs }
+      const sets = exercises.flatMap(exercise =>
+        (logs[exercise.id] ?? []).map((set, index) => ({
+          exerciseId: exercise.id,
+          setsDone: index + 1,
+          actualWeight: set.weight ? parseFloat(set.weight) : null,
+          actualReps: set.reps || null,
+          completed: set.completed,
+          note: null,
+        })),
+      )
 
-      for (const exercise of exercises) {
-        const exerciseSets = logs[exercise.id] ?? []
-        for (let index = 0; index < exerciseSets.length; index++) {
-          const set = exerciseSets[index]
-          const setNumber = index + 1
-          const payload = {
-            workout_log_id: workoutLogId,
-            exercise_id: exercise.id,
-            actual_weight: set.weight ? parseFloat(set.weight) : null,
-            actual_reps: set.reps || null,
-            sets_done: setNumber,
-            completed: set.completed,
-          }
-
-          const existing = nextExistingLogs[exercise.id]?.[setNumber]
-          if (existing) {
-            await supabase.from('exercise_logs').update(payload).eq('id', existing.id)
-          } else {
-            const { data: inserted } = await supabase
-              .from('exercise_logs')
-              .insert(payload)
-              .select('*')
-              .single()
-            if (inserted) {
-              nextExistingLogs[exercise.id] = {
-                ...(nextExistingLogs[exercise.id] ?? {}),
-                [setNumber]: inserted as ExerciseLog,
-              }
-            }
-          }
-        }
-      }
-
-      setExistingLogs(nextExistingLogs)
+      await fetch(`/api/backend/me/workout-logs/${workoutLogId}/exercise-logs`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sets }),
+      })
     } catch (syncError) {
       console.error('Failed to sync workout progress', syncError)
     } finally {
       setSyncingProgress(false)
     }
-  }, [workoutLogId, loading, complete, saving, existingLogs, exercises, logs])
+  }, [workoutLogId, loading, complete, saving, exercises, logs])
 
   useEffect(() => {
     if (!workoutLogId || loading || complete || saving) return
@@ -251,100 +239,88 @@ export default function WorkoutPlayerPage() {
   }, [logs, workoutLogId, loading, complete, saving, persistProgress])
 
   const saveWorkout = async () => {
-    if (!clientId || !workoutLogId) return
+    if (!workoutLogId) return
 
     setSaving(true)
     setError('')
 
-    const completedAt = new Date()
+    const completedAtMs = Date.now()
     const durationSeconds = startedAtRef.current > 0
-      ? Math.floor((completedAt.getTime() - startedAtRef.current) / 1000)
+      ? Math.floor((completedAtMs - startedAtRef.current) / 1000)
       : elapsed
 
-    const { error: updateError } = await supabase
-      .from('workout_logs')
-      .update({ completed_at: completedAt.toISOString(), duration_seconds: durationSeconds })
-      .eq('id', workoutLogId)
-
-    if (updateError) {
-      setError(updateError.message)
-      setSaving(false)
-      return
-    }
-
-    await supabase
-      .from('workout_logs')
-      .delete()
-      .eq('client_id', clientId)
-      .eq('day_id', id)
-      .is('completed_at', null)
-      .neq('id', workoutLogId)
-
-    for (const exercise of exercises) {
-      const exerciseSets = logs[exercise.id] ?? []
-      for (let index = 0; index < exerciseSets.length; index++) {
-        const set = exerciseSets[index]
-        const setNumber = index + 1
-        const payload = {
-          workout_log_id: workoutLogId,
-          exercise_id: exercise.id,
-          actual_weight: set.weight ? parseFloat(set.weight) : null,
-          actual_reps: set.reps || null,
-          sets_done: setNumber,
+    try {
+      // Final flush of all sets before completing
+      const sets = exercises.flatMap(exercise =>
+        (logs[exercise.id] ?? []).map((set, index) => ({
+          exerciseId: exercise.id,
+          setsDone: index + 1,
+          actualWeight: set.weight ? parseFloat(set.weight) : null,
+          actualReps: set.reps || null,
           completed: set.completed,
-        }
-        const existing = existingLogs[exercise.id]?.[setNumber]
-        if (existing) {
-          await supabase.from('exercise_logs').update(payload).eq('id', existing.id)
-        } else {
-          await supabase.from('exercise_logs').insert(payload)
-        }
-      }
-    }
+          note: null,
+        })),
+      )
 
-    setFinalDurationSeconds(durationSeconds)
-    setSaving(false)
-    setComplete(true)
-    showToast('Workout gespeichert ✓', 'success')
-
-    if (clientTrainerId) {
-      const dayName = workout?.name ?? 'ein Training'
-      await supabase.from('notifications').insert({
-        client_id: clientTrainerId,
-        type: 'workout',
-        title: `${clientName || 'Ein Kunde'} hat ${dayName} abgeschlossen`,
-        body: durationSeconds > 0
-          ? `Dauer: ${Math.floor(durationSeconds / 60)} Minuten`
-          : null,
-        is_read: false,
+      await fetch(`/api/backend/me/workout-logs/${workoutLogId}/exercise-logs`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sets }),
       })
+
+      const patchRes = await fetch(`/api/backend/me/workout-logs/${workoutLogId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ durationSeconds }),
+      })
+
+      if (!patchRes.ok) {
+        const errData = await patchRes.json().catch(() => ({})) as { message?: string }
+        setError(errData.message ?? 'Fehler beim Speichern.')
+        setSaving(false)
+        return
+      }
+
+      setFinalDurationSeconds(durationSeconds)
+      setSaving(false)
+      setComplete(true)
+      showToast('Workout gespeichert ✓', 'success')
+    } catch (err) {
+      console.error('Failed to save workout', err)
+      setError('Workout konnte nicht gespeichert werden.')
+      setSaving(false)
     }
   }
 
   const handleSwapRequest = async () => {
-    if (!clientId || !exercise || !swapReason.trim()) return
+    if (!exercise || !swapReason.trim()) return
     setSwapSending(true)
     setError('')
 
-    const { error: requestError } = await supabase.from('exercise_change_requests').insert({
-      client_id: clientId,
-      workout_day_id: id,
-      exercise_id: exercise.id,
-      reason: swapReason.trim(),
-      status: 'pending',
-    })
+    try {
+      const res = await fetch('/api/backend/me/exercise-change-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dayId: id, exerciseId: exercise.id, reason: swapReason.trim() }),
+      })
 
-    if (requestError) {
-      setError(requestError.message)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { message?: string }
+        setError(errData.message ?? 'Fehler beim Senden.')
+        setSwapSending(false)
+        return
+      }
+
       setSwapSending(false)
-      return
+      setSwapModalOpen(false)
+      setSwapReason('')
+      setSwapSent(exercise.id)
+      showToast('Anfrage gesendet ✓', 'info')
+    } catch (err) {
+      console.error('Failed to send swap request', err)
+      setError('Anfrage konnte nicht gesendet werden.')
+      setSwapSending(false)
     }
-
-    setSwapSending(false)
-    setSwapModalOpen(false)
-    setSwapReason('')
-    setSwapSent(exercise.id)
-    showToast('Anfrage gesendet ✓', 'info')
   }
 
   useEffect(() => { setBulkKgOpen(false) }, [currentExerciseIndex])
@@ -507,9 +483,9 @@ export default function WorkoutPlayerPage() {
                           : 'border-gray-200 opacity-60 hover:opacity-100'
                     }`}
                   >
-                    {ex.image_url ? (
+                    {ex.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={ex.image_url} alt="" className="w-full h-full object-cover" />
+                      <img src={ex.imageUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-[9px] font-bold uppercase px-1 text-center leading-tight">
                         {ex.name.slice(0, 8)}
@@ -534,7 +510,7 @@ export default function WorkoutPlayerPage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-1">{exercise.name}</h1>
           <p className="text-emerald-600 text-sm font-medium">
             {exercise.sets} Sätze × {exercise.reps}
-            {exercise.target_weight ? ` · ${exercise.target_weight} kg` : ''}
+            {exercise.targetWeightKg ? ` · ${exercise.targetWeightKg} kg` : ''}
           </p>
           {exercise.note && (
             <p className="text-gray-500 text-sm mt-2">💡 {exercise.note}</p>
