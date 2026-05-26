@@ -162,6 +162,18 @@ model Exercise {
   @@index([dayId, sortOrder])
 }
 
+model ExerciseLibrary {
+  id          String   @id @default(cuid())
+  name        String
+  muscleGroup String?
+  equipment   String?
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+}
+
 model Notification {
   id        String           @id @default(cuid())
   userId    String
