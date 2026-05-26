@@ -5,7 +5,7 @@ import { authRouter } from "./routes/auth";
 import { clientLinkTokensRouter } from "./routes/clientLinkTokens";
 import { clientsRouter } from "./routes/clients";
 import { meRouter } from "./routes/me";
-import { plansRouter, workoutDaysRouter } from "./routes/plans";
+import { exercisesRouter, plansRouter, workoutDaysRouter } from "./routes/plans";
 
 const app = express();
 
@@ -26,6 +26,7 @@ app.use("/api/v1/clients", clientsRouter);
 app.use("/api/v1/me", meRouter);
 app.use("/api/v1/plans", plansRouter);
 app.use("/api/v1/workout-days", workoutDaysRouter);
+app.use("/api/v1/exercises", exercisesRouter);
 
 app.get("/health", (_req, res) => {
   res.json({

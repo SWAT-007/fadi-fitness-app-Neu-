@@ -287,20 +287,45 @@ export default function PlanBuilderPage() {
   const saveEx = async (e: React.FormEvent) => {
     e.preventDefault()
     const payload = {
-      day_id: exModal.dayId,
       name: exForm.name,
       description: exForm.description || null,
       sets: exForm.sets,
       reps: exForm.reps,
-      target_weight: exForm.target_weight ? parseFloat(exForm.target_weight) : null,
-      rest_seconds: exForm.rest_seconds ? parseInt(exForm.rest_seconds) : 90,
+      targetWeightKg: exForm.target_weight ? parseFloat(exForm.target_weight) : null,
+      restSeconds: exForm.rest_seconds ? parseInt(exForm.rest_seconds) : 90,
       note: exForm.note || null,
-      sort_order: exModal.editing ? exModal.editing.sort_order : (exercises[exModal.dayId]?.length ?? 0),
+      imageUrl: exModal.editing?.image_url ?? null,
     }
     if (exModal.editing) {
-      await supabase.from('exercises').update(payload).eq('id', exModal.editing.id)
+      const response = await fetch(`/api/backend/exercises/${exModal.editing.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        const msg =
+          response.status === 401
+            ? 'Backend-Login erforderlich.'
+            : (data && typeof data.message === 'string' && data.message) || 'Übung konnte nicht gespeichert werden.'
+        showToast(msg, 'danger')
+        return
+      }
     } else {
-      await supabase.from('exercises').insert(payload)
+      const response = await fetch(`/api/backend/workout-days/${exModal.dayId}/exercises`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        const msg =
+          response.status === 401
+            ? 'Backend-Login erforderlich.'
+            : (data && typeof data.message === 'string' && data.message) || 'Übung konnte nicht erstellt werden.'
+        showToast(msg, 'danger')
+        return
+      }
     }
     setExModal({ open: false, dayId: '', editing: null })
     showToast(exModal.editing ? 'Uebung gespeichert ✓' : 'Uebung erstellt ✓', 'success')
@@ -309,7 +334,18 @@ export default function PlanBuilderPage() {
 
   const deleteEx = async (exId: string) => {
     if (!confirm('Übung löschen?')) return
-    await supabase.from('exercises').delete().eq('id', exId)
+    const response = await fetch(`/api/backend/exercises/${exId}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      const data = await response.json().catch(() => null)
+      const msg =
+        response.status === 401
+          ? 'Backend-Login erforderlich.'
+          : (data && typeof data.message === 'string' && data.message) || 'Übung konnte nicht gelöscht werden.'
+      showToast(msg, 'danger')
+      return
+    }
     showToast('Uebung geloescht', 'danger')
     await load()
   }

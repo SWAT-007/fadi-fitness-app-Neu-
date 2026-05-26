@@ -4,6 +4,7 @@ import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 
 const plansRouter = Router();
 const workoutDaysRouter = Router();
+const exercisesRouter = Router();
 
 const mapPlan = (plan: {
   id: string;
@@ -484,4 +485,294 @@ workoutDaysRouter.delete("/:dayId", requireAuth, async (req: AuthenticatedReques
   }
 });
 
-export { plansRouter, workoutDaysRouter };
+workoutDaysRouter.post("/:dayId/exercises", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const dayIdParam = req.params.dayId;
+  const dayId = Array.isArray(dayIdParam) ? dayIdParam[0] : dayIdParam;
+  if (!dayId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  const descriptionInput = req.body?.description;
+  const description =
+    descriptionInput === null
+      ? null
+      : typeof descriptionInput === "string"
+        ? descriptionInput
+        : null;
+  const setsInput = req.body?.sets;
+  const sets =
+    typeof setsInput === "number" && Number.isInteger(setsInput) && setsInput > 0
+      ? setsInput
+      : 3;
+  const repsInput = req.body?.reps;
+  const reps = typeof repsInput === "string" && repsInput.trim() ? repsInput.trim() : "10";
+  const targetWeightKgInput = req.body?.targetWeightKg;
+  const targetWeightKg =
+    targetWeightKgInput === null
+      ? null
+      : typeof targetWeightKgInput === "number" && Number.isFinite(targetWeightKgInput)
+        ? targetWeightKgInput
+        : null;
+  const restSecondsInput = req.body?.restSeconds;
+  const restSeconds =
+    restSecondsInput === null
+      ? null
+      : typeof restSecondsInput === "number" && Number.isFinite(restSecondsInput)
+        ? restSecondsInput
+        : null;
+  const noteInput = req.body?.note;
+  const note = noteInput === null ? null : typeof noteInput === "string" ? noteInput : null;
+  const imageUrlInput = req.body?.imageUrl;
+  const imageUrl = imageUrlInput === null ? null : typeof imageUrlInput === "string" ? imageUrlInput : null;
+
+  if (!name) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existingDay = await prisma.workoutDay.findFirst({
+      where: {
+        id: dayId,
+        plan: {
+          trainerId: trainerProfile.id,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!existingDay) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const lastExercise = await prisma.exercise.findFirst({
+      where: { dayId: existingDay.id },
+      orderBy: { sortOrder: "desc" },
+      select: { sortOrder: true },
+    });
+
+    const sortOrder = lastExercise ? lastExercise.sortOrder + 1 : 0;
+
+    const createdExercise = await prisma.exercise.create({
+      data: {
+        dayId: existingDay.id,
+        name,
+        description,
+        sets,
+        reps,
+        targetWeightKg,
+        restSeconds,
+        note,
+        sortOrder,
+        imageUrl,
+      },
+      select: {
+        id: true,
+        dayId: true,
+        name: true,
+        description: true,
+        sets: true,
+        reps: true,
+        targetWeightKg: true,
+        restSeconds: true,
+        note: true,
+        sortOrder: true,
+        imageUrl: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.status(201).json({
+      exercise: {
+        ...createdExercise,
+        libraryId: null,
+      },
+    });
+  } catch (error) {
+    console.error("[plans:create-exercise] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+exercisesRouter.patch("/:exerciseId", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const exerciseIdParam = req.params.exerciseId;
+  const exerciseId = Array.isArray(exerciseIdParam) ? exerciseIdParam[0] : exerciseIdParam;
+  if (!exerciseId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  const descriptionInput = req.body?.description;
+  const description =
+    descriptionInput === null
+      ? null
+      : typeof descriptionInput === "string"
+        ? descriptionInput
+        : null;
+  const setsInput = req.body?.sets;
+  const sets =
+    typeof setsInput === "number" && Number.isInteger(setsInput) && setsInput > 0
+      ? setsInput
+      : 3;
+  const repsInput = req.body?.reps;
+  const reps = typeof repsInput === "string" && repsInput.trim() ? repsInput.trim() : "10";
+  const targetWeightKgInput = req.body?.targetWeightKg;
+  const targetWeightKg =
+    targetWeightKgInput === null
+      ? null
+      : typeof targetWeightKgInput === "number" && Number.isFinite(targetWeightKgInput)
+        ? targetWeightKgInput
+        : null;
+  const restSecondsInput = req.body?.restSeconds;
+  const restSeconds =
+    restSecondsInput === null
+      ? null
+      : typeof restSecondsInput === "number" && Number.isFinite(restSecondsInput)
+        ? restSecondsInput
+        : null;
+  const noteInput = req.body?.note;
+  const note = noteInput === null ? null : typeof noteInput === "string" ? noteInput : null;
+  const imageUrlInput = req.body?.imageUrl;
+  const imageUrl = imageUrlInput === null ? null : typeof imageUrlInput === "string" ? imageUrlInput : null;
+
+  if (!name) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existingExercise = await prisma.exercise.findFirst({
+      where: {
+        id: exerciseId,
+        day: {
+          plan: {
+            trainerId: trainerProfile.id,
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!existingExercise) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const updatedExercise = await prisma.exercise.update({
+      where: { id: existingExercise.id },
+      data: {
+        name,
+        description,
+        sets,
+        reps,
+        targetWeightKg,
+        restSeconds,
+        note,
+        imageUrl,
+      },
+      select: {
+        id: true,
+        dayId: true,
+        name: true,
+        description: true,
+        sets: true,
+        reps: true,
+        targetWeightKg: true,
+        restSeconds: true,
+        note: true,
+        sortOrder: true,
+        imageUrl: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.json({
+      exercise: {
+        ...updatedExercise,
+        libraryId: null,
+      },
+    });
+  } catch (error) {
+    console.error("[plans:update-exercise] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+exercisesRouter.delete("/:exerciseId", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const exerciseIdParam = req.params.exerciseId;
+  const exerciseId = Array.isArray(exerciseIdParam) ? exerciseIdParam[0] : exerciseIdParam;
+  if (!exerciseId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existingExercise = await prisma.exercise.findFirst({
+      where: {
+        id: exerciseId,
+        day: {
+          plan: {
+            trainerId: trainerProfile.id,
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!existingExercise) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await prisma.exercise.delete({
+      where: { id: existingExercise.id },
+    });
+
+    return res.json({
+      deleted: true,
+      exerciseId: existingExercise.id,
+    });
+  } catch (error) {
+    console.error("[plans:delete-exercise] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+export { plansRouter, workoutDaysRouter, exercisesRouter };
