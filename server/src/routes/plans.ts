@@ -978,6 +978,56 @@ workoutDaysRouter.post("/:dayId/exercises", requireAuth, async (req: Authenticat
   }
 });
 
+exercisesRouter.get("/library", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const searchInput = typeof req.query.search === "string" ? req.query.search.trim() : "";
+  const muscleGroupInput =
+    typeof req.query.muscleGroup === "string" ? req.query.muscleGroup.trim() : "";
+  const limitInput = typeof req.query.limit === "string" ? Number.parseInt(req.query.limit, 10) : Number.NaN;
+  const limit = Number.isFinite(limitInput) && limitInput > 0 ? Math.min(limitInput, 1000) : 500;
+
+  const where: {
+    name?: { contains: string; mode: "insensitive" };
+    muscleGroup?: string;
+  } = {};
+
+  if (searchInput) {
+    where.name = {
+      contains: searchInput,
+      mode: "insensitive",
+    };
+  }
+
+  if (muscleGroupInput) {
+    where.muscleGroup = muscleGroupInput;
+  }
+
+  try {
+    const exercises = await prisma.exerciseLibrary.findMany({
+      where,
+      orderBy: { name: "asc" },
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        muscleGroup: true,
+        equipment: true,
+        imageUrl: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.json({ exercises });
+  } catch (error) {
+    console.error("[exercises:library] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 exercisesRouter.patch("/:exerciseId", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });
