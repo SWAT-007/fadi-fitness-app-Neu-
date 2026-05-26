@@ -1,8 +1,16 @@
-import { supabase } from '@/lib/supabase'
 import type { ExerciseLibraryItem } from '@/lib/types'
 
 export type LibraryExercise = ExerciseLibraryItem
 export type ExerciseCategory = 'Beine' | 'Bizeps' | 'Brust' | 'Gesäß' | 'Rücken' | 'Schultern' | 'Trizeps'
+
+type BackendExerciseLibraryItem = {
+  id?: string
+  name?: string
+  muscleGroup?: string | null
+  equipment?: string | null
+  imageUrl?: string | null
+  createdAt?: string
+}
 
 export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
   'Beine',
@@ -13,8 +21,6 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
   'Schultern',
   'Trizeps',
 ]
-
-const PAGE_SIZE = 1000
 
 const normalizeCategoryKey = (value?: string | null) =>
   value
@@ -63,25 +69,37 @@ export function getExerciseCategory(muscleGroup?: string | null): ExerciseCatego
 }
 
 export async function fetchExerciseLibrary(): Promise<ExerciseLibraryItem[]> {
-  const rows: ExerciseLibraryItem[] = []
-
-  for (let from = 0; ; from += PAGE_SIZE) {
-    const to = from + PAGE_SIZE - 1
-    const { data, error } = await supabase
-      .from('exercise_library')
-      .select('*')
-      .order('name', { ascending: true })
-      .range(from, to)
-
-    if (error) {
-      console.error('[exercise-library] Failed to load exercises:', error)
-      throw error
-    }
-
-    rows.push(...(data ?? []))
-
-    if (!data || data.length < PAGE_SIZE) {
-      return rows
-    }
+  let response: Response
+  try {
+    response = await fetch('/api/backend/exercises/library', {
+      method: 'GET',
+      cache: 'no-store',
+    })
+  } catch (error) {
+    console.error('[exercise-library] Backend unavailable:', error)
+    throw new Error('Backend unavailable')
   }
+
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    const message =
+      payload && typeof payload.message === 'string' ? payload.message : 'Failed to load exercise library'
+    if (response.status === 401) {
+      throw new Error('Unauthorized')
+    }
+    throw new Error(message)
+  }
+
+  const backendRows: BackendExerciseLibraryItem[] =
+    payload && Array.isArray(payload.exercises) ? payload.exercises : []
+
+  return backendRows.map((row) => ({
+    id: String(row.id),
+    name: String(row.name ?? ''),
+    muscle_group: typeof row.muscleGroup === 'string' ? row.muscleGroup : null,
+    equipment: typeof row.equipment === 'string' ? row.equipment : null,
+    image_url: typeof row.imageUrl === 'string' ? row.imageUrl : null,
+    created_by: null,
+    created_at: typeof row.createdAt === 'string' ? row.createdAt : new Date(0).toISOString(),
+  }))
 }
