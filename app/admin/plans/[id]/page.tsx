@@ -269,16 +269,29 @@ export default function PlanBuilderPage() {
   const addPickedExercise = async (exercise: LibraryExercise) => {
     if (!pickerDayId) return
 
-    await supabase.from('exercises').insert({
-      day_id: pickerDayId,
-      name: exercise.name,
-      sets: 3,
-      reps: '10',
-      rest_seconds: 60,
-      sort_order: exercises[pickerDayId]?.length ?? 0,
-      library_id: exercise.id,
-      image_url: exercise.image_url ?? null,
+    const response = await fetch(`/api/backend/workout-days/${pickerDayId}/exercises`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: exercise.name,
+        description: null,
+        sets: 3,
+        reps: '10',
+        restSeconds: 60,
+        targetWeightKg: null,
+        note: null,
+        imageUrl: exercise.image_url ?? null,
+      }),
     })
+    if (!response.ok) {
+      const data = await response.json().catch(() => null)
+      const msg =
+        response.status === 401
+          ? 'Backend-Login erforderlich.'
+          : (data && typeof data.message === 'string' && data.message) || 'Übung konnte nicht hinzugefügt werden.'
+      showToast(msg, 'danger')
+      return
+    }
     setPickerDayId(null)
     showToast('Uebung hinzugefuegt ✓', 'success')
     await load()
