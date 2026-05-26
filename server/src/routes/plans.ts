@@ -435,4 +435,53 @@ workoutDaysRouter.patch("/:dayId", requireAuth, async (req: AuthenticatedRequest
   }
 });
 
+workoutDaysRouter.delete("/:dayId", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const dayIdParam = req.params.dayId;
+  const dayId = Array.isArray(dayIdParam) ? dayIdParam[0] : dayIdParam;
+  if (!dayId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existingDay = await prisma.workoutDay.findFirst({
+      where: {
+        id: dayId,
+        plan: {
+          trainerId: trainerProfile.id,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!existingDay) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await prisma.workoutDay.delete({
+      where: { id: existingDay.id },
+    });
+
+    return res.json({
+      deleted: true,
+      dayId: existingDay.id,
+    });
+  } catch (error) {
+    console.error("[plans:delete-day] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 export { plansRouter, workoutDaysRouter };

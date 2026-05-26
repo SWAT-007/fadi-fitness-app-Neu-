@@ -237,7 +237,18 @@ export default function PlanBuilderPage() {
 
   const deleteDay = async (dayId: string) => {
     if (!confirm('Trainingstag und alle Übungen löschen?')) return
-    await supabase.from('workout_days').delete().eq('id', dayId)
+    const response = await fetch(`/api/backend/workout-days/${dayId}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null)
+      const msg =
+        response.status === 401
+          ? 'Backend-Login erforderlich.'
+          : (payload && typeof payload.message === 'string' && payload.message) || 'Trainingstag konnte nicht gelöscht werden.'
+      showToast(msg, 'danger')
+      return
+    }
     showToast('Trainingstag geloescht', 'danger')
     await load()
   }
