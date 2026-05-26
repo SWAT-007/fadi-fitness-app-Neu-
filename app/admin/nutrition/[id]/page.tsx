@@ -400,13 +400,46 @@ export default function NutritionEditorPage() {
 
   const addMeal = async () => {
     if (!newMealName.trim()) return
-    showDeferredWriteMessage('settings')
+    try {
+      const response = await fetch(`/api/backend/nutrition/plans/${id}/meals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newMealName.trim() }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        setSettingsMsg(payload?.message ?? 'Fehler beim Hinzufügen.')
+        return
+      }
+      const backendMeal = payload?.meal as { id: string; planId: string; name: string; description: string | null; sortOrder: number; createdAt: string } | undefined
+      if (backendMeal) {
+        const newMeal: NutritionMeal = {
+          id: backendMeal.id,
+          plan_id: backendMeal.planId,
+          name: backendMeal.name,
+          sort_order: backendMeal.sortOrder,
+          target_kcal: 0,
+          target_protein: 0,
+          target_carbs: 0,
+          target_fat: 0,
+          target_vegetable_g: 0,
+          allowed_categories: ['protein', 'carbs', 'fat', 'vegetable'],
+          created_at: backendMeal.createdAt,
+        }
+        setMeals((prev) => [...prev, newMeal])
+      }
+      setNewMealName('')
+      setAddingMeal(false)
+    } catch {
+      setSettingsMsg('Backend nicht erreichbar.')
+    }
   }
 
   // Verteilt die noch offenen (oder über-verteilten) Makros gleichmäßig auf
   // alle Mahlzeiten. „Rest" = Tages-Ziel − Summe der Mahlzeit-Ziele.
   // mode = 'all' rührt P/K/F gemeinsam an. Per-Makro-Buttons rufen mit der
   // jeweiligen Auswahl auf.
+  // distributeRest writes to macro target fields not stored in backend — deferred.
   const distributeRest = async (
     targets: Array<'protein' | 'carbs' | 'fat'>,
   ) => {
@@ -416,15 +449,49 @@ export default function NutritionEditorPage() {
   }
 
   const updateMeal = async (mealId: string, patch: Partial<NutritionMeal>) => {
-    void mealId
-    void patch
-    showDeferredWriteMessage('settings')
+    // Fields supported by backend
+    const backendBody: Record<string, unknown> = {}
+    if (patch.name !== undefined) backendBody.name = patch.name
+    if (patch.sort_order !== undefined) backendBody.sortOrder = patch.sort_order
+
+    // Update local state immediately (UI-only fields like target_protein are display-only)
+    setMeals((prev) => prev.map((m) => m.id === mealId ? { ...m, ...patch } : m))
+
+    if (Object.keys(backendBody).length === 0) return
+
+    try {
+      const response = await fetch(`/api/backend/nutrition/meals/${mealId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(backendBody),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        setSettingsMsg(payload?.message ?? 'Fehler beim Aktualisieren.')
+        return
+      }
+      const backendMeal = payload?.meal as { name: string; sortOrder: number } | undefined
+      if (backendMeal) {
+        setMeals((prev) => prev.map((m) => m.id === mealId ? { ...m, name: backendMeal.name, sort_order: backendMeal.sortOrder } : m))
+      }
+    } catch {
+      setSettingsMsg('Backend nicht erreichbar.')
+    }
   }
 
   const deleteMeal = async (mid: string) => {
-    void mid
     if (!confirm('Mahlzeit löschen?')) return
-    showDeferredWriteMessage('settings')
+    try {
+      const response = await fetch(`/api/backend/nutrition/meals/${mid}`, { method: 'DELETE' })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        setSettingsMsg(payload?.message ?? 'Fehler beim Löschen.')
+        return
+      }
+      setMeals((prev) => prev.filter((m) => m.id !== mid))
+    } catch {
+      setSettingsMsg('Backend nicht erreichbar.')
+    }
   }
 
   // ─── Assignment ───────────────────────────────────────────────────────────

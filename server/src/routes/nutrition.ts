@@ -623,4 +623,173 @@ nutritionRouter.patch("/plans/:id", requireAuth, async (req: AuthenticatedReques
   }
 });
 
+nutritionRouter.post("/plans/:id/meals", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const idParam = req.params.id;
+  const planId = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!planId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  if (!name) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  const descriptionInput = req.body?.description;
+  const description =
+    descriptionInput === null || descriptionInput === undefined
+      ? null
+      : typeof descriptionInput === "string"
+        ? descriptionInput.trim() || null
+        : null;
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const plan = await prisma.nutritionPlan.findFirst({
+      where: { id: planId, trainerId: trainerProfile.id },
+      select: { id: true },
+    });
+    if (!plan) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const lastMeal = await prisma.nutritionMeal.findFirst({
+      where: { planId: plan.id },
+      orderBy: { sortOrder: "desc" },
+      select: { sortOrder: true },
+    });
+    const sortOrder = lastMeal ? lastMeal.sortOrder + 1 : 0;
+
+    const meal = await prisma.nutritionMeal.create({
+      data: { planId: plan.id, name, description, sortOrder },
+      select: {
+        id: true, planId: true, name: true, description: true,
+        sortOrder: true, createdAt: true, updatedAt: true,
+      },
+    });
+
+    return res.status(201).json({ meal });
+  } catch (error) {
+    console.error("[nutrition:meals:create] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+nutritionRouter.patch("/meals/:mealId", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const mealIdParam = req.params.mealId;
+  const mealId = Array.isArray(mealIdParam) ? mealIdParam[0] : mealIdParam;
+  if (!mealId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const data: { name?: string; description?: string | null; sortOrder?: number } = {};
+
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "name")) {
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    if (!name) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.name = name;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "description")) {
+    const desc = req.body?.description;
+    if (!(desc === null || desc === undefined || typeof desc === "string")) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.description = typeof desc === "string" ? desc.trim() || null : null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "sortOrder")) {
+    const so = req.body?.sortOrder;
+    if (!Number.isInteger(so) || so < 0) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.sortOrder = so as number;
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existingMeal = await prisma.nutritionMeal.findFirst({
+      where: { id: mealId, plan: { trainerId: trainerProfile.id } },
+      select: { id: true },
+    });
+    if (!existingMeal) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const meal = await prisma.nutritionMeal.update({
+      where: { id: existingMeal.id },
+      data,
+      select: {
+        id: true, planId: true, name: true, description: true,
+        sortOrder: true, createdAt: true, updatedAt: true,
+      },
+    });
+
+    return res.json({ meal });
+  } catch (error) {
+    console.error("[nutrition:meals:update] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+nutritionRouter.delete("/meals/:mealId", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const mealIdParam = req.params.mealId;
+  const mealId = Array.isArray(mealIdParam) ? mealIdParam[0] : mealIdParam;
+  if (!mealId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existingMeal = await prisma.nutritionMeal.findFirst({
+      where: { id: mealId, plan: { trainerId: trainerProfile.id } },
+      select: { id: true },
+    });
+    if (!existingMeal) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await prisma.nutritionMeal.delete({ where: { id: existingMeal.id } });
+    return res.json({ deleted: true, mealId: existingMeal.id });
+  } catch (error) {
+    console.error("[nutrition:meals:delete] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 export { nutritionRouter };
