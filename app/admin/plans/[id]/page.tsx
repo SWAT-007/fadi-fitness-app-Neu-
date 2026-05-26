@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import ExercisePicker from '@/components/ExercisePicker'
 import { supabase } from '@/lib/supabase'
@@ -16,15 +16,46 @@ type ExerciseForm = {
 
 const emptyExForm: ExerciseForm = { name: '', description: '', sets: 3, reps: '10', target_weight: '', rest_seconds: '90', note: '' }
 
+type BackendPlanDetailResponse = {
+  plan: {
+    id: string
+    name: string
+    description: string | null
+    createdAt: string
+    updatedAt: string
+  }
+  days: Array<{
+    id: string
+    planId: string
+    name: string
+    description: string | null
+    sortOrder: number
+    exercises: Array<{
+      id: string
+      dayId: string
+      name: string
+      description: string | null
+      sets: number
+      reps: string
+      targetWeightKg: number | null
+      restSeconds: number | null
+      note: string | null
+      sortOrder: number
+      imageUrl: string | null
+      libraryId: string | null
+    }>
+  }>
+}
+
 export default function PlanBuilderPage() {
   const { id } = useParams<{ id: string }>()
-  const router = useRouter()
   const { showToast } = useToast()
 
   const [plan, setPlan] = useState<WorkoutPlan | null>(null)
   const [days, setDays] = useState<WorkoutDay[]>([])
   const [exercises, setExercises] = useState<Record<string, Exercise[]>>({})
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
 
   // Plan editing
   const [editingPlan, setEditingPlan] = useState(false)
@@ -45,37 +76,89 @@ export default function PlanBuilderPage() {
   const [expandedDayId, setExpandedDayId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const [planRes, daysRes] = await Promise.all([
-      supabase.from('workout_plans').select('*').eq('id', id).single(),
-      supabase.from('workout_days').select('*').eq('plan_id', id).order('sort_order'),
-    ])
-    if (!planRes.data) { router.push('/admin/plans'); return }
-    setPlan(planRes.data)
-    setPlanName(planRes.data.name)
-    setPlanDesc(planRes.data.description ?? '')
+    setLoading(true)
+    setLoadError('')
+    try {
+      const response = await fetch(`/api/backend/plans/${id}`, { cache: 'no-store' })
+      const payload = (await response.json().catch(() => null)) as BackendPlanDetailResponse | { message?: string; ok?: boolean } | null
 
-    const dayList = daysRes.data ?? []
-    setDays(dayList)
+      if (!response.ok) {
+        if (response.status === 401) {
+          setLoadError('Backend-Login erforderlich.')
+        } else if (response.status === 404) {
+          setLoadError('Plan nicht gefunden.')
+        } else {
+          setLoadError((payload && 'message' in payload && typeof payload.message === 'string' && payload.message) || 'Plan konnte nicht geladen werden.')
+        }
+        setPlan(null)
+        setDays([])
+        setExercises({})
+        setExpandedDayId(null)
+        return
+      }
 
-    if (dayList.length > 0) {
-      const exRes = await supabase
-        .from('exercises')
-        .select('*')
-        .in('day_id', dayList.map(d => d.id))
-        .order('sort_order')
-      const exByDay: Record<string, Exercise[]> = {}
-      dayList.forEach(d => { exByDay[d.id] = [] })
-      ;(exRes.data ?? []).forEach(ex => {
-        if (exByDay[ex.day_id]) exByDay[ex.day_id].push(ex)
-      })
-      setExercises(exByDay)
-      setExpandedDayId(prev => (prev && dayList.some(d => d.id === prev) ? prev : null))
-    } else {
+      if (!payload || !('plan' in payload) || !payload.plan || !Array.isArray(payload.days)) {
+        setLoadError('Plan konnte nicht geladen werden.')
+        setPlan(null)
+        setDays([])
+        setExercises({})
+        setExpandedDayId(null)
+        return
+      }
+
+      const mappedPlan = {
+        id: payload.plan.id,
+        trainer_id: '',
+        name: payload.plan.name,
+        description: payload.plan.description,
+        created_at: payload.plan.createdAt,
+        updated_at: payload.plan.updatedAt,
+      } as WorkoutPlan
+
+      const mappedDays = payload.days.map((day) => ({
+        id: day.id,
+        plan_id: day.planId,
+        name: day.name,
+        description: day.description,
+        sort_order: day.sortOrder,
+        created_at: payload.plan.createdAt,
+      })) as WorkoutDay[]
+
+      const mappedExercises: Record<string, Exercise[]> = {}
+      for (const day of payload.days) {
+        mappedExercises[day.id] = day.exercises.map((exercise) => ({
+          id: exercise.id,
+          day_id: exercise.dayId,
+          name: exercise.name,
+          description: exercise.description,
+          sets: exercise.sets,
+          reps: exercise.reps,
+          target_weight: exercise.targetWeightKg,
+          rest_seconds: exercise.restSeconds,
+          note: exercise.note,
+          sort_order: exercise.sortOrder,
+          image_url: exercise.imageUrl,
+          library_id: exercise.libraryId,
+          created_at: payload.plan.createdAt,
+        })) as Exercise[]
+      }
+
+      setPlan(mappedPlan)
+      setPlanName(mappedPlan.name)
+      setPlanDesc(mappedPlan.description ?? '')
+      setDays(mappedDays)
+      setExercises(mappedExercises)
+      setExpandedDayId(prev => (prev && mappedDays.some(d => d.id === prev) ? prev : null))
+    } catch {
+      setLoadError('Plan konnte nicht geladen werden.')
+      setPlan(null)
+      setDays([])
       setExercises({})
       setExpandedDayId(null)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
-  }, [id, router])
+  }, [id])
 
   useEffect(() => { load() }, [load])
 
@@ -196,6 +279,20 @@ export default function PlanBuilderPage() {
 
   if (loading) {
     return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto">
+        <Link href="/admin/plans" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-4">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          Zurück zu Pläne
+        </Link>
+        <div className="bg-white rounded-2xl border border-red-100 py-10 text-center">
+          <p className="text-red-600 text-sm">{loadError}</p>
+        </div>
+      </div>
+    )
   }
 
   return (
