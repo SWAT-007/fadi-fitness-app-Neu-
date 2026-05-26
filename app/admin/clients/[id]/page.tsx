@@ -516,15 +516,39 @@ export default function ClientDetailPage() {
     }
   }
 
-  const togglePlanActiveDeferred = async (apId: string, current: boolean) => {
-    void apId
-    void current
-    showToast('Aktivieren/Deaktivieren wird im nächsten Backend-Slice migriert.', 'danger')
+  const togglePlanActive = async (apId: string, current: boolean) => {
+    const response = await fetch(`/api/backend/client-assignments/${apId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: !current }),
+    })
+    if (!response.ok) {
+      const data = await response.json().catch(() => null) as { message?: string } | null
+      const msg = response.status === 401
+        ? 'Backend-Login erforderlich.'
+        : (data?.message ?? 'Konnte nicht aktualisiert werden.')
+      showToast(msg, 'danger')
+      return
+    }
+    showToast(!current ? 'Plan aktiviert ✓' : 'Plan deaktiviert', 'success')
+    await load()
   }
 
-  const removePlanDeferred = async (apId: string) => {
-    void apId
-    showToast('Plan entfernen wird im nächsten Backend-Slice migriert.', 'danger')
+  const removePlan = async (apId: string) => {
+    if (!confirm('Zuweisung entfernen?')) return
+    const response = await fetch(`/api/backend/client-assignments/${apId}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      const data = await response.json().catch(() => null) as { message?: string } | null
+      const msg = response.status === 401
+        ? 'Backend-Login erforderlich.'
+        : (data?.message ?? 'Konnte nicht entfernt werden.')
+      showToast(msg, 'danger')
+      return
+    }
+    showToast('Plan entfernt', 'danger')
+    await load()
   }
 
   const toggleLog = (logId: string) => {
@@ -1276,7 +1300,7 @@ export default function ClientDetailPage() {
                     <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ap.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {ap.is_active ? 'Aktiv' : 'Inaktiv'}
                     </span>
-                    <button onClick={() => togglePlanActiveDeferred(ap.id, ap.is_active)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100">
+                    <button onClick={() => togglePlanActive(ap.id, ap.is_active)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100">
                       {ap.is_active ? 'Deaktivieren' : 'Aktivieren'}
                     </button>
                     {(ap.plan as WorkoutPlan | undefined)?.id ? (
@@ -1287,7 +1311,7 @@ export default function ClientDetailPage() {
                         Öffnen
                       </Link>
                     ) : null}
-                    <button onClick={() => removePlanDeferred(ap.id)} className="text-xs text-red-500 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">
+                    <button onClick={() => removePlan(ap.id)} className="text-xs text-red-500 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">
                       Entfernen
                     </button>
                   </li>

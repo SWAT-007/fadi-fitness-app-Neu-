@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import { authRouter } from "./routes/auth";
 import { clientLinkTokensRouter } from "./routes/clientLinkTokens";
-import { clientsRouter } from "./routes/clients";
+import { clientAssignmentsRouter, clientsRouter } from "./routes/clients";
 import { meRouter } from "./routes/me";
 import { exercisesRouter, plansRouter, workoutDaysRouter } from "./routes/plans";
 
@@ -27,6 +27,7 @@ app.use("/api/v1/me", meRouter);
 app.use("/api/v1/plans", plansRouter);
 app.use("/api/v1/workout-days", workoutDaysRouter);
 app.use("/api/v1/exercises", exercisesRouter);
+app.use("/api/v1/client-assignments", clientAssignmentsRouter);
 
 app.get("/health", (_req, res) => {
   res.json({

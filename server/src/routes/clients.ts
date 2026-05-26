@@ -388,4 +388,129 @@ clientsRouter.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res)
   }
 });
 
-export { clientsRouter };
+const clientAssignmentsRouter = Router();
+
+clientAssignmentsRouter.patch("/:assignmentId", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const assignmentIdParam = req.params.assignmentId;
+  const assignmentId = Array.isArray(assignmentIdParam) ? assignmentIdParam[0] : assignmentIdParam;
+  if (!assignmentId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const activeInput = req.body?.active;
+  if (typeof activeInput !== "boolean") {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existing = await prisma.assignedPlan.findFirst({
+      where: {
+        id: assignmentId,
+        client: { trainerId: trainerProfile.id },
+        plan: { trainerId: trainerProfile.id },
+      },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const updated = await prisma.assignedPlan.update({
+      where: { id: existing.id },
+      data: { active: activeInput },
+      select: {
+        id: true,
+        clientId: true,
+        planId: true,
+        active: true,
+        assignedAt: true,
+        plan: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
+      },
+    });
+
+    return res.json({
+      assignment: {
+        id: updated.id,
+        clientId: updated.clientId,
+        planId: updated.planId,
+        active: updated.active,
+        assignedAt: updated.assignedAt,
+        plan: {
+          id: updated.plan.id,
+          name: updated.plan.name,
+          description: updated.plan.description,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("[client-assignments:update] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+clientAssignmentsRouter.delete("/:assignmentId", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const assignmentIdParam = req.params.assignmentId;
+  const assignmentId = Array.isArray(assignmentIdParam) ? assignmentIdParam[0] : assignmentIdParam;
+  if (!assignmentId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existing = await prisma.assignedPlan.findFirst({
+      where: {
+        id: assignmentId,
+        client: { trainerId: trainerProfile.id },
+        plan: { trainerId: trainerProfile.id },
+      },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await prisma.assignedPlan.delete({
+      where: { id: existing.id },
+    });
+
+    return res.json({ deleted: true, assignmentId: existing.id });
+  } catch (error) {
+    console.error("[client-assignments:delete] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+export { clientsRouter, clientAssignmentsRouter };
