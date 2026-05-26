@@ -413,6 +413,53 @@ plansRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) =>
   }
 });
 
+plansRouter.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const planIdParam = req.params.id;
+  const planId = Array.isArray(planIdParam) ? planIdParam[0] : planIdParam;
+  if (!planId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existingPlan = await prisma.workoutPlan.findFirst({
+      where: {
+        id: planId,
+        trainerId: trainerProfile.id,
+      },
+      select: { id: true },
+    });
+
+    if (!existingPlan) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await prisma.workoutPlan.delete({
+      where: { id: existingPlan.id },
+    });
+
+    return res.json({
+      deleted: true,
+      planId: existingPlan.id,
+    });
+  } catch (error) {
+    console.error("[plans:delete] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 plansRouter.post("/:id/days", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });

@@ -133,9 +133,19 @@ export default function PlansPage() {
 
   const handleDelete = async () => {
     if (!deleteId) return
-    const { error } = await supabase.from('workout_plans').delete().eq('id', deleteId)
+    const response = await fetch(`/api/backend/plans/${deleteId}`, {
+      method: 'DELETE',
+      cache: 'no-store',
+    })
+    const payload = await response.json().catch(() => null)
     setDeleteId(null)
-    if (!error) showToast('Plan geloescht', 'danger')
+    if (response.ok) {
+      showToast('Plan geloescht', 'danger')
+    } else if (response.status === 401) {
+      showToast('Backend-Login erforderlich.', 'danger')
+    } else {
+      showToast((payload && typeof payload.message === 'string' && payload.message) || 'Plan konnte nicht geloescht werden.', 'danger')
+    }
     await load()
   }
 
