@@ -163,9 +163,28 @@ export default function PlanBuilderPage() {
   useEffect(() => { load() }, [load])
 
   const savePlan = async () => {
-    await supabase.from('workout_plans').update({ name: planName, description: planDesc || null }).eq('id', id)
-    setPlan(p => p ? { ...p, name: planName, description: planDesc } : p)
+    const response = await fetch(`/api/backend/plans/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: planName,
+        description: planDesc || null,
+      }),
+    })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !payload?.plan) {
+      const msg =
+        response.status === 401
+          ? 'Backend-Login erforderlich.'
+          : (payload && typeof payload.message === 'string' && payload.message) || 'Plan konnte nicht gespeichert werden.'
+      showToast(msg, 'danger')
+      return
+    }
+    setPlan(p => p ? { ...p, name: payload.plan.name, description: payload.plan.description } : p)
+    setPlanName(payload.plan.name)
+    setPlanDesc(payload.plan.description ?? '')
     setEditingPlan(false)
+    await load()
     showToast('Plan gespeichert ✓', 'success')
   }
 

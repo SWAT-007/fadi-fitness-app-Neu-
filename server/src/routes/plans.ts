@@ -143,4 +143,83 @@ plansRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
   }
 });
 
+plansRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const planIdParam = req.params.id;
+  const planId = Array.isArray(planIdParam) ? planIdParam[0] : planIdParam;
+  if (!planId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const name =
+    typeof req.body?.name === "string"
+      ? req.body.name.trim()
+      : "";
+  const descriptionInput = req.body?.description;
+  const description =
+    descriptionInput === null
+      ? null
+      : typeof descriptionInput === "string"
+        ? descriptionInput
+        : null;
+
+  if (!name) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existingPlan = await prisma.workoutPlan.findFirst({
+      where: {
+        id: planId,
+        trainerId: trainerProfile.id,
+      },
+      select: { id: true },
+    });
+
+    if (!existingPlan) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const updatedPlan = await prisma.workoutPlan.update({
+      where: { id: existingPlan.id },
+      data: {
+        name,
+        description,
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.json({
+      plan: {
+        id: updatedPlan.id,
+        name: updatedPlan.name,
+        description: updatedPlan.description,
+        createdAt: updatedPlan.createdAt,
+        updatedAt: updatedPlan.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error("[plans:update] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 export { plansRouter };
