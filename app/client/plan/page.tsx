@@ -2,15 +2,32 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import type { AssignedPlan, WorkoutPlan, WorkoutDay } from '@/lib/types'
 import { StaggerItem } from '@/components/Motion'
+
+type PlanDay = {
+  id: string
+  name: string
+  description: string | null
+  sortOrder: number
+}
+
+type PlanEntry = {
+  id: string
+  planId: string
+  assignedAt: string
+  plan: {
+    id: string
+    name: string
+    description: string | null
+    days: PlanDay[]
+  }
+}
 
 export default function ClientPlanPage() {
   const router = useRouter()
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const [plans, setPlans] = useState<(AssignedPlan & { plan: WorkoutPlan & { workout_days: WorkoutDay[] } })[]>([])
+  const [plans, setPlans] = useState<PlanEntry[]>([])
   const [completedDayIds, setCompletedDayIds] = useState<Set<string>>(new Set())
   const [activeDayIds, setActiveDayIds] = useState<Set<string>>(new Set())
   const [menuOpenDayId, setMenuOpenDayId] = useState<string | null>(null)
@@ -21,61 +38,44 @@ export default function ClientPlanPage() {
     const load = async () => {
       try {
         setErrorMessage(null)
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setErrorMessage('Bitte melde dich an, um deinen Trainingsplan zu sehen.')
+
+        const [planRes, logsRes] = await Promise.all([
+          fetch('/api/backend/me/active-plan', { cache: 'no-store' }),
+          fetch('/api/backend/me/workout-logs/week', { cache: 'no-store' }),
+        ])
+
+        if (planRes.status === 401 || logsRes.status === 401) {
+          setErrorMessage('Bitte melde dich an, um deinen Trainingsplan zu sehen.')
+          setLoading(false)
+          return
+        }
+
+        if (!planRes.ok) throw new Error(`active-plan: ${planRes.status}`)
+        if (!logsRes.ok) throw new Error(`workout-logs: ${logsRes.status}`)
+
+        const planData = await planRes.json() as {
+          assignment: { id: string; planId: string; assignedAt: string } | null
+          plan: { id: string; name: string; description: string | null; days: PlanDay[] } | null
+        }
+        const logsData = await logsRes.json() as {
+          completedDayIds: string[]
+          activeDayIds: string[]
+        }
+
+        if (planData.assignment && planData.plan) {
+          setPlans([{
+            id: planData.assignment.id,
+            planId: planData.assignment.planId,
+            assignedAt: planData.assignment.assignedAt,
+            plan: planData.plan,
+          }])
+        } else {
+          setPlans([])
+        }
+
+        setCompletedDayIds(new Set(logsData.completedDayIds ?? []))
+        setActiveDayIds(new Set(logsData.activeDayIds ?? []))
         setLoading(false)
-        return
-      }
-
-      const { data: client, error: clientError } = await supabase
-        .from('clients').select('id').eq('user_id', user.id).maybeSingle()
-      if (clientError) throw clientError
-      if (!client) { setLoading(false); return }
-
-      // Monday of current week
-      const now = new Date()
-      const dayOfWeek = now.getDay()
-      const monday = new Date(now)
-      monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
-      monday.setHours(0, 0, 0, 0)
-      const weekStart = monday.toISOString().split('T')[0]
-
-      const [plansRes, weekLogsRes, activeLogsRes] = await Promise.all([
-        supabase
-          .from('assigned_plans')
-          .select('*, plan:workout_plans(*, workout_days(*))')
-          .eq('client_id', client.id)
-          .eq('is_active', true)
-          .order('assigned_at', { ascending: false }),
-        supabase
-          .from('workout_logs')
-          .select('day_id')
-          .eq('client_id', client.id)
-          .not('completed_at', 'is', null)
-          .gte('date', weekStart),
-        supabase
-          .from('workout_logs')
-          .select('day_id')
-          .eq('client_id', client.id)
-          .is('completed_at', null),
-      ])
-      if (plansRes.error) throw plansRes.error
-      if (weekLogsRes.error) throw weekLogsRes.error
-      if (activeLogsRes.error) throw activeLogsRes.error
-
-      // Deduplizieren: gleicher Plan darf nur einmal erscheinen
-      const all = (plansRes.data ?? []) as (AssignedPlan & { plan: WorkoutPlan & { workout_days: WorkoutDay[] } })[]
-      const seen = new Set<string>()
-      const unique = all.filter(ap => {
-        if (seen.has(ap.plan_id)) return false
-        seen.add(ap.plan_id)
-        return true
-      })
-      setPlans(unique)
-      setCompletedDayIds(new Set((weekLogsRes.data ?? []).map(r => r.day_id)))
-      setActiveDayIds(new Set((activeLogsRes.data ?? []).map(r => r.day_id)))
-      setLoading(false)
       } catch (error) {
         console.error('Failed to load client plans', error)
         setErrorMessage('Dein Trainingsplan konnte gerade nicht geladen werden.')
@@ -118,8 +118,7 @@ export default function ClientPlanPage() {
         </div>
       ) : (
         plans.map((ap, planIndex) => {
-          const sortedDays = [...(ap.plan.workout_days ?? [])]
-            .sort((a, b) => a.sort_order - b.sort_order)
+          const sortedDays = [...(ap.plan.days ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)
 
           return (
             <StaggerItem key={ap.id} index={planIndex} className="mb-6">
@@ -129,7 +128,7 @@ export default function ClientPlanPage() {
                   <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Aktueller Plan</p>
                   <h2 className="font-bold text-gray-900 mt-0.5">{ap.plan.name}</h2>
                   <p className="text-xs text-gray-500 mt-1">
-                    Zugewiesen am {new Date(ap.assigned_at).toLocaleDateString('de-DE')}
+                    Zugewiesen am {new Date(ap.assignedAt).toLocaleDateString('de-DE')}
                   </p>
                 </div>
 
