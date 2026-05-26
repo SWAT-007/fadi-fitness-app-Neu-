@@ -48,6 +48,27 @@ type BackendClientPayload = {
   }
 }
 
+type BackendPlanListItem = {
+  id: string
+  name?: string
+  title?: string
+  description?: string | null
+  createdAt?: string
+}
+
+type BackendAssignmentItem = {
+  id: string
+  clientId: string
+  planId: string
+  active: boolean
+  assignedAt: string
+  plan?: {
+    id: string
+    name: string
+    description?: string | null
+  } | null
+}
+
 function formatDuration(seconds: number | null | undefined) {
   if (!seconds) return null
   const m = Math.floor(seconds / 60)
@@ -234,8 +255,15 @@ export default function ClientDetailPage() {
         created_at: backendClient.createdAt ?? new Date().toISOString(),
       }
 
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      const assignmentsResponse = await fetch(`/api/backend/clients/${id}/assignments`, {
+        cache: 'no-store',
+      })
+      const assignmentsPayload = (await assignmentsResponse.json().catch(() => null)) as { assignments?: BackendAssignmentItem[]; message?: string } | null
+
+      const plansResponse = await fetch('/api/backend/plans', {
+        cache: 'no-store',
+      })
+      const plansPayload = (await plansResponse.json().catch(() => null)) as { plans?: BackendPlanListItem[]; message?: string } | null
 
       const now = new Date()
       const dayOfWeek = now.getDay()
@@ -251,14 +279,12 @@ export default function ClientDetailPage() {
       chartStart.setDate(monday.getDate() - 49)
       const chartStartStr = chartStart.toISOString().split('T')[0]
 
-      const [assignedResult, assignedNutritionResult, plansResult, logsResult, historyResult, progressResult, analyseResult, chartResult, checkinsResult, lastWeekResult] = await Promise.allSettled([
-        supabase.from('assigned_plans').select('*, plan:workout_plans(*)').eq('client_id', id).order('assigned_at', { ascending: false }),
+      const [assignedNutritionResult, logsResult, historyResult, progressResult, analyseResult, chartResult, checkinsResult, lastWeekResult] = await Promise.allSettled([
         supabase
           .from('assigned_nutrition_plans')
           .select('id, client_id, plan_id, assigned_at, is_active, plan:nutrition_plans(id, name)')
           .eq('client_id', id)
           .order('assigned_at', { ascending: false }),
-        supabase.from('workout_plans').select('*').eq('trainer_id', user.id).order('name'),
         supabase.from('workout_logs').select('id', { count: 'exact', head: true }).eq('client_id', id).not('completed_at', 'is', null),
         supabase.from('workout_logs')
           .select('*, workout_day:workout_days(name), exercise_logs(id, sets_done, actual_weight, actual_reps, completed, exercise:exercises(name))')
@@ -294,9 +320,7 @@ export default function ClientDetailPage() {
         return result.value
       }
 
-      const assignedRes = resolveLegacy(assignedResult, 'assigned_plans')
       const assignedNutritionRes = resolveLegacy(assignedNutritionResult, 'assigned_nutrition_plans')
-      const plansRes = resolveLegacy(plansResult, 'workout_plans')
       const logsRes = resolveLegacy(logsResult, 'workout_logs_count')
       const historyRes = resolveLegacy(historyResult, 'workout_logs_history')
       const progressRes = resolveLegacy(progressResult, 'progress_logs')
@@ -305,9 +329,7 @@ export default function ClientDetailPage() {
       const checkinsRes = resolveLegacy(checkinsResult, 'weekly_checkins')
       const lastWeekRes = resolveLegacy(lastWeekResult, 'workout_logs_last_week')
 
-      if (assignedRes?.error) console.warn('[client-detail:legacy] assigned_plans unavailable', assignedRes.error)
       if (assignedNutritionRes?.error) console.warn('[client-detail:legacy] assigned_nutrition_plans unavailable', assignedNutritionRes.error)
-      if (plansRes?.error) console.warn('[client-detail:legacy] workout_plans unavailable', plansRes.error)
       if (logsRes?.error) console.warn('[client-detail:legacy] workout_logs_count unavailable', logsRes.error)
       if (historyRes?.error) console.warn('[client-detail:legacy] workout_logs_history unavailable', historyRes.error)
       if (progressRes?.error) console.warn('[client-detail:legacy] progress_logs unavailable', progressRes.error)
@@ -320,7 +342,34 @@ export default function ClientDetailPage() {
       setProfileName(normalizedClient.full_name ?? '')
       setProfilePhone(normalizedClient.phone ?? '')
       setNotesValue(normalizedClient.notes ?? '')
-      setAssignedPlans(((assignedRes?.data ?? []) as AssignedPlan[]))
+      if (assignmentsResponse.ok) {
+        const backendAssignments = Array.isArray(assignmentsPayload?.assignments) ? assignmentsPayload.assignments : []
+        setAssignedPlans(
+          backendAssignments.map((assignment) => ({
+            id: assignment.id,
+            client_id: assignment.clientId,
+            plan_id: assignment.planId,
+            assigned_at: assignment.assignedAt,
+            is_active: assignment.active,
+            plan: assignment.plan
+              ? {
+                  id: assignment.plan.id,
+                  trainer_id: '',
+                  name: assignment.plan.name,
+                  description: assignment.plan.description ?? null,
+                  created_at: new Date().toISOString(),
+                }
+              : undefined,
+          })) as AssignedPlan[],
+        )
+      } else {
+        if (assignmentsResponse.status === 401) {
+          setLoadError('Backend-Login erforderlich.')
+        } else {
+          console.warn('[client-detail:backend] assignments unavailable', assignmentsPayload?.message ?? 'unknown')
+        }
+        setAssignedPlans([])
+      }
       const nutritionAssignments: NutritionAssignmentSummary[] = (((assignedNutritionRes?.data ?? []) as Array<{
         id: string
         plan_id: string
@@ -340,7 +389,25 @@ export default function ClientDetailPage() {
         }
       })
       setAssignedNutritionPlans(nutritionAssignments)
-      setAvailablePlans(plansRes?.data ?? [])
+      if (plansResponse.ok) {
+        const backendPlans = Array.isArray(plansPayload?.plans) ? plansPayload.plans : []
+        setAvailablePlans(
+          backendPlans.map((plan) => ({
+            id: plan.id,
+            trainer_id: '',
+            name: plan.name ?? plan.title ?? '',
+            description: plan.description ?? null,
+            created_at: plan.createdAt ?? new Date().toISOString(),
+          })) as WorkoutPlan[],
+        )
+      } else {
+        if (plansResponse.status === 401) {
+          setLoadError('Backend-Login erforderlich.')
+        } else {
+          console.warn('[client-detail:backend] plans unavailable', plansPayload?.message ?? 'unknown')
+        }
+        setAvailablePlans([])
+      }
       setWorkoutLogs(Array.from({ length: logsRes?.count ?? 0 }) as WorkoutLog[])
       setHistoryLogs((historyRes?.data ?? []) as WorkoutLogDetail[])
       setProgressLogs(progressRes?.data ?? [])
@@ -423,49 +490,41 @@ export default function ClientDetailPage() {
   const handleAssignPlan = async () => {
     if (!selectedPlanId) return
     setAssigning(true)
-    const { error: deactivateError } = await supabase
-      .from('assigned_plans')
-      .update({ is_active: false })
-      .eq('client_id', id)
-      .eq('is_active', true)
-    if (deactivateError) {
-      showToast('Plan konnte nicht zugewiesen werden.', 'danger')
-      setAssigning(false)
-      return
-    }
-
-    const { error } = await supabase.from('assigned_plans').insert({ client_id: id, plan_id: selectedPlanId, is_active: true })
-    if (error) {
-      showToast('Plan konnte nicht zugewiesen werden.', 'danger')
-      setAssigning(false)
-      return
-    }
-    if (!error && client?.user_id) {
-      const assignedPlan = availablePlans.find(plan => plan.id === selectedPlanId)
-      await supabase.from('notifications').insert({
-        client_id: client.user_id,
-        type: 'workout_plan',
-        title: 'Neuer Trainingsplan zugewiesen',
-        body: assignedPlan?.name ?? null,
-        is_read: false,
+    try {
+      const response = await fetch(`/api/backend/plans/${selectedPlanId}/assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: id }),
       })
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null
+      if (!response.ok) {
+        if (response.status === 401) {
+          showToast('Backend-Login erforderlich.', 'danger')
+        } else {
+          showToast(payload?.message ?? 'Plan konnte nicht zugewiesen werden.', 'danger')
+        }
+        return
+      }
+
+      showToast('Plan zugewiesen ✓', 'success')
+      setSelectedPlanId('')
+      await load()
+    } catch {
+      showToast('Netzwerkfehler bei der Zuweisung.', 'danger')
+    } finally {
+      setAssigning(false)
     }
-    showToast('Plan zugewiesen ✓', 'success')
-    setSelectedPlanId('')
-    await load()
-    setAssigning(false)
   }
 
-  const togglePlanActive = async (apId: string, current: boolean) => {
-    await supabase.from('assigned_plans').update({ is_active: !current }).eq('id', apId)
-    showToast(!current ? 'Plan aktiviert ✓' : 'Plan deaktiviert', 'success')
-    await load()
+  const togglePlanActiveDeferred = async (apId: string, current: boolean) => {
+    void apId
+    void current
+    showToast('Aktivieren/Deaktivieren wird im nächsten Backend-Slice migriert.', 'danger')
   }
 
-  const removePlan = async (apId: string) => {
-    await supabase.from('assigned_plans').delete().eq('id', apId)
-    showToast('Plan entfernt', 'danger')
-    await load()
+  const removePlanDeferred = async (apId: string) => {
+    void apId
+    showToast('Plan entfernen wird im nächsten Backend-Slice migriert.', 'danger')
   }
 
   const toggleLog = (logId: string) => {
@@ -1217,7 +1276,7 @@ export default function ClientDetailPage() {
                     <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ap.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {ap.is_active ? 'Aktiv' : 'Inaktiv'}
                     </span>
-                    <button onClick={() => togglePlanActive(ap.id, ap.is_active)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100">
+                    <button onClick={() => togglePlanActiveDeferred(ap.id, ap.is_active)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100">
                       {ap.is_active ? 'Deaktivieren' : 'Aktivieren'}
                     </button>
                     {(ap.plan as WorkoutPlan | undefined)?.id ? (
@@ -1228,7 +1287,7 @@ export default function ClientDetailPage() {
                         Öffnen
                       </Link>
                     ) : null}
-                    <button onClick={() => removePlan(ap.id)} className="text-xs text-red-500 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">
+                    <button onClick={() => removePlanDeferred(ap.id)} className="text-xs text-red-500 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">
                       Entfernen
                     </button>
                   </li>

@@ -177,6 +177,82 @@ clientsRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) =>
   }
 });
 
+clientsRouter.get("/:id/assignments", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!clientId) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const client = await prisma.clientProfile.findFirst({
+      where: {
+        id: clientId,
+        trainerId: trainerProfile.id,
+      },
+      select: { id: true },
+    });
+
+    if (!client) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const assignments = await prisma.assignedPlan.findMany({
+      where: {
+        clientId: client.id,
+        plan: {
+          trainerId: trainerProfile.id,
+        },
+      },
+      orderBy: { assignedAt: "desc" },
+      select: {
+        id: true,
+        clientId: true,
+        planId: true,
+        active: true,
+        assignedAt: true,
+        plan: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
+      },
+    });
+
+    return res.json({
+      assignments: assignments.map((assignment) => ({
+        id: assignment.id,
+        clientId: assignment.clientId,
+        planId: assignment.planId,
+        active: assignment.active,
+        assignedAt: assignment.assignedAt,
+        plan: {
+          id: assignment.plan.id,
+          name: assignment.plan.name,
+          description: assignment.plan.description,
+        },
+      })),
+    });
+  } catch (error) {
+    console.error("[clients:assignments] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 clientsRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });
