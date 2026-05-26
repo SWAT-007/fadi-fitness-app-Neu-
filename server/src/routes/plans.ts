@@ -1028,6 +1028,164 @@ exercisesRouter.get("/library", requireAuth, async (req: AuthenticatedRequest, r
   }
 });
 
+exercisesRouter.post("/library", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  const muscleGroupInput = req.body?.muscleGroup;
+  const equipmentInput = req.body?.equipment;
+  const imageUrlInput = req.body?.imageUrl;
+
+  if (!name) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  if (
+    !(muscleGroupInput === null || muscleGroupInput === undefined || typeof muscleGroupInput === "string") ||
+    !(equipmentInput === null || equipmentInput === undefined || typeof equipmentInput === "string") ||
+    !(imageUrlInput === null || imageUrlInput === undefined || typeof imageUrlInput === "string")
+  ) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const created = await prisma.exerciseLibrary.create({
+      data: {
+        name,
+        muscleGroup: typeof muscleGroupInput === "string" ? muscleGroupInput.trim() || null : null,
+        equipment: typeof equipmentInput === "string" ? equipmentInput.trim() || null : null,
+        imageUrl: typeof imageUrlInput === "string" ? imageUrlInput.trim() || null : null,
+      },
+      select: {
+        id: true,
+        name: true,
+        muscleGroup: true,
+        equipment: true,
+        imageUrl: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.status(201).json({ exercise: created });
+  } catch (error) {
+    console.error("[exercises:create-library] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+exercisesRouter.patch("/library/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const idParam = req.params.id;
+  const id = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!id) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const hasName = Object.prototype.hasOwnProperty.call(req.body ?? {}, "name");
+  const hasMuscleGroup = Object.prototype.hasOwnProperty.call(req.body ?? {}, "muscleGroup");
+  const hasEquipment = Object.prototype.hasOwnProperty.call(req.body ?? {}, "equipment");
+  const hasImageUrl = Object.prototype.hasOwnProperty.call(req.body ?? {}, "imageUrl");
+
+  const data: {
+    name?: string;
+    muscleGroup?: string | null;
+    equipment?: string | null;
+    imageUrl?: string | null;
+  } = {};
+
+  if (hasName) {
+    if (typeof req.body?.name !== "string" || !req.body.name.trim()) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.name = req.body.name.trim();
+  }
+
+  if (hasMuscleGroup) {
+    if (!(req.body?.muscleGroup === null || typeof req.body?.muscleGroup === "string")) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.muscleGroup =
+      typeof req.body?.muscleGroup === "string" ? req.body.muscleGroup.trim() || null : null;
+  }
+
+  if (hasEquipment) {
+    if (!(req.body?.equipment === null || typeof req.body?.equipment === "string")) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.equipment = typeof req.body?.equipment === "string" ? req.body.equipment.trim() || null : null;
+  }
+
+  if (hasImageUrl) {
+    if (!(req.body?.imageUrl === null || typeof req.body?.imageUrl === "string")) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.imageUrl = typeof req.body?.imageUrl === "string" ? req.body.imageUrl.trim() || null : null;
+  }
+
+  try {
+    const existing = await prisma.exerciseLibrary.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const updated = await prisma.exerciseLibrary.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        name: true,
+        muscleGroup: true,
+        equipment: true,
+        imageUrl: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.json({ exercise: updated });
+  } catch (error) {
+    console.error("[exercises:update-library] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+exercisesRouter.delete("/library/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const idParam = req.params.id;
+  const id = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!id) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  try {
+    const existing = await prisma.exerciseLibrary.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await prisma.exerciseLibrary.delete({ where: { id } });
+    return res.json({ deleted: true, id });
+  } catch (error) {
+    console.error("[exercises:delete-library] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 exercisesRouter.patch("/:exerciseId", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });
