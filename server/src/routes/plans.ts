@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 
 const plansRouter = Router();
+const workoutDaysRouter = Router();
 
 const mapPlan = (plan: {
   id: string;
@@ -352,4 +353,86 @@ plansRouter.post("/:id/days", requireAuth, async (req: AuthenticatedRequest, res
   }
 });
 
-export { plansRouter };
+workoutDaysRouter.patch("/:dayId", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const dayIdParam = req.params.dayId;
+  const dayId = Array.isArray(dayIdParam) ? dayIdParam[0] : dayIdParam;
+  if (!dayId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  const descriptionInput = req.body?.description;
+  const description =
+    descriptionInput === null
+      ? null
+      : typeof descriptionInput === "string"
+        ? descriptionInput
+        : null;
+
+  if (!name) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existingDay = await prisma.workoutDay.findFirst({
+      where: {
+        id: dayId,
+        plan: {
+          trainerId: trainerProfile.id,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!existingDay) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const updatedDay = await prisma.workoutDay.update({
+      where: { id: existingDay.id },
+      data: {
+        name,
+        description,
+      },
+      select: {
+        id: true,
+        planId: true,
+        name: true,
+        description: true,
+        sortOrder: true,
+        createdAt: true,
+      },
+    });
+
+    return res.json({
+      day: {
+        id: updatedDay.id,
+        planId: updatedDay.planId,
+        name: updatedDay.name,
+        description: updatedDay.description,
+        sortOrder: updatedDay.sortOrder,
+        createdAt: updatedDay.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("[plans:update-day] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+export { plansRouter, workoutDaysRouter };

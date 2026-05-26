@@ -194,7 +194,23 @@ export default function PlanBuilderPage() {
   const saveDay = async (e: React.FormEvent) => {
     e.preventDefault()
     if (dayModal.editing) {
-      await supabase.from('workout_days').update({ name: dayName, description: dayDesc || null }).eq('id', dayModal.editing.id)
+      const response = await fetch(`/api/backend/workout-days/${dayModal.editing.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: dayName,
+          description: dayDesc || null,
+        }),
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const msg =
+          response.status === 401
+            ? 'Backend-Login erforderlich.'
+            : (payload && typeof payload.message === 'string' && payload.message) || 'Trainingstag konnte nicht gespeichert werden.'
+        showToast(msg, 'danger')
+        return
+      }
     } else {
       const response = await fetch(`/api/backend/plans/${id}/days`, {
         method: 'POST',
