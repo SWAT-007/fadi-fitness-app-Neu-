@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+
 import {
   calcMacros,
   type ClientMealFood, type Food, type FoodCategory,
@@ -443,77 +443,98 @@ export default function ClientNutritionPage() {
       return next
     })
 
+  const DEFERRED_WRITE_MESSAGE = 'Diese Aktion wird im nächsten Migrationsschritt auf das Backend umgestellt.'
+
   const load = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
+    setLoading(true)
+    try {
+      const response = await fetch('/api/backend/me/nutrition', { cache: 'no-store' })
+      const payload = (await response.json().catch(() => null)) as {
+        client?: { id: string; fullName: string; trainerId: string }
+        activeNutritionPlan?: {
+          id: string
+          clientId: string
+          planId: string
+          active: boolean
+          assignedAt: string
+          plan: {
+            id: string
+            name: string
+            description: string | null
+            meals: Array<{ id: string; planId: string; name: string; sortOrder: number }>
+          }
+        } | null
+        foods?: Array<{
+          id: string
+          name: string
+          caloriesPer100g: number | null
+          proteinPer100g: number | null
+          carbsPer100g: number | null
+          fatPer100g: number | null
+          unit: string | null
+        }>
+      } | null
 
-    const { data: client } = await supabase
-      .from('clients').select('id, user_id').eq('user_id', user.id).maybeSingle()
-    if (!client) { setLoading(false); return }
-    setClientId(client.id)
-    setUserId(user.id)
+      if (!response.ok || !payload) return
 
-    // Load meal history
-    const { data: historyData } = await supabase
-      .from('meal_history')
-      .select('*')
-      .eq('client_id', user.id)
-      .order('logged_at', { ascending: false })
-      .limit(50)
-    setMealHistory((historyData ?? []) as MealHistoryEntry[])
+      setClientId(payload.client?.id ?? null)
+      // userId stays null — MealDrinks writes are deferred for this slice
 
-    const { data: anp } = await supabase
-      .from('assigned_nutrition_plans')
-      .select('plan_id, is_active, assigned_at')
-      .eq('client_id', client.id)
-      .eq('is_active', true)
-      .order('assigned_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (!anp) { setLoading(false); return }
+      const anp = payload.activeNutritionPlan
+      if (!anp) {
+        setFoods([])
+        return
+      }
 
-    const { data: planData } = await supabase
-      .from('nutrition_plans')
-      .select('*, nutrition_meals(*)')
-      .eq('id', anp.plan_id)
-      .single()
-    if (!planData) { setLoading(false); return }
+      const mappedPlan: FullPlan = {
+        id: anp.plan.id,
+        trainer_id: '',
+        name: anp.plan.name,
+        description: anp.plan.description,
+        goal: 'maintain',
+        target_calories: 2000,
+        target_protein: 150,
+        target_carbs: 200,
+        target_fat: 70,
+        created_at: anp.assignedAt,
+        nutrition_meals: (anp.plan.meals ?? []).map((m) => ({
+          id: m.id,
+          plan_id: m.planId,
+          name: m.name,
+          sort_order: m.sortOrder,
+          target_kcal: 0,
+          target_protein: 0,
+          target_carbs: 0,
+          target_fat: 0,
+          target_vegetable_g: 0,
+          allowed_categories: ['protein', 'carbs', 'fat', 'vegetable'] as FoodCategory[],
+          created_at: '',
+        })),
+      }
+      setPlan(mappedPlan)
 
-    const sorted = {
-      ...planData,
-      nutrition_meals: [...(planData.nutrition_meals ?? [])]
-        .sort((a: NutritionMeal, b: NutritionMeal) => a.sort_order - b.sort_order),
-    } as FullPlan
-    setPlan(sorted)
+      const mappedFoods: Food[] = (payload.foods ?? []).map((f) => ({
+        id: f.id,
+        name: f.name,
+        kcal_per_100g: f.caloriesPer100g ?? 0,
+        protein_per_100g: f.proteinPer100g ?? 0,
+        carbs_per_100g: f.carbsPer100g ?? 0,
+        fat_per_100g: f.fatPer100g ?? 0,
+        category: 'other' as FoodCategory,
+        unit: f.unit ?? 'g',
+        trainer_id: null,
+        created_at: '',
+      } as Food))
+      setFoods(mappedFoods)
 
-    const { data: foodsData } = await supabase.from('foods').select('*').order('name')
-    setFoods(foodsData ?? [])
-
-    // Nur heutiger Tag — ab Mitternacht (lokale Zeit in UTC umgerechnet)
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
-
-    const mealIds = sorted.nutrition_meals.map(m => m.id)
-    if (mealIds.length > 0) {
-      const { data: cmfData } = await supabase
-        .from('client_meal_foods')
-        .select('*, food:foods(*)')
-        .eq('client_id', client.id)
-        .in('meal_id', mealIds)
-        .gte('created_at', todayStart.toISOString())
-      setCmf((cmfData ?? []) as CmfWithFood[])
+      setCmf([])
+      setMealHistory([])
+      setDrinkLogs([])
+    } catch {
+      // network or parse error — leave plan=null
+    } finally {
+      setLoading(false)
     }
-
-    // Load today's drink logs
-    const { data: drinkData } = await supabase
-      .from('drink_logs')
-      .select('*')
-      .eq('client_id', user.id)
-      .gte('logged_at', todayStart.toISOString())
-      .order('logged_at', { ascending: true })
-    setDrinkLogs((drinkData ?? []) as DrinkLog[])
-
-    setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -522,250 +543,30 @@ export default function ClientNutritionPage() {
   //     nicht berechnet") und resettet auch andere Slots dieser Mahlzeit auf 0,
   //     damit Kunde am Ende „Berechnen" klickt. ────────────────────────────
 
-  const pickSlot = async (mealId: string, food: Food) => {
-    if (!clientId || !plan) return
-    const meal = plan.nutrition_meals.find(m => m.id === mealId)
-    if (!meal) return
-    const isFree = isFreeCat(food.category)
-
-    const oldOfSameCat = cmf.filter(c => c.meal_id === mealId && c.food.category === food.category)
-    if (oldOfSameCat.length > 0) {
-      await supabase.from('client_meal_foods').delete().in('id', oldOfSameCat.map(c => c.id))
-    }
-
-    // Bei Makro-Slot: andere Makro-Slots zurücksetzen, damit neu berechnet wird.
-    // Free-Slot (Gemüse) ändert NICHT die Makro-Slots.
-    if (!isFree) {
-      const otherMacroSlots = cmf.filter(c =>
-        c.meal_id === mealId &&
-        c.food.category !== food.category &&
-        !isFreeCat(c.food.category)
-      )
-      if (otherMacroSlots.length > 0) {
-        await Promise.all(otherMacroSlots.map(s =>
-          supabase.from('client_meal_foods').update({ amount_g: 0 }).eq('id', s.id)
-        ))
-      }
-    }
-
-    // Gemüse bekommt sofort die Trainer-Vorgabe; Makro-Slots erst nach Berechnen.
-    const vegGrams = Math.max(0, Math.round(meal.target_vegetable_g ?? 0))
-    const insertPayload = {
-      client_id: clientId, meal_id: mealId, food_id: food.id,
-      amount_g: isFree ? vegGrams : 0,
-      sort_order: isFree ? 99 : SLOT_CATS.indexOf(food.category),
-    }
-    const { data: inserted, error: insErr } = await supabase
-      .from('client_meal_foods')
-      .insert(insertPayload)
-      .select('*, food:foods(*)')
-      .single()
-    if (insErr) {
-      console.error('[cmf insert]', insErr)
-      return
-    }
-
-    setCmf(prev => {
-      const filtered = prev.filter(c => !(c.meal_id === mealId && c.food.category === food.category))
-      const updated = filtered.map(c => {
-        if (c.meal_id !== mealId) return c
-        if (isFree) return c                        // Free-Pick ändert nichts am Rest
-        if (isFreeCat(c.food.category)) return c    // Makro-Pick lässt Free-Slots in Ruhe
-        return { ...c, amount_g: 0 }
-      })
-      return [...updated, inserted as CmfWithFood]
-    })
-    setOpenPicker(null)
+  const pickSlot = async (_mealId: string, _food: Food) => {
+    showToast('info', DEFERRED_WRITE_MESSAGE)
   }
 
-  const clearSlot = async (mealId: string, cat: FoodCategory) => {
-    const items = cmf.filter(c => c.meal_id === mealId && c.food.category === cat)
-    if (items.length === 0) return
-    const isFree = isFreeCat(cat)
-    await supabase.from('client_meal_foods').delete().in('id', items.map(c => c.id))
-
-    // Bei Makro-Slot: verbleibende Makro-Slots zurücksetzen.
-    // Bei Free-Slot: nichts ändern.
-    if (!isFree) {
-      const remainingMacro = cmf.filter(c =>
-        c.meal_id === mealId &&
-        c.food.category !== cat &&
-        !isFreeCat(c.food.category)
-      )
-      if (remainingMacro.length > 0) {
-        await Promise.all(remainingMacro.map(c =>
-          supabase.from('client_meal_foods').update({ amount_g: 0 }).eq('id', c.id)
-        ))
-      }
-    }
-
-    setCmf(prev => prev
-      .filter(c => !(c.meal_id === mealId && c.food.category === cat))
-      .map(c => {
-        if (c.meal_id !== mealId) return c
-        if (isFree) return c
-        if (isFreeCat(c.food.category)) return c
-        return { ...c, amount_g: 0 }
-      })
-    )
+  const clearSlot = async (_mealId: string, _cat: FoodCategory) => {
+    showToast('info', DEFERRED_WRITE_MESSAGE)
   }
 
   // ─── „Berechnen": löst NNLS für alle Slots einer Mahlzeit ────────────────
 
-  const calcMeal = async (mealId: string) => {
-    if (!plan) return
-    const meal = plan.nutrition_meals.find(m => m.id === mealId)
-    if (!meal) return
-    const items = cmf.filter(c => c.meal_id === mealId)
-    if (items.length === 0) return
-
-    // Makro-Slots werden über NNLS gelöst, Free-Slots (Gemüse) bekommen den
-    // vom Trainer festgelegten Wert (target_vegetable_g).
-    // Extra-Quellen (manuell eingetragen) werden vorab von den Zielen abgezogen.
-    const adjustedMeal = {
-      ...meal,
-      target_protein: Math.max(0, meal.target_protein - getExtraG(mealId, 'protein')),
-      target_carbs:   Math.max(0, meal.target_carbs   - getExtraG(mealId, 'carbs')),
-      target_fat:     Math.max(0, meal.target_fat     - getExtraG(mealId, 'fat')),
-    }
-    const macroFoods = items.filter(c => !isFreeCat(c.food.category)).map(c => c.food)
-    const { grams } = solveGrams(adjustedMeal, macroFoods)
-    const vegGrams = Math.max(0, Math.round(meal.target_vegetable_g ?? 0))
-
-    const updates = items.map(c => ({
-      id: c.id,
-      amount_g: isFreeCat(c.food.category) ? vegGrams : (grams.get(c.food.id) ?? c.amount_g),
-    }))
-
-    await Promise.all(updates.map(u =>
-      supabase.from('client_meal_foods').update({ amount_g: u.amount_g }).eq('id', u.id)
-    ))
-
-    const idToGrams = new Map(updates.map(u => [u.id, u.amount_g]))
-    setCmf(prev => prev.map(c =>
-      idToGrams.has(c.id) ? { ...c, amount_g: idToGrams.get(c.id)! } : c
-    ))
+  const calcMeal = async (_mealId: string) => {
+    showToast('info', DEFERRED_WRITE_MESSAGE)
   }
 
   // ─── Meal History: save ───────────────────────────────────────────────────
 
-  const saveMealToHistory = async (mealId: string) => {
-    if (!userId || !plan) return
-    const meal = plan.nutrition_meals.find(m => m.id === mealId)
-    if (!meal) return
-
-    const mealItems = cmf.filter(c => c.meal_id === mealId && c.amount_g > 0)
-    if (mealItems.length === 0) return
-
-    setSavingHistoryId(mealId)
-
-    // Use custom name if provided, else fall back to the plan meal name
-    const customName = customMealNames[mealId]?.trim()
-    const mealName = customName || meal.name
-
-    const ingredients: HistoryIngredient[] = mealItems.map(item => {
-      const m = macrosFor(item)
-      return {
-        food_id:  item.food_id,
-        category: item.food.category,
-        name:     item.food.name,
-        grams:    Math.round(item.amount_g),
-        calories: Math.round(m.calories),
-        protein:  Math.round(m.protein),
-        carbs:    Math.round(m.carbs),
-        fat:      Math.round(m.fat),
-      }
-    })
-
-    // Append extra (Zusatz) food slots to the ingredients list
-    const mealExtraSlots = extraSlots[mealId] ?? {}
-    for (const [cat, slot] of Object.entries(mealExtraSlots) as [FoodCategory, ExtraSlot][]) {
-      if (!slot) continue
-      const g = Math.round(Math.max(0, parseFloat(slot.grams) || 0))
-      if (g <= 0) continue
-      const em = calcMacros(slot.food, g)
-      ingredients.push({
-        food_id:  slot.food.id,
-        category: cat,
-        name:     slot.food.name + ' (Zusatz)',
-        grams:    g,
-        calories: Math.round(em.calories),
-        protein:  Math.round(em.protein),
-        carbs:    Math.round(em.carbs),
-        fat:      Math.round(em.fat),
-      })
-    }
-
-    const { data } = await supabase
-      .from('meal_history')
-      .insert({
-        client_id:      userId,
-        meal_name:      mealName,
-        ingredients,
-        total_calories: ingredients.reduce((s, i) => s + i.calories, 0),
-      })
-      .select()
-      .single()
-
-    if (data) {
-      setMealHistory(prev => [data as MealHistoryEntry, ...prev])
-      setSavedMealIds(prev => new Set([...prev, mealId]))
-      // Clear custom name after successful save
-      setCustomMealNames(prev => { const n = { ...prev }; delete n[mealId]; return n })
-      // Save flash feedback
-      setSaveFlash(prev => new Set([...prev, mealId]))
-      setTimeout(() => setSaveFlash(prev => {
-        const next = new Set(prev); next.delete(mealId); return next
-      }), 1500)
-      showToast('success', 'Mahlzeit gespeichert ✓')
-    }
-    setSavingHistoryId(null)
+  const saveMealToHistory = async (_mealId: string) => {
+    showToast('info', DEFERRED_WRITE_MESSAGE)
   }
 
   // ─── Meal History: reuse ──────────────────────────────────────────────────
 
-  const reuseFromHistory = async (entry: MealHistoryEntry) => {
-    if (!clientId || !plan) return
-
-    // Match by meal name (case-insensitive), fall back to first meal
-    const targetMeal =
-      plan.nutrition_meals.find(m => m.name.toLowerCase() === entry.meal_name.toLowerCase()) ??
-      plan.nutrition_meals[0]
-    if (!targetMeal) return
-
-    setReusingHistoryId(entry.id)
-
-    // Clear existing slots for that meal
-    const existing = cmf.filter(c => c.meal_id === targetMeal.id)
-    if (existing.length > 0) {
-      await supabase.from('client_meal_foods').delete().in('id', existing.map(c => c.id))
-    }
-
-    // Re-insert from history
-    const payloads = entry.ingredients.map((ing, i) => ({
-      client_id: clientId,
-      meal_id:   targetMeal.id,
-      food_id:   ing.food_id,
-      amount_g:  ing.grams,
-      sort_order: SLOT_CATS.indexOf(ing.category as FoodCategory) !== -1
-        ? SLOT_CATS.indexOf(ing.category as FoodCategory)
-        : i,
-    }))
-
-    const { data: inserted } = await supabase
-      .from('client_meal_foods')
-      .insert(payloads)
-      .select('*, food:foods(*)')
-
-    if (inserted) {
-      setCmf(prev => [
-        ...prev.filter(c => c.meal_id !== targetMeal.id),
-        ...(inserted as CmfWithFood[]),
-      ])
-      showToast('info', 'Mahlzeit übernommen. Getränke ggf. neu eintragen und bei Bedarf Mengen berechnen.')
-    }
-
-    setReusingHistoryId(null)
+  const reuseFromHistory = async (_entry: MealHistoryEntry) => {
+    showToast('info', DEFERRED_WRITE_MESSAGE)
   }
 
   // ─── Macro met tracking ───────────────────────────────────────────────────

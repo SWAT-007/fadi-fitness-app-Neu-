@@ -652,4 +652,86 @@ meRouter.post("/exercise-change-requests", requireAuth, async (req: Authenticate
   }
 });
 
+meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  try {
+    const clientProfile = await prisma.clientProfile.findFirst({
+      where: { userId: req.user.userId },
+      select: { id: true, fullName: true, trainerId: true },
+    });
+    if (!clientProfile) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const [activeNutritionPlan, foods] = await Promise.all([
+      prisma.assignedNutritionPlan.findFirst({
+        where: { clientId: clientProfile.id, active: true },
+        orderBy: { assignedAt: "desc" },
+        select: {
+          id: true,
+          clientId: true,
+          planId: true,
+          active: true,
+          assignedAt: true,
+          plan: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              meals: {
+                orderBy: { sortOrder: "asc" },
+                select: {
+                  id: true,
+                  planId: true,
+                  name: true,
+                  description: true,
+                  sortOrder: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.food.findMany({
+        where: {
+          OR: [
+            { trainerId: clientProfile.trainerId },
+            { trainerId: null },
+          ],
+        },
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          caloriesPer100g: true,
+          proteinPer100g: true,
+          carbsPer100g: true,
+          fatPer100g: true,
+          unit: true,
+        },
+      }),
+    ]);
+
+    return res.json({
+      client: {
+        id: clientProfile.id,
+        fullName: clientProfile.fullName,
+        trainerId: clientProfile.trainerId,
+      },
+      activeNutritionPlan: activeNutritionPlan ?? null,
+      foods,
+      clientMealFoods: [],
+      mealHistory: [],
+      drinkLogs: [],
+    });
+  } catch (error) {
+    console.error("[me:nutrition] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 export { meRouter };
+
