@@ -27,6 +27,195 @@ const mapPlan = (plan: {
   assignmentCount: plan._count.assignedPlans,
 });
 
+plansRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const planName = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  const descriptionInput = req.body?.description;
+  const planDescription =
+    descriptionInput === null
+      ? null
+      : typeof descriptionInput === "string"
+        ? descriptionInput
+        : null;
+  const daysInput = Array.isArray(req.body?.days) ? req.body.days : [];
+
+  if (!planName) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  const normalizedDays: Array<{
+    name: string;
+    description: string | null;
+    exercises: Array<{
+      name: string;
+      description: string | null;
+      sets: number;
+      reps: string;
+      targetWeightKg: number | null;
+      restSeconds: number | null;
+      note: string | null;
+      imageUrl: string | null;
+    }>;
+  }> = [];
+
+  for (const dayItem of daysInput) {
+    const dayName = typeof dayItem?.name === "string" ? dayItem.name.trim() : "";
+    if (!dayName) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    const dayDescriptionInput = dayItem?.description;
+    const dayDescription =
+      dayDescriptionInput === null
+        ? null
+        : typeof dayDescriptionInput === "string"
+          ? dayDescriptionInput
+          : null;
+    const exercisesInput = Array.isArray(dayItem?.exercises) ? dayItem.exercises : [];
+    const normalizedExercises: Array<{
+      name: string;
+      description: string | null;
+      sets: number;
+      reps: string;
+      targetWeightKg: number | null;
+      restSeconds: number | null;
+      note: string | null;
+      imageUrl: string | null;
+    }> = [];
+
+    for (const exerciseItem of exercisesInput) {
+      const exerciseName = typeof exerciseItem?.name === "string" ? exerciseItem.name.trim() : "";
+      if (!exerciseName) {
+        return res.status(400).json({ message: "Invalid request" });
+      }
+      const exerciseDescriptionInput = exerciseItem?.description;
+      const exerciseDescription =
+        exerciseDescriptionInput === null
+          ? null
+          : typeof exerciseDescriptionInput === "string"
+            ? exerciseDescriptionInput
+            : null;
+      const setsInput = exerciseItem?.sets;
+      const sets =
+        typeof setsInput === "number" && Number.isInteger(setsInput) && setsInput > 0
+          ? setsInput
+          : 3;
+      const repsInput = exerciseItem?.reps;
+      const reps = typeof repsInput === "string" && repsInput.trim() ? repsInput.trim() : "10";
+      const targetWeightKgInput = exerciseItem?.targetWeightKg;
+      const targetWeightKg =
+        targetWeightKgInput === null
+          ? null
+          : typeof targetWeightKgInput === "number" && Number.isFinite(targetWeightKgInput)
+            ? targetWeightKgInput
+            : null;
+      const restSecondsInput = exerciseItem?.restSeconds;
+      const restSeconds =
+        restSecondsInput === null
+          ? null
+          : typeof restSecondsInput === "number" && Number.isFinite(restSecondsInput)
+            ? restSecondsInput
+            : null;
+      const noteInput = exerciseItem?.note;
+      const note = noteInput === null ? null : typeof noteInput === "string" ? noteInput : null;
+      const imageUrlInput = exerciseItem?.imageUrl;
+      const imageUrl = imageUrlInput === null ? null : typeof imageUrlInput === "string" ? imageUrlInput : null;
+
+      normalizedExercises.push({
+        name: exerciseName,
+        description: exerciseDescription,
+        sets,
+        reps,
+        targetWeightKg,
+        restSeconds,
+        note,
+        imageUrl,
+      });
+    }
+
+    normalizedDays.push({
+      name: dayName,
+      description: dayDescription,
+      exercises: normalizedExercises,
+    });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const createdPlan = await tx.workoutPlan.create({
+        data: {
+          trainerId: trainerProfile.id,
+          name: planName,
+          description: planDescription,
+        },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      let exerciseCount = 0;
+
+      for (let dayIndex = 0; dayIndex < normalizedDays.length; dayIndex += 1) {
+        const day = normalizedDays[dayIndex];
+        const createdDay = await tx.workoutDay.create({
+          data: {
+            planId: createdPlan.id,
+            name: day.name,
+            description: day.description,
+            sortOrder: dayIndex,
+          },
+          select: { id: true },
+        });
+
+        for (let exerciseIndex = 0; exerciseIndex < day.exercises.length; exerciseIndex += 1) {
+          const exercise = day.exercises[exerciseIndex];
+          await tx.exercise.create({
+            data: {
+              dayId: createdDay.id,
+              name: exercise.name,
+              description: exercise.description,
+              sets: exercise.sets,
+              reps: exercise.reps,
+              targetWeightKg: exercise.targetWeightKg,
+              restSeconds: exercise.restSeconds,
+              note: exercise.note,
+              sortOrder: exerciseIndex,
+              imageUrl: exercise.imageUrl,
+            },
+          });
+          exerciseCount += 1;
+        }
+      }
+
+      return {
+        plan: createdPlan,
+        dayCount: normalizedDays.length,
+        exerciseCount,
+      };
+    });
+
+    return res.status(201).json(result);
+  } catch (error) {
+    console.error("[plans:create] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 plansRouter.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });

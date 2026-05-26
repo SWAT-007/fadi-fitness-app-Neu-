@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ExercisePicker from '@/components/ExercisePicker'
-import { supabase } from '@/lib/supabase'
 import type { LibraryExercise } from '@/lib/exercises'
 
 // ─── Local types ────────────────────────────────────────────────────────────
@@ -133,56 +132,51 @@ export default function NewPlanPage() {
       i !== dayIdx ? d : { ...d, exercises: d.exercises.filter((_, j) => j !== exIdx) }
     ))
 
-  // Save everything to Supabase
+  // Save everything via backend bridge
   const handleSave = async () => {
     setSaving(true)
     setError('')
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.replace('/login'); return }
-
-    const { data: plan, error: planErr } = await supabase
-      .from('workout_plans')
-      .insert({
-        trainer_id: user.id,
-        name: planName.trim(),
-        training_days_per_week: daysPerWeek,
-        duration_weeks: durationWeeks,
+    try {
+      const response = await fetch('/api/backend/plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: planName.trim(),
+          description: null,
+          days: days.map((day) => ({
+            name: day.name,
+            description: null,
+            exercises: day.exercises.map((ex) => ({
+              name: ex.name,
+              description: null,
+              sets: ex.sets,
+              reps: ex.reps,
+              targetWeightKg: null,
+              restSeconds: ex.rest_seconds,
+              note: null,
+              imageUrl: ex.image_url ?? null,
+            })),
+          })),
+        }),
       })
-      .select()
-      .single()
 
-    if (planErr || !plan) {
-      setError(planErr?.message ?? 'Plan konnte nicht gespeichert werden.')
-      setSaving(false)
-      return
-    }
+      const payload = await response.json().catch(() => null)
 
-    for (let i = 0; i < days.length; i++) {
-      const day = days[i]
-      const { data: wDay } = await supabase
-        .from('workout_days')
-        .insert({ plan_id: plan.id, name: day.name, sort_order: i })
-        .select()
-        .single()
-
-      if (wDay && day.exercises.length > 0) {
-        await supabase.from('exercises').insert(
-          day.exercises.map((ex, j) => ({
-            day_id: wDay.id,
-            name: ex.name,
-            sets: ex.sets,
-            reps: ex.reps,
-            rest_seconds: ex.rest_seconds,
-            sort_order: j,
-            library_id: ex.libraryId || null,
-            image_url: ex.image_url ?? null,
-          }))
-        )
+      if (!response.ok || !payload?.plan?.id) {
+        if (response.status === 401) {
+          setError('Backend-Login erforderlich.')
+        } else {
+          setError((payload && typeof payload.message === 'string' && payload.message) || 'Plan konnte nicht gespeichert werden.')
+        }
+        setSaving(false)
+        return
       }
-    }
 
-    router.push(`/admin/plans/${plan.id}`)
+      router.push(`/admin/plans/${payload.plan.id}`)
+    } catch {
+      setError('Backend nicht erreichbar.')
+      setSaving(false)
+    }
   }
 
   // ── Step 1: Type ───────────────────────────────────────────────────────────
