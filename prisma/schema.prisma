@@ -70,6 +70,8 @@ model ClientProfile {
   legacySupabaseClientId String?        @unique
   legacySupabaseUserId   String?        @unique
   assignedPlans          AssignedPlan[]
+  workoutLogs            WorkoutLog[]
+  exerciseChangeRequests ExerciseChangeRequest[]
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
 
@@ -129,7 +131,9 @@ model WorkoutDay {
   description String?
   sortOrder   Int         @default(0)
   legacySupabaseDayId String? @unique
-  exercises   Exercise[]
+  exercises              Exercise[]
+  workoutLogs            WorkoutLog[]
+  exerciseChangeRequests ExerciseChangeRequest[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -150,6 +154,8 @@ model Exercise {
   sortOrder      Int         @default(0)
   imageUrl       String?
   legacySupabaseExerciseId String? @unique
+  exerciseLogs           ExerciseLog[]
+  exerciseChangeRequests ExerciseChangeRequest[]
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -182,4 +188,57 @@ model Message {
 
   @@index([senderId])
   @@index([receiverId, readAt])
+}
+
+model WorkoutLog {
+  id              String        @id @default(cuid())
+  clientId        String
+  client          ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  dayId           String
+  day             WorkoutDay    @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  date            String
+  notes           String?
+  completedAt     DateTime?
+  durationSeconds Int?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  exerciseLogs    ExerciseLog[]
+
+  @@index([clientId, completedAt])
+  @@index([clientId, dayId, completedAt])
+}
+
+model ExerciseLog {
+  id           String     @id @default(cuid())
+  workoutLogId String
+  workoutLog   WorkoutLog @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)
+  exerciseId   String
+  exercise     Exercise   @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  actualWeight Float?
+  actualReps   String?
+  setsDone     Int?
+  completed    Boolean    @default(false)
+  note         String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([workoutLogId, exerciseId, setsDone])
+  @@index([workoutLogId])
+}
+
+model ExerciseChangeRequest {
+  id         String        @id @default(cuid())
+  clientId   String
+  client     ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  dayId      String
+  day        WorkoutDay    @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  exerciseId String
+  exercise   Exercise      @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  reason     String
+  status     String        @default("pending")
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([clientId])
+  @@index([dayId])
 }
