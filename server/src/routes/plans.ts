@@ -222,4 +222,134 @@ plansRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) =>
   }
 });
 
+plansRouter.post("/:id/days", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const planIdParam = req.params.id;
+  const planId = Array.isArray(planIdParam) ? planIdParam[0] : planIdParam;
+  if (!planId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  const descriptionInput = req.body?.description;
+  const description =
+    descriptionInput === null
+      ? null
+      : typeof descriptionInput === "string"
+        ? descriptionInput
+        : null;
+
+  if (!name) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existingPlan = await prisma.workoutPlan.findFirst({
+      where: {
+        id: planId,
+        trainerId: trainerProfile.id,
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    if (!existingPlan) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const lastDay = await tx.workoutDay.findFirst({
+        where: { planId: existingPlan.id },
+        orderBy: { sortOrder: "desc" },
+        select: { sortOrder: true },
+      });
+
+      const sortOrder = lastDay ? lastDay.sortOrder + 1 : 0;
+
+      const day = await tx.workoutDay.create({
+        data: {
+          planId: existingPlan.id,
+          name,
+          description,
+          sortOrder,
+        },
+        select: {
+          id: true,
+          planId: true,
+          name: true,
+          description: true,
+          sortOrder: true,
+          createdAt: true,
+        },
+      });
+
+      const assignedPlans = await tx.assignedPlan.findMany({
+        where: {
+          planId: existingPlan.id,
+          active: true,
+        },
+        select: {
+          client: {
+            select: {
+              userId: true,
+            },
+          },
+        },
+      });
+
+      const recipientUserIds = Array.from(
+        new Set(
+          assignedPlans
+            .map((item) => item.client.userId)
+            .filter((userId): userId is string => Boolean(userId)),
+        ),
+      );
+
+      let notificationCount = 0;
+      if (recipientUserIds.length > 0) {
+        const created = await tx.notification.createMany({
+          data: recipientUserIds.map((userId) => ({
+            userId,
+            type: "WORKOUT",
+            title: "Neues Workout hinzugefügt",
+            body: `${existingPlan.name}: ${day.name}`,
+          })),
+        });
+        notificationCount = created.count;
+      }
+
+      return { day, notificationCount };
+    });
+
+    return res.status(201).json({
+      day: {
+        id: result.day.id,
+        planId: result.day.planId,
+        name: result.day.name,
+        description: result.day.description,
+        sortOrder: result.day.sortOrder,
+        createdAt: result.day.createdAt,
+      },
+      notificationCount: result.notificationCount,
+    });
+  } catch (error) {
+    console.error("[plans:create-day] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 export { plansRouter };

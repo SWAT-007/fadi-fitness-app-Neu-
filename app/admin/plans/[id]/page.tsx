@@ -196,27 +196,22 @@ export default function PlanBuilderPage() {
     if (dayModal.editing) {
       await supabase.from('workout_days').update({ name: dayName, description: dayDesc || null }).eq('id', dayModal.editing.id)
     } else {
-      const { error } = await supabase.from('workout_days').insert({ plan_id: id, name: dayName, description: dayDesc || null, sort_order: days.length })
-      if (!error) {
-        const { data: assignedRows } = await supabase
-          .from('assigned_plans')
-          .select('client:clients(user_id)')
-          .eq('plan_id', id)
-          .eq('is_active', true)
-
-        const notificationRows = ((assignedRows ?? []) as unknown as Array<{ client: { user_id: string | null } | { user_id: string | null }[] | null }>)
-          .map(row => Array.isArray(row.client) ? row.client[0]?.user_id : row.client?.user_id)
-          .filter((userId): userId is string => Boolean(userId))
-          .map(userId => ({
-            client_id: userId,
-            type: 'workout',
-            title: 'Neues Workout hinzugefügt',
-            body: `${plan?.name ?? 'Trainingsplan'}: ${dayName}`,
-          }))
-
-        if (notificationRows.length > 0) {
-          await supabase.from('notifications').insert(notificationRows)
-        }
+      const response = await fetch(`/api/backend/plans/${id}/days`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: dayName,
+          description: dayDesc || null,
+        }),
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const msg =
+          response.status === 401
+            ? 'Backend-Login erforderlich.'
+            : (payload && typeof payload.message === 'string' && payload.message) || 'Trainingstag konnte nicht erstellt werden.'
+        showToast(msg, 'danger')
+        return
       }
     }
     setDayModal({ open: false, editing: null })
