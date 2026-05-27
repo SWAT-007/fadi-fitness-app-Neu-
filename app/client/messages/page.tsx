@@ -1,8 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import type { Message, Profile, Client } from '@/lib/types'
+import type { Message } from '@/lib/types'
 
 const stroke = {
   fill: 'none' as const,
@@ -41,10 +40,53 @@ function formatMessageTimestamp(iso: string) {
     date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
 }
 
+type BackendParticipant = {
+  id: string
+  fullName: string | null
+  email: string | null
+}
+
+type BackendClientSummary = {
+  id: string
+  userId: string | null
+  fullName: string
+  email: string
+}
+
+type BackendMessage = {
+  id: string
+  senderId: string
+  receiverId: string
+  content: string
+  createdAt: string
+  readAt: string | null
+  sender?: BackendParticipant | null
+}
+
+function mapMessage(message: BackendMessage): Message {
+  return {
+    id: message.id,
+    sender_id: message.senderId,
+    receiver_id: message.receiverId,
+    content: message.content,
+    created_at: message.createdAt,
+    read_at: message.readAt,
+    sender: message.sender
+      ? {
+          id: message.sender.id,
+          email: message.sender.email ?? '',
+          full_name: message.sender.fullName ?? message.sender.email ?? '',
+          role: 'trainer',
+          created_at: '',
+        }
+      : undefined,
+  }
+}
+
 export default function ClientMessagesPage() {
-  const [myProfile, setMyProfile] = useState<Profile | null>(null)
-  const [trainerProfile, setTrainerProfile] = useState<Profile | null>(null)
-  const [client, setClient] = useState<Client | null>(null)
+  const [myUserId, setMyUserId] = useState('')
+  const [trainer, setTrainer] = useState<BackendParticipant | null>(null)
+  const [client, setClient] = useState<BackendClientSummary | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
@@ -63,94 +105,71 @@ export default function ClientMessagesPage() {
     })
   }, [])
 
-  useEffect(() => {
-    const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+  const markConversationRead = useCallback(async (trainerId: string, currentUserId: string) => {
+    try {
+      const response = await fetch('/api/backend/me/messages/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      if (!response.ok) return
 
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-      setMyProfile(prof)
-
-      const { data: cl } = await supabase.from('clients').select('*').eq('user_id', user.id).maybeSingle()
-      if (!cl) { setLoading(false); return }
-      setClient(cl)
-
-      const { data: trainer } = await supabase.from('profiles').select('*').eq('id', cl.trainer_id).single()
-      setTrainerProfile(trainer)
-
-      if (!prof || !trainer) { setLoading(false); return }
-
-      const { data: msgs } = await supabase
-        .from('messages')
-        .select('*, sender:profiles!messages_sender_id_fkey(*)')
-        .or(`and(sender_id.eq.${prof.id},receiver_id.eq.${trainer.id}),and(sender_id.eq.${trainer.id},receiver_id.eq.${prof.id})`)
-        .order('created_at')
-      setMessages((msgs ?? []) as Message[])
-
-      await supabase
-        .from('messages')
-        .update({ read_at: new Date().toISOString() })
-        .eq('sender_id', trainer.id)
-        .eq('receiver_id', prof.id)
-        .is('read_at', null)
-
-      await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('client_id', user.id)
-        .eq('type', 'message')
-        .is('is_read', false)
-
-      setLoading(false)
+      const readAt = new Date().toISOString()
+      setMessages(prev => prev.map(message => (
+        message.sender_id === trainerId && message.receiver_id === currentUserId && !message.read_at
+          ? { ...message, read_at: readAt }
+          : message
+      )))
+    } catch (error) {
+      console.error('[Messages] mark read failed:', error)
     }
-    init()
   }, [])
 
   const loadConversation = useCallback(async () => {
-    if (!myProfile || !trainerProfile) return
-    const { data: msgs } = await supabase
-      .from('messages')
-      .select('*, sender:profiles!messages_sender_id_fkey(*)')
-      .or(`and(sender_id.eq.${myProfile.id},receiver_id.eq.${trainerProfile.id}),and(sender_id.eq.${trainerProfile.id},receiver_id.eq.${myProfile.id})`)
-      .order('created_at')
-    setMessages((msgs ?? []) as Message[])
-    await supabase
-      .from('messages')
-      .update({ read_at: new Date().toISOString() })
-      .eq('sender_id', trainerProfile.id)
-      .eq('receiver_id', myProfile.id)
-      .is('read_at', null)
-    await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('client_id', myProfile.id)
-      .eq('type', 'message')
-      .eq('is_read', false)
-  }, [myProfile, trainerProfile])
+    try {
+      const response = await fetch('/api/backend/me/messages', { cache: 'no-store' })
+      const data = await response.json().catch(() => null) as {
+        client?: BackendClientSummary | null
+        trainer?: BackendParticipant | null
+        messages?: BackendMessage[]
+        message?: string
+      } | null
 
-  useEffect(() => {
-    if (!myProfile || !trainerProfile) return
-    const meId = myProfile.id
-    const trainerId = trainerProfile.id
-
-    const channel = supabase
-      .channel(`client-messages-${meId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
-        const msg = payload.new as Message
-        if (
-          (msg.sender_id === meId && msg.receiver_id === trainerId) ||
-          (msg.sender_id === trainerId && msg.receiver_id === meId)
-        ) {
-          appendMessage(msg)
+      if (!response.ok) {
+        if (response.status === 404) {
+          setClient(null)
+          setTrainer(null)
+          setMyUserId('')
+          setMessages([])
+          return
         }
-      })
-      .subscribe()
+        throw new Error(data?.message ?? 'Load failed')
+      }
 
-    return () => { supabase.removeChannel(channel) }
-  }, [myProfile, trainerProfile, appendMessage])
+      const nextClient = data?.client ?? null
+      const nextTrainer = data?.trainer ?? null
+      const mappedMessages = ((data?.messages ?? []) as BackendMessage[]).map(mapMessage)
+
+      setClient(nextClient)
+      setTrainer(nextTrainer)
+      setMyUserId(nextClient?.userId ?? '')
+      setMessages(mappedMessages)
+
+      if (nextClient?.userId && nextTrainer?.id) {
+        await markConversationRead(nextTrainer.id, nextClient.userId)
+      }
+    } catch (error) {
+      console.error('[Messages] load failed:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [markConversationRead])
 
   useEffect(() => {
-    if (!myProfile || !trainerProfile) return
+    void loadConversation()
+  }, [loadConversation])
+
+  useEffect(() => {
     const refresh = () => { void loadConversation() }
 
     const intervalId = setInterval(refresh, 8000)
@@ -165,7 +184,7 @@ export default function ClientMessagesPage() {
       window.removeEventListener('focus', refresh)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [myProfile, trainerProfile, loadConversation])
+  }, [loadConversation])
 
   useEffect(() => {
     const prev = prevMessageCountRef.current
@@ -187,64 +206,44 @@ export default function ClientMessagesPage() {
   const sendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault()
     if (sendingRef.current) return
-    if (!newMessage.trim() || !myProfile || !trainerProfile || !client) return
+    if (!newMessage.trim() || !trainer?.id || !client?.userId) return
     sendingRef.current = true
     const content = newMessage.trim()
     setSending(true)
     setNewMessage('')
-    const { data, error } = await supabase
-      .from('messages')
-      .insert({ sender_id: myProfile.id, receiver_id: trainerProfile.id, content })
-      .select('*, sender:profiles!messages_sender_id_fkey(*)')
-      .single()
-    if (!error && data) {
-      appendMessage(data as Message)
-      // Notify the trainer
-      const senderName = myProfile.full_name || client.full_name || 'Ein Kunde'
-      const notification = {
-        client_id: trainerProfile.id,
-        type: 'message',
-        title: `${senderName} hat dir eine Nachricht geschickt`,
-        body: content.slice(0, 60),
-        is_read: false,
-      }
-      console.log('[Notifications] client->trainer message insert', {
-        insertedClientId: notification.client_id,
-        trainerAuthUserId: trainerProfile.id,
-        clientTrainerId: client.trainer_id,
-        clientAuthUserId: myProfile.id,
-        clientRowId: client.id,
-        insertsTrainerUserId: notification.client_id === trainerProfile.id,
-        insertsClientOwnId: notification.client_id === myProfile.id,
-      })
-      const { data: sessionData } = await supabase.auth.getSession()
-      const notificationResponse = await fetch('/api/notifications/client-message', {
+    try {
+      const response = await fetch('/api/backend/me/messages', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionData.session?.access_token ?? ''}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
       })
-      const notificationResult = await notificationResponse.json().catch(() => null)
-      console.log('[Notifications] client->trainer insert result', notificationResult)
-      if (!notificationResponse.ok) {
-        console.error('[Notifications] client->trainer insert failed:', notificationResult)
+      const data = await response.json().catch(() => null) as {
+        message?: BackendMessage | string
+        notificationCreated?: boolean
+      } | null
+
+      if (!response.ok || !data || typeof data.message === 'string' || !data.message) {
+        setNewMessage(content)
+        return
       }
-    }
-    if (error) {
+
+      appendMessage(mapMessage(data.message))
+      await markConversationRead(trainer.id, client.userId)
+    } catch (error) {
+      console.error('[Messages] send failed:', error)
       setNewMessage(content)
+    } finally {
+      setSending(false)
+      sendingRef.current = false
+      inputRef.current?.focus()
     }
-    setSending(false)
-    sendingRef.current = false
-    inputRef.current?.focus()
   }
 
   if (loading) {
     return <div className="flex justify-center p-12"><div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" /></div>
   }
 
-  if (!client || !trainerProfile) {
+  if (!client || !trainer) {
     return (
       <div className="p-4 flex flex-col items-center justify-center min-h-[60vh] text-center">
         <div className="mx-auto w-14 h-14 rounded-2xl bg-white ring-1 ring-inset ring-black/5 flex items-center justify-center text-gray-400 shadow-sm">
@@ -270,7 +269,7 @@ export default function ClientMessagesPage() {
             </div>
           </div>
         ) : (
-          <MessageList messages={messages} myId={myProfile?.id ?? ''} accent="emerald" />
+          <MessageList messages={messages} myId={myUserId} accent="emerald" />
         )}
         <div ref={bottomRef} />
       </div>

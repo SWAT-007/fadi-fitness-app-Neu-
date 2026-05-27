@@ -1526,6 +1526,198 @@ meRouter.delete("/progress-logs/:id", requireAuth, async (req: AuthenticatedRequ
   }
 });
 
+const messageSelect = {
+  id: true,
+  senderId: true,
+  receiverId: true,
+  content: true,
+  createdAt: true,
+  readAt: true,
+  sender: {
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+    },
+  },
+};
+
+meRouter.get("/messages", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const rawLimit = parseInt(String(req.query.limit ?? "100"), 10);
+  const limit = isNaN(rawLimit) || rawLimit < 1 ? 100 : Math.min(rawLimit, 300);
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: {
+        id: true,
+        userId: true,
+        fullName: true,
+        email: true,
+        trainer: {
+          select: {
+            userId: true,
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const trainerUserId = clientProfile.trainer?.userId ?? null;
+    const trainerUser = clientProfile.trainer?.user ?? null;
+
+    if (!clientProfile.userId || !trainerUserId) {
+      return res.json({
+        client: {
+          id: clientProfile.id,
+          userId: clientProfile.userId,
+          fullName: clientProfile.fullName,
+          email: clientProfile.email,
+        },
+        trainer: null,
+        messages: [],
+      });
+    }
+
+    const messages = await prisma.message.findMany({
+      where: {
+        OR: [
+          { senderId: clientProfile.userId, receiverId: trainerUserId },
+          { senderId: trainerUserId, receiverId: clientProfile.userId },
+        ],
+      },
+      orderBy: { createdAt: "asc" },
+      take: limit,
+      select: messageSelect,
+    });
+
+    return res.json({
+      client: {
+        id: clientProfile.id,
+        userId: clientProfile.userId,
+        fullName: clientProfile.fullName,
+        email: clientProfile.email,
+      },
+      trainer: trainerUser
+        ? {
+            id: trainerUser.id,
+            fullName: trainerUser.fullName,
+            email: trainerUser.email,
+          }
+        : {
+            id: trainerUserId,
+            fullName: null,
+            email: null,
+          },
+      messages,
+    });
+  } catch (error) {
+    console.error("[me:messages:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+meRouter.post("/messages", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
+  if (!content) {
+    return res.status(400).json({ message: "Content required" });
+  }
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: {
+        id: true,
+        fullName: true,
+        trainer: { select: { userId: true } },
+      },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+    if (!clientProfile.trainer?.userId) {
+      return res.status(404).json({ message: "Trainer not found" });
+    }
+
+    const message = await prisma.message.create({
+      data: {
+        senderId: req.user.userId,
+        receiverId: clientProfile.trainer.userId,
+        content,
+      },
+      select: messageSelect,
+    });
+
+    let notificationCreated = false;
+    try {
+      const shortBody = content.length > 80 ? `${content.slice(0, 77)}...` : content;
+      await prisma.notification.create({
+        data: {
+          userId: clientProfile.trainer.userId,
+          type: NotificationType.MESSAGE,
+          title: "Neue Nachricht von deinem Client",
+          body: shortBody,
+        },
+      });
+      notificationCreated = true;
+    } catch (notifError) {
+      console.error("[me:messages:create] notification error:", notifError);
+    }
+
+    return res.status(201).json({ message, notificationCreated });
+  } catch (error) {
+    console.error("[me:messages:create] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+meRouter.post("/messages/read", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: {
+        trainer: { select: { userId: true } },
+      },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+    if (!clientProfile.trainer?.userId) {
+      return res.json({ updatedCount: 0 });
+    }
+
+    const result = await prisma.message.updateMany({
+      where: {
+        senderId: clientProfile.trainer.userId,
+        receiverId: req.user.userId,
+        readAt: null,
+      },
+      data: { readAt: new Date() },
+    });
+
+    return res.json({ updatedCount: result.count });
+  } catch (error) {
+    console.error("[me:messages:read] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 meRouter.get("/progress-summary", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "client") {
     return res.status(403).json({ message: "Forbidden" });
@@ -1594,4 +1786,3 @@ meRouter.get("/progress-summary", requireAuth, async (req: AuthenticatedRequest,
 });
 
 export { meRouter };
-
