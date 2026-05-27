@@ -1,3 +1,4 @@
+import { NotificationType } from "@prisma/client";
 import { Router } from "express";
 import { prisma } from "../db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
@@ -37,6 +38,45 @@ const mapClientProfile = (client: {
   createdAt: client.createdAt,
   updatedAt: client.updatedAt,
 });
+
+const messageSelect = {
+  id: true,
+  senderId: true,
+  receiverId: true,
+  content: true,
+  createdAt: true,
+  readAt: true,
+  sender: {
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+    },
+  },
+} as const;
+
+const resolveTrainerProfile = async (userId: string) => {
+  return prisma.trainerProfile.findUnique({
+    where: { userId },
+    select: {
+      id: true,
+      userId: true,
+    },
+  });
+};
+
+const resolveOwnedClientProfile = async (trainerId: string, clientId: string) => {
+  return prisma.clientProfile.findFirst({
+    where: { id: clientId, trainerId },
+    select: {
+      id: true,
+      userId: true,
+      fullName: true,
+      email: true,
+      status: true,
+    },
+  });
+};
 
 clientsRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
@@ -173,6 +213,145 @@ clientsRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) =>
     return res.json({ client: mapClientProfile(client) });
   } catch (error) {
     console.error("[clients:get] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+clientsRouter.get("/:clientId/messages", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientIdParam = req.params.clientId;
+  const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
+  if (!clientId) return res.status(404).json({ message: "Not found" });
+
+  const rawLimit = parseInt(String(req.query.limit ?? "100"), 10);
+  const limit = isNaN(rawLimit) || rawLimit < 1 ? 100 : Math.min(rawLimit, 300);
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    if (!clientProfile.userId) {
+      return res.json({
+        client: clientProfile,
+        messages: [],
+      });
+    }
+
+    const messages = await prisma.message.findMany({
+      where: {
+        OR: [
+          { senderId: req.user.userId, receiverId: clientProfile.userId },
+          { senderId: clientProfile.userId, receiverId: req.user.userId },
+        ],
+      },
+      orderBy: { createdAt: "asc" },
+      take: limit,
+      select: messageSelect,
+    });
+
+    return res.json({
+      client: clientProfile,
+      messages,
+    });
+  } catch (error) {
+    console.error("[clients:messages:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+clientsRouter.post("/:clientId/messages", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientIdParam = req.params.clientId;
+  const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
+  if (!clientId) return res.status(404).json({ message: "Not found" });
+
+  const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
+  if (!content) {
+    return res.status(400).json({ message: "Content required" });
+  }
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+    if (!clientProfile.userId) {
+      return res.status(400).json({ message: "Client has no linked user" });
+    }
+
+    const message = await prisma.message.create({
+      data: {
+        senderId: req.user.userId,
+        receiverId: clientProfile.userId,
+        content,
+      },
+      select: messageSelect,
+    });
+
+    let notificationCreated = false;
+    try {
+      const shortBody = content.length > 80 ? `${content.slice(0, 77)}...` : content;
+      await prisma.notification.create({
+        data: {
+          userId: clientProfile.userId,
+          type: NotificationType.MESSAGE,
+          title: "Neue Nachricht von deinem Trainer",
+          body: shortBody,
+        },
+      });
+      notificationCreated = true;
+    } catch (notifError) {
+      console.error("[clients:messages:create] notification error:", notifError);
+    }
+
+    return res.status(201).json({ message, notificationCreated });
+  } catch (error) {
+    console.error("[clients:messages:create] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+clientsRouter.post("/:clientId/messages/read", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientIdParam = req.params.clientId;
+  const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
+  if (!clientId) return res.status(404).json({ message: "Not found" });
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+    if (!clientProfile.userId) {
+      return res.json({ updatedCount: 0 });
+    }
+
+    const result = await prisma.message.updateMany({
+      where: {
+        senderId: clientProfile.userId,
+        receiverId: req.user.userId,
+        readAt: null,
+      },
+      data: { readAt: new Date() },
+    });
+
+    return res.json({ updatedCount: result.count });
+  } catch (error) {
+    console.error("[clients:messages:read] error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 });
@@ -620,6 +799,69 @@ clientsRouter.get("/:clientId/progress-logs", requireAuth, async (req: Authentic
     return res.json({ progressLogs });
   } catch (error) {
     console.error("[clients:progress-logs:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+clientsRouter.get("/messages/clients", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const clients = await prisma.clientProfile.findMany({
+      where: { trainerId: trainerProfile.id },
+      orderBy: { fullName: "asc" },
+      select: {
+        id: true,
+        trainerId: true,
+        userId: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        notes: true,
+        createdAt: true,
+      },
+    });
+
+    const clientUserIds = clients.map((client) => client.userId).filter(Boolean) as string[];
+    const unreadBySenderId = new Map<string, number>();
+
+    if (clientUserIds.length > 0) {
+      const unreadMessages = await prisma.message.findMany({
+        where: {
+          senderId: { in: clientUserIds },
+          receiverId: req.user.userId,
+          readAt: null,
+        },
+        select: { senderId: true },
+      });
+
+      for (const message of unreadMessages) {
+        unreadBySenderId.set(message.senderId, (unreadBySenderId.get(message.senderId) ?? 0) + 1);
+      }
+    }
+
+    return res.json({
+      trainerUserId: req.user.userId,
+      clients: clients.map((client) => ({
+        id: client.id,
+        trainerId: client.trainerId,
+        userId: client.userId,
+        fullName: client.fullName,
+        email: client.email,
+        phone: client.phone,
+        notes: client.notes,
+        createdAt: client.createdAt,
+        unreadCount: client.userId ? unreadBySenderId.get(client.userId) ?? 0 : 0,
+        messagingEnabled: client.userId !== null,
+      })),
+    });
+  } catch (error) {
+    console.error("[clients:messages:clients] error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 });
