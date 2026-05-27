@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
-import { supabase } from '@/lib/supabase'
 import type { CheckinImage, ProgressLog, WeeklyCheckin } from '@/lib/types'
 import Lightbox from '@/components/Lightbox'
 import { AnimatedNumber, Collapsible, StaggerItem, useToast } from '@/components/Motion'
@@ -99,6 +98,43 @@ function mapProgressLog(p: BackendProgressLog): ProgressLog {
     body_weight: p.bodyWeight,
     notes: p.notes,
     created_at: p.createdAt,
+  }
+}
+
+// ─── Backend workout log shape ────────────────────────────────────────────────
+
+type BackendExerciseLog = {
+  actualWeight: number | null
+  actualReps: string | null
+  setsDone: number | null
+  completed: boolean
+  exercise: { name: string } | null
+}
+
+type BackendWorkoutLog = {
+  id: string
+  dayId: string
+  date: string
+  durationSeconds: number | null
+  completedAt: string | null
+  createdAt: string
+  day: { id: string; name: string; plan: { id: string; name: string } } | null
+  exerciseLogs: BackendExerciseLog[]
+}
+
+function mapWorkoutLog(w: BackendWorkoutLog): WorkoutLogItem {
+  return {
+    id: w.id,
+    date: w.date,
+    duration_seconds: w.durationSeconds,
+    workout_day: w.day ? { name: w.day.name } : null,
+    exercise_logs: w.exerciseLogs.map(el => ({
+      actual_weight: el.actualWeight,
+      actual_reps: el.actualReps,
+      sets_done: el.setsDone,
+      completed: el.completed,
+      exercise: el.exercise,
+    })),
   }
 }
 
@@ -325,31 +361,22 @@ export default function ProgressPage() {
 
   const load = useCallback(async () => {
     try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: client } = await supabase.from('clients').select('id, trainer_id, full_name').eq('user_id', user.id).maybeSingle()
-    if (!client) { setLoading(false); return }
-    setClientId(client.id)
-    setClientTrainerId((client as typeof client & { trainer_id: string }).trainer_id ?? null)
-    setClientName((client as typeof client & { full_name: string }).full_name ?? '')
-
-    const [progressFetch, workoutsRes, totalRes, checkinsFetch] = await Promise.all([
+    const [summaryFetch, progressFetch, checkinsFetch] = await Promise.all([
+      fetch('/api/backend/me/progress-summary'),
       fetch('/api/backend/me/progress-logs?limit=30'),
-      supabase
-        .from('workout_logs')
-        .select('id, date, duration_seconds, workout_day:workout_days(name), exercise_logs(actual_weight, actual_reps, sets_done, completed, exercise:exercises(name))')
-        .eq('client_id', client.id)
-        .not('completed_at', 'is', null)
-        .order('date', { ascending: false })
-        .limit(60),
-      supabase.from('workout_logs').select('id', { count: 'exact', head: true }).eq('client_id', client.id).not('completed_at', 'is', null),
       fetch('/api/backend/me/checkins'),
     ])
 
+    const summaryData = summaryFetch.ok ? await summaryFetch.json().catch(() => null) : null
+    if (!summaryData?.client) { setLoading(false); return }
+    setClientId(summaryData.client.id)
+    setClientTrainerId(summaryData.client.trainerId ?? null)
+    setClientName(summaryData.client.fullName ?? '')
+    setTotalWorkouts(summaryData.workoutSummary?.completedWorkoutCount ?? 0)
+    setWorkoutLogs(((summaryData.workoutSummary?.recentWorkouts ?? []) as BackendWorkoutLog[]).map(mapWorkoutLog))
+
     const progressData = progressFetch.ok ? await progressFetch.json().catch(() => null) : null
     setProgressLogs(((progressData?.progressLogs ?? []) as BackendProgressLog[]).map(mapProgressLog))
-    setWorkoutLogs((workoutsRes.data ?? []) as unknown as WorkoutLogItem[])
-    setTotalWorkouts(totalRes.count ?? 0)
 
     const checkinsData = checkinsFetch.ok ? await checkinsFetch.json().catch(() => null) : null
     setCheckins(((checkinsData?.checkins ?? []) as BackendCheckin[]).map(mapCheckin))

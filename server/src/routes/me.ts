@@ -1526,5 +1526,72 @@ meRouter.delete("/progress-logs/:id", requireAuth, async (req: AuthenticatedRequ
   }
 });
 
+meRouter.get("/progress-summary", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const rawLimit = parseInt(String(req.query.limit ?? "60"), 10);
+  const limit = isNaN(rawLimit) || rawLimit < 1 ? 60 : Math.min(rawLimit, 100);
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true, fullName: true, trainerId: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const [completedWorkoutCount, recentWorkouts] = await Promise.all([
+      prisma.workoutLog.count({
+        where: { clientId: clientProfile.id, completedAt: { not: null } },
+      }),
+      prisma.workoutLog.findMany({
+        where: { clientId: clientProfile.id, completedAt: { not: null } },
+        orderBy: { completedAt: "desc" },
+        take: limit,
+        select: {
+          id: true,
+          dayId: true,
+          date: true,
+          durationSeconds: true,
+          completedAt: true,
+          createdAt: true,
+          day: {
+            select: {
+              id: true,
+              name: true,
+              plan: { select: { id: true, name: true } },
+            },
+          },
+          exerciseLogs: {
+            select: {
+              actualWeight: true,
+              actualReps: true,
+              setsDone: true,
+              completed: true,
+              exercise: { select: { name: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return res.json({
+      client: {
+        id: clientProfile.id,
+        fullName: clientProfile.fullName,
+        trainerId: clientProfile.trainerId,
+      },
+      workoutSummary: {
+        completedWorkoutCount,
+        recentWorkouts,
+      },
+    });
+  } catch (error) {
+    console.error("[me:progress-summary] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 export { meRouter };
 
