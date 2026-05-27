@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import type { DrinkLog } from '@/lib/types'
 
 // ─── Preset drinks ────────────────────────────────────────────────────────────
@@ -55,8 +54,7 @@ function Collapsible({ open, children }: { open: boolean; children: React.ReactN
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface Props {
-  mealIndex: number      // 0-based index, stored as meal_number in DB
-  clientId:  string
+  mealIndex: number      // 0-based index, used client-side for filtering within a session
   logs:      DrinkLog[]  // all today's drink_logs — component filters by mealIndex
   onAdd:     (log: DrinkLog) => void
   onDelete:  (id: string) => void
@@ -64,7 +62,7 @@ interface Props {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function MealDrinks({ mealIndex, clientId, logs, onAdd, onDelete }: Props) {
+export default function MealDrinks({ mealIndex, logs, onAdd, onDelete }: Props) {
   const [enabled,    setEnabled]    = useState(false)
   const [preset,     setPreset]     = useState<string>(PRESETS[0].name)
   const [isCustom,   setIsCustom]   = useState(false)
@@ -101,36 +99,47 @@ export default function MealDrinks({ mealIndex, clientId, logs, onAdd, onDelete 
 
   const handleAdd = async () => {
     const drinkName = isCustom ? customName.trim() : preset
-    if (!drinkName || !clientId) return
+    if (!drinkName) return
     const ml  = Math.round(parseFloat(amount)  || 0)
     const cal = Math.round(parseFloat(calories) || 0)
     if (ml <= 0) return
 
     setSaving(true)
-    const { data, error } = await supabase
-      .from('drink_logs')
-      .insert({
-        client_id:   clientId,
-        drink_name:  drinkName,
-        calories:    cal,
-        meal_number: mealIndex,
+    try {
+      const res = await fetch('/api/backend/me/nutrition/drink-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ drinkType: drinkName, amountMl: ml }),
       })
-      .select()
-      .single()
-
-    if (!error && data) {
-      onAdd(data as DrinkLog)
-      // Reset calories display for preset (keep preset/amount)
-      if (!isCustom) setCalories(String(autoCalc(preset, parseFloat(amount) || 0)))
-      else { setCustomName(''); setCalories('') }
+      if (res.ok) {
+        const data = (await res.json().catch(() => null)) as { drinkLog?: { id: string; clientId: string; drinkType: string | null; amountMl: number | null; loggedAt: string } } | null
+        if (data?.drinkLog) {
+          onAdd({
+            id: data.drinkLog.id,
+            client_id: data.drinkLog.clientId,
+            drink_name: drinkName,
+            calories: cal,
+            meal_number: mealIndex,
+            logged_at: data.drinkLog.loggedAt,
+          })
+          if (!isCustom) setCalories(String(autoCalc(preset, parseFloat(amount) || 0)))
+          else { setCustomName(''); setCalories('') }
+        }
+      }
+    } catch {
+      // silent
     }
     setSaving(false)
   }
 
   const handleDelete = async (id: string) => {
     setDeletingId(id)
-    await supabase.from('drink_logs').delete().eq('id', id)
-    onDelete(id)
+    try {
+      const res = await fetch(`/api/backend/me/nutrition/drink-logs/${id}`, { method: 'DELETE' })
+      if (res.ok) onDelete(id)
+    } catch {
+      // silent
+    }
     setDeletingId(null)
   }
 

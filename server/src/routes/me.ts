@@ -674,6 +674,14 @@ const cmfSelect = {
   },
 } as const;
 
+const drinkLogSelect = {
+  id: true,
+  clientId: true,
+  drinkType: true,
+  amountMl: true,
+  loggedAt: true,
+} as const;
+
 const mealHistorySelect = {
   id: true,
   clientId: true,
@@ -704,7 +712,7 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
 
-    const [activeNutritionPlan, foods, clientMealFoods, mealHistory] = await Promise.all([
+    const [activeNutritionPlan, foods, clientMealFoods, mealHistory, drinkLogs] = await Promise.all([
       prisma.assignedNutritionPlan.findFirst({
         where: { clientId: clientProfile.id, active: true },
         orderBy: { assignedAt: "desc" },
@@ -765,6 +773,15 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
         take: 50,
         select: mealHistorySelect,
       }),
+      prisma.drinkLog.findMany({
+        where: {
+          clientId: clientProfile.id,
+          loggedAt: { gte: todayStart },
+        },
+        orderBy: { loggedAt: "desc" },
+        take: 100,
+        select: drinkLogSelect,
+      }),
     ]);
 
     return res.json({
@@ -777,7 +794,7 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
       foods,
       clientMealFoods,
       mealHistory,
-      drinkLogs: [],
+      drinkLogs,
     });
   } catch (error) {
     console.error("[me:nutrition] error:", error);
@@ -947,6 +964,101 @@ meRouter.delete("/nutrition/client-meal-foods/:id", requireAuth, async (req: Aut
     return res.json({ deleted: true, id: cmfId });
   } catch (error) {
     console.error("[me:nutrition:cmf:delete] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+meRouter.get("/nutrition/drink-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const rawLimit = parseInt(String(req.query.limit ?? "100"), 10);
+  const take = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 300) : 100;
+
+  try {
+    const clientProfile = await prisma.clientProfile.findFirst({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const logs = await prisma.drinkLog.findMany({
+      where: { clientId: clientProfile.id },
+      orderBy: { loggedAt: "desc" },
+      take,
+      select: drinkLogSelect,
+    });
+
+    return res.json({ drinkLogs: logs });
+  } catch (error) {
+    console.error("[me:nutrition:drink-logs:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+meRouter.post("/nutrition/drink-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const body = (req.body as Record<string, unknown>) ?? {};
+  const drinkType = typeof body.drinkType === "string" ? body.drinkType.trim() : null;
+  const rawAmount = body.amountMl;
+  if (rawAmount !== undefined && rawAmount !== null && typeof rawAmount !== "number") {
+    return res.status(400).json({ message: "amountMl must be a number or null" });
+  }
+  const amountMl = typeof rawAmount === "number" ? (rawAmount >= 0 ? rawAmount : null) : null;
+
+  try {
+    const clientProfile = await prisma.clientProfile.findFirst({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const log = await prisma.drinkLog.create({
+      data: {
+        clientId: clientProfile.id,
+        drinkType,
+        amountMl,
+      },
+      select: drinkLogSelect,
+    });
+
+    return res.status(201).json({ drinkLog: log });
+  } catch (error) {
+    console.error("[me:nutrition:drink-logs:create] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+meRouter.delete("/nutrition/drink-logs/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const logId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!logId) return res.status(404).json({ message: "Not found" });
+
+  try {
+    const clientProfile = await prisma.clientProfile.findFirst({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const existing = await prisma.drinkLog.findFirst({
+      where: { id: logId, clientId: clientProfile.id },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ message: "Not found" });
+
+    await prisma.drinkLog.delete({ where: { id: logId } });
+
+    return res.json({ deleted: true, id: logId });
+  } catch (error) {
+    console.error("[me:nutrition:drink-logs:delete] error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 });

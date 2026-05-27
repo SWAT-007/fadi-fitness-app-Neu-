@@ -1,13 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import type { DrinkLog } from '@/lib/types'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface Props {
-  clientId: string
   logs: DrinkLog[]
   onAdd: (log: DrinkLog) => void
   onDelete: (id: string) => void
@@ -15,7 +13,7 @@ interface Props {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function DrinksSection({ clientId, logs, onAdd, onDelete }: Props) {
+export default function DrinksSection({ logs, onAdd, onDelete }: Props) {
   const [enabled,    setEnabled]    = useState(false)
   const [name,       setName]       = useState('')
   const [calories,   setCalories]   = useState('')
@@ -32,23 +30,33 @@ export default function DrinksSection({ clientId, logs, onAdd, onDelete }: Props
     if (!trimmed) return
     setSaving(true)
     setError('')
-
-    const { data, error: err } = await supabase
-      .from('drink_logs')
-      .insert({
-        client_id:  clientId,
-        drink_name: trimmed,
-        calories:   calories ? parseInt(calories, 10) : null,
+    try {
+      const res = await fetch('/api/backend/me/nutrition/drink-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ drinkType: trimmed, amountMl: null }),
       })
-      .select()
-      .single()
-
-    if (err || !data) {
-      setError(err?.message ?? 'Fehler beim Hinzufügen.')
-    } else {
-      onAdd(data as DrinkLog)
-      setName('')
-      setCalories('')
+      if (!res.ok) {
+        setError('Fehler beim Hinzufügen.')
+      } else {
+        const data = (await res.json().catch(() => null)) as { drinkLog?: { id: string; clientId: string; drinkType: string | null; amountMl: number | null; loggedAt: string } } | null
+        if (data?.drinkLog) {
+          onAdd({
+            id: data.drinkLog.id,
+            client_id: data.drinkLog.clientId,
+            drink_name: trimmed,
+            calories: calories ? parseInt(calories, 10) : null,
+            meal_number: null,
+            logged_at: data.drinkLog.loggedAt,
+          })
+          setName('')
+          setCalories('')
+        } else {
+          setError('Fehler beim Hinzufügen.')
+        }
+      }
+    } catch {
+      setError('Fehler beim Hinzufügen.')
     }
     setSaving(false)
   }
@@ -61,8 +69,12 @@ export default function DrinksSection({ clientId, logs, onAdd, onDelete }: Props
 
   const handleDelete = async (id: string) => {
     setDeletingId(id)
-    const { error: err } = await supabase.from('drink_logs').delete().eq('id', id)
-    if (!err) onDelete(id)
+    try {
+      const res = await fetch(`/api/backend/me/nutrition/drink-logs/${id}`, { method: 'DELETE' })
+      if (res.ok) onDelete(id)
+    } catch {
+      // silent — keep UI state unchanged on network error
+    }
     setDeletingId(null)
   }
 
@@ -138,7 +150,7 @@ export default function DrinksSection({ clientId, logs, onAdd, onDelete }: Props
             </div>
             <button
               onClick={handleAdd}
-              disabled={saving || !name.trim() || !clientId}
+              disabled={saving || !name.trim()}
               className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors flex-shrink-0"
             >
               {saving ? '…' : 'Hinzufügen'}

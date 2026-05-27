@@ -426,6 +426,22 @@ function mapMealHistory(h: BackendMealHistory): MealHistoryEntry {
   }
 }
 
+type BackendDrinkLog = {
+  id: string; clientId: string; drinkType: string | null
+  amountMl: number | null; loggedAt: string
+}
+
+function mapDrinkLog(d: BackendDrinkLog): DrinkLog {
+  return {
+    id: d.id,
+    client_id: d.clientId,
+    drink_name: d.drinkType ?? '',
+    calories: null,
+    meal_number: null,
+    logged_at: d.loggedAt,
+  }
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function ClientNutritionPage() {
@@ -533,6 +549,7 @@ export default function ClientNutritionPage() {
         }>
         clientMealFoods?: BackendCmf[]
         mealHistory?: BackendMealHistory[]
+        drinkLogs?: BackendDrinkLog[]
       } | null
 
       if (!response.ok || !payload) return
@@ -589,7 +606,7 @@ export default function ClientNutritionPage() {
 
       setCmf((payload.clientMealFoods ?? []).filter(c => c.food !== null).map(mapCmf))
       setMealHistory((payload.mealHistory ?? []).map(mapMealHistory))
-      setDrinkLogs([])
+      setDrinkLogs((payload.drinkLogs ?? []).map(mapDrinkLog))
     } catch {
       // network or parse error — leave plan=null
     } finally {
@@ -1180,10 +1197,9 @@ export default function ClientNutritionPage() {
               })()}
 
               {/* ── Getränke ─────────────────────────────────────────────────── */}
-              {userId && (
+              {clientId && (
                 <MealDrinks
                   mealIndex={i}
-                  clientId={userId}
                   logs={drinkLogs}
                   onAdd={log => { setDrinkLogs(prev => [...prev, log]); showToast('info', 'Getränk hinzugefügt ✓') }}
                   onDelete={id => setDrinkLogs(prev => prev.filter(d => d.id !== id))}
