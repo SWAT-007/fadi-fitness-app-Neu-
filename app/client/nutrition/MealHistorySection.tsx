@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import type { MealHistoryEntry } from '@/lib/types'
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -87,7 +86,7 @@ interface Props {
   history: MealHistoryEntry[]
   reusingId: string | null
   onReuse: (entry: MealHistoryEntry) => void
-  onDelete: (id: string) => void
+  onDelete: (id: string) => Promise<void>
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -115,9 +114,11 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
   const handleDelete = async (id: string) => {
     setDeletingId(id)
     setConfirmId(null)
-    const { error } = await supabase.from('meal_history').delete().eq('id', id)
-    if (!error) onDelete(id)
-    setDeletingId(null)
+    try {
+      await onDelete(id)
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   return (

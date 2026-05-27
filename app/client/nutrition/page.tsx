@@ -400,6 +400,32 @@ function mapCmf(c: BackendCmf): CmfWithFood {
   } as CmfWithFood
 }
 
+type BackendMealHistory = {
+  id: string; clientId: string; name: string | null; category: string | null
+  amountG: number | null; calories: number | null; protein: number | null
+  carbs: number | null; fat: number | null; loggedAt: string
+}
+
+function mapMealHistory(h: BackendMealHistory): MealHistoryEntry {
+  return {
+    id: h.id,
+    client_id: h.clientId,
+    meal_name: h.name ?? 'Mahlzeit',
+    total_calories: h.calories ?? null,
+    logged_at: h.loggedAt,
+    ingredients: [{
+      food_id: '',
+      category: h.category ?? 'other',
+      name: h.name ?? '',
+      grams: h.amountG ?? 0,
+      calories: Math.round(h.calories ?? 0),
+      protein: Math.round(h.protein ?? 0),
+      carbs: Math.round(h.carbs ?? 0),
+      fat: Math.round(h.fat ?? 0),
+    }],
+  }
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function ClientNutritionPage() {
@@ -506,6 +532,7 @@ export default function ClientNutritionPage() {
           unit: string | null
         }>
         clientMealFoods?: BackendCmf[]
+        mealHistory?: BackendMealHistory[]
       } | null
 
       if (!response.ok || !payload) return
@@ -561,7 +588,7 @@ export default function ClientNutritionPage() {
       setFoods(mappedFoods)
 
       setCmf((payload.clientMealFoods ?? []).filter(c => c.food !== null).map(mapCmf))
-      setMealHistory([])
+      setMealHistory((payload.mealHistory ?? []).map(mapMealHistory))
       setDrinkLogs([])
     } catch {
       // network or parse error — leave plan=null
@@ -650,8 +677,39 @@ export default function ClientNutritionPage() {
 
   // ─── Meal History: save ───────────────────────────────────────────────────
 
-  const saveMealToHistory = async (_mealId: string) => {
-    showToast('info', DEFERRED_WRITE_MESSAGE)
+  const saveMealToHistory = async (mealId: string) => {
+    if (!plan) return
+    const meal = plan.nutrition_meals.find(m => m.id === mealId)
+    if (!meal) return
+    const mealCmf = cmf.filter(c => c.meal_id === mealId)
+    if (mealCmf.length === 0) return
+    const name = customMealNames[mealId]?.trim() || meal.name
+    const totals = sumMacros(mealCmf)
+    setSavingHistoryId(mealId)
+    try {
+      const res = await fetch('/api/backend/me/nutrition/meal-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          calories: Math.round(totals.cal),
+          protein: Math.round(totals.p),
+          carbs: Math.round(totals.k),
+          fat: Math.round(totals.f),
+        }),
+      })
+      if (!res.ok) { showToast('error', 'Fehler beim Speichern'); return }
+      const data = (await res.json().catch(() => null)) as { mealHistoryItem?: BackendMealHistory } | null
+      if (!data?.mealHistoryItem) { showToast('error', 'Fehler beim Speichern'); return }
+      setMealHistory(prev => [mapMealHistory(data.mealHistoryItem!), ...prev])
+      setSavedMealIds(prev => { const s = new Set(prev); s.add(mealId); return s })
+      setSaveFlash(prev => { const s = new Set(prev); s.add(mealId); return s })
+      setTimeout(() => setSaveFlash(prev => { const s = new Set(prev); s.delete(mealId); return s }), 1500)
+    } catch {
+      showToast('error', 'Fehler beim Speichern')
+    } finally {
+      setSavingHistoryId(null)
+    }
   }
 
   // ─── Meal History: reuse ──────────────────────────────────────────────────
@@ -1187,7 +1245,11 @@ export default function ClientNutritionPage() {
             history={mealHistory}
             reusingId={reusingHistoryId}
             onReuse={reuseFromHistory}
-            onDelete={id => { setMealHistory(prev => prev.filter(e => e.id !== id)); showToast('error', 'Eintrag gelöscht') }}
+            onDelete={async (id) => {
+                await fetch(`/api/backend/me/nutrition/meal-history/${id}`, { method: 'DELETE' })
+                setMealHistory(prev => prev.filter(e => e.id !== id))
+                showToast('error', 'Eintrag gelöscht')
+              }}
           />
         </div>
       )}
