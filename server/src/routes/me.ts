@@ -652,6 +652,28 @@ meRouter.post("/exercise-change-requests", requireAuth, async (req: Authenticate
   }
 });
 
+const cmfSelect = {
+  id: true,
+  clientId: true,
+  mealId: true,
+  foodId: true,
+  category: true,
+  amountG: true,
+  createdAt: true,
+  updatedAt: true,
+  food: {
+    select: {
+      id: true,
+      name: true,
+      caloriesPer100g: true,
+      proteinPer100g: true,
+      carbsPer100g: true,
+      fatPer100g: true,
+      unit: true,
+    },
+  },
+} as const;
+
 meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "client") {
     return res.status(403).json({ message: "Forbidden" });
@@ -666,7 +688,10 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
       return res.status(404).json({ message: "Not found" });
     }
 
-    const [activeNutritionPlan, foods] = await Promise.all([
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+
+    const [activeNutritionPlan, foods, clientMealFoods] = await Promise.all([
       prisma.assignedNutritionPlan.findFirst({
         where: { clientId: clientProfile.id, active: true },
         orderBy: { assignedAt: "desc" },
@@ -713,6 +738,14 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
           unit: true,
         },
       }),
+      prisma.clientMealFood.findMany({
+        where: {
+          clientId: clientProfile.id,
+          createdAt: { gte: todayStart },
+        },
+        orderBy: { createdAt: "asc" },
+        select: cmfSelect,
+      }),
     ]);
 
     return res.json({
@@ -723,12 +756,178 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
       },
       activeNutritionPlan: activeNutritionPlan ?? null,
       foods,
-      clientMealFoods: [],
+      clientMealFoods,
       mealHistory: [],
       drinkLogs: [],
     });
   } catch (error) {
     console.error("[me:nutrition] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+meRouter.post("/nutrition/client-meal-foods", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const { mealId, foodId, category, amountG } = req.body as {
+    mealId?: string;
+    foodId?: string;
+    category?: string;
+    amountG?: number;
+  };
+  if (!foodId) {
+    return res.status(400).json({ message: "foodId required" });
+  }
+
+  try {
+    const clientProfile = await prisma.clientProfile.findFirst({
+      where: { userId: req.user.userId },
+      select: { id: true, trainerId: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    // Validate food ownership: must be trainer's food or global
+    const food = await prisma.food.findFirst({
+      where: {
+        id: foodId,
+        OR: [{ trainerId: clientProfile.trainerId }, { trainerId: null }],
+      },
+      select: { id: true },
+    });
+    if (!food) return res.status(400).json({ message: "Food not found or not accessible" });
+
+    // Validate meal ownership: must belong to client's active nutrition plan
+    if (mealId) {
+      const activeAssignment = await prisma.assignedNutritionPlan.findFirst({
+        where: { clientId: clientProfile.id, active: true },
+        orderBy: { assignedAt: "desc" },
+        select: { planId: true },
+      });
+      if (!activeAssignment) return res.status(400).json({ message: "No active nutrition plan" });
+
+      const meal = await prisma.nutritionMeal.findFirst({
+        where: { id: mealId, planId: activeAssignment.planId },
+        select: { id: true },
+      });
+      if (!meal) return res.status(400).json({ message: "Meal not found in active plan" });
+    }
+
+    const cmf = await prisma.clientMealFood.create({
+      data: {
+        clientId: clientProfile.id,
+        mealId: mealId ?? null,
+        foodId,
+        category: category ?? null,
+        amountG: typeof amountG === "number" ? amountG : null,
+      },
+      select: cmfSelect,
+    });
+
+    return res.status(201).json({ clientMealFood: cmf });
+  } catch (error) {
+    console.error("[me:nutrition:cmf:create] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+meRouter.patch("/nutrition/client-meal-foods/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const cmfId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!cmfId) return res.status(404).json({ message: "Not found" });
+
+  try {
+    const clientProfile = await prisma.clientProfile.findFirst({
+      where: { userId: req.user.userId },
+      select: { id: true, trainerId: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const existing = await prisma.clientMealFood.findFirst({
+      where: { id: cmfId, clientId: clientProfile.id },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ message: "Not found" });
+
+    const body = (req.body as Record<string, unknown>) ?? {};
+
+    // Validate food ownership if foodId is being changed
+    if (Object.prototype.hasOwnProperty.call(body, "foodId") && body.foodId != null) {
+      const food = await prisma.food.findFirst({
+        where: {
+          id: body.foodId as string,
+          OR: [{ trainerId: clientProfile.trainerId }, { trainerId: null }],
+        },
+        select: { id: true },
+      });
+      if (!food) return res.status(400).json({ message: "Food not found or not accessible" });
+    }
+
+    // Validate meal ownership if mealId is being changed
+    if (Object.prototype.hasOwnProperty.call(body, "mealId") && body.mealId != null) {
+      const activeAssignment = await prisma.assignedNutritionPlan.findFirst({
+        where: { clientId: clientProfile.id, active: true },
+        orderBy: { assignedAt: "desc" },
+        select: { planId: true },
+      });
+      if (!activeAssignment) return res.status(400).json({ message: "No active nutrition plan" });
+
+      const meal = await prisma.nutritionMeal.findFirst({
+        where: { id: body.mealId as string, planId: activeAssignment.planId },
+        select: { id: true },
+      });
+      if (!meal) return res.status(400).json({ message: "Meal not found in active plan" });
+    }
+
+    const data: Record<string, unknown> = {};
+    if (Object.prototype.hasOwnProperty.call(body, "mealId")) data.mealId = body.mealId ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "foodId")) data.foodId = body.foodId ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "category")) data.category = body.category ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "amountG")) data.amountG = typeof body.amountG === "number" ? body.amountG : null;
+
+    const cmf = await prisma.clientMealFood.update({
+      where: { id: cmfId },
+      data,
+      select: cmfSelect,
+    });
+
+    return res.json({ clientMealFood: cmf });
+  } catch (error) {
+    console.error("[me:nutrition:cmf:update] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+meRouter.delete("/nutrition/client-meal-foods/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const cmfId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!cmfId) return res.status(404).json({ message: "Not found" });
+
+  try {
+    const clientProfile = await prisma.clientProfile.findFirst({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const existing = await prisma.clientMealFood.findFirst({
+      where: { id: cmfId, clientId: clientProfile.id },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ message: "Not found" });
+
+    await prisma.clientMealFood.delete({ where: { id: cmfId } });
+
+    return res.json({ deleted: true, id: cmfId });
+  } catch (error) {
+    console.error("[me:nutrition:cmf:delete] error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 });

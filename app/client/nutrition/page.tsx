@@ -368,6 +368,38 @@ function SlotPicker({
   )
 }
 
+type BackendCmf = {
+  id: string; clientId: string; mealId: string | null; foodId: string | null
+  category: string | null; amountG: number | null; createdAt: string; updatedAt: string
+  food: {
+    id: string; name: string; caloriesPer100g: number | null; proteinPer100g: number | null
+    carbsPer100g: number | null; fatPer100g: number | null; unit: string | null
+  } | null
+}
+
+function mapCmf(c: BackendCmf): CmfWithFood {
+  return {
+    id: c.id,
+    client_id: c.clientId,
+    meal_id: c.mealId ?? '',
+    food_id: c.foodId ?? '',
+    amount_g: c.amountG ?? 0,
+    created_at: c.createdAt,
+    food: {
+      id: c.food?.id ?? c.foodId ?? '',
+      name: c.food?.name ?? '',
+      kcal_per_100g: c.food?.caloriesPer100g ?? 0,
+      protein_per_100g: c.food?.proteinPer100g ?? 0,
+      carbs_per_100g: c.food?.carbsPer100g ?? 0,
+      fat_per_100g: c.food?.fatPer100g ?? 0,
+      category: (c.category ?? 'other') as FoodCategory,
+      unit: c.food?.unit ?? 'g',
+      trainer_id: null,
+      created_at: '',
+    } as Food,
+  } as CmfWithFood
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function ClientNutritionPage() {
@@ -473,6 +505,7 @@ export default function ClientNutritionPage() {
           fatPer100g: number | null
           unit: string | null
         }>
+        clientMealFoods?: BackendCmf[]
       } | null
 
       if (!response.ok || !payload) return
@@ -527,7 +560,7 @@ export default function ClientNutritionPage() {
       } as Food))
       setFoods(mappedFoods)
 
-      setCmf([])
+      setCmf((payload.clientMealFoods ?? []).filter(c => c.food !== null).map(mapCmf))
       setMealHistory([])
       setDrinkLogs([])
     } catch {
@@ -543,12 +576,70 @@ export default function ClientNutritionPage() {
   //     nicht berechnet") und resettet auch andere Slots dieser Mahlzeit auf 0,
   //     damit Kunde am Ende „Berechnen" klickt. ────────────────────────────
 
-  const pickSlot = async (_mealId: string, _food: Food) => {
-    showToast('info', DEFERRED_WRITE_MESSAGE)
+  const pickSlot = async (mealId: string, food: Food, slotCat: FoodCategory) => {
+    const toDelete = cmf.filter(c => c.meal_id === mealId && c.food.category === slotCat)
+    const toReset  = cmf.filter(c => c.meal_id === mealId && c.food.category !== slotCat)
+    try {
+      await Promise.all(
+        toDelete.map(c =>
+          fetch(`/api/backend/me/nutrition/client-meal-foods/${c.id}`, { method: 'DELETE' }),
+        ),
+      )
+      await Promise.allSettled(
+        toReset.map(c =>
+          fetch(`/api/backend/me/nutrition/client-meal-foods/${c.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amountG: 0 }),
+          }),
+        ),
+      )
+      const res = await fetch('/api/backend/me/nutrition/client-meal-foods', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mealId, foodId: food.id, category: slotCat, amountG: 0 }),
+      })
+      if (!res.ok) { showToast('error', 'Fehler beim Speichern'); return }
+      const data = (await res.json().catch(() => null)) as { clientMealFood?: BackendCmf } | null
+      if (!data?.clientMealFood) { showToast('error', 'Fehler beim Speichern'); return }
+      setCmf(prev => [
+        ...prev
+          .filter(c => !(c.meal_id === mealId && c.food.category === slotCat))
+          .map(c => c.meal_id === mealId ? { ...c, amount_g: 0 } : c),
+        mapCmf(data.clientMealFood!),
+      ])
+      setOpenPicker(null)
+    } catch {
+      showToast('error', 'Fehler beim Speichern')
+    }
   }
 
-  const clearSlot = async (_mealId: string, _cat: FoodCategory) => {
-    showToast('info', DEFERRED_WRITE_MESSAGE)
+  const clearSlot = async (mealId: string, cat: FoodCategory) => {
+    const toDelete = cmf.filter(c => c.meal_id === mealId && c.food.category === cat)
+    const toReset  = cmf.filter(c => c.meal_id === mealId && c.food.category !== cat)
+    try {
+      await Promise.all(
+        toDelete.map(c =>
+          fetch(`/api/backend/me/nutrition/client-meal-foods/${c.id}`, { method: 'DELETE' }),
+        ),
+      )
+      await Promise.allSettled(
+        toReset.map(c =>
+          fetch(`/api/backend/me/nutrition/client-meal-foods/${c.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amountG: 0 }),
+          }),
+        ),
+      )
+      setCmf(prev => [
+        ...prev
+          .filter(c => !(c.meal_id === mealId && c.food.category === cat))
+          .map(c => c.meal_id === mealId ? { ...c, amount_g: 0 } : c),
+      ])
+    } catch {
+      showToast('error', 'Fehler beim Entfernen')
+    }
   }
 
   // ─── „Berechnen": löst NNLS für alle Slots einer Mahlzeit ────────────────
@@ -838,7 +929,7 @@ export default function ClientNutritionPage() {
                         <SlotPicker
                           category={cat}
                           foods={foods}
-                          onPick={(food) => pickSlot(meal.id, food)}
+                          onPick={(food) => pickSlot(meal.id, food, cat)}
                         />
                       )}
 
@@ -994,7 +1085,7 @@ export default function ClientNutritionPage() {
                           <SlotPicker
                             category={cat}
                             foods={foods}
-                            onPick={(food) => pickSlot(meal.id, food)}
+                            onPick={(food) => pickSlot(meal.id, food, cat)}
                           />
                         )}
                       </div>
