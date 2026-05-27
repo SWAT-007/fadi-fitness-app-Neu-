@@ -1168,5 +1168,116 @@ meRouter.delete("/nutrition/meal-history/:id", requireAuth, async (req: Authenti
   }
 });
 
+// ─── MealLogs ─────────────────────────────────────────────────────────────────
+
+const mealLogSelect = {
+  id: true,
+  clientId: true,
+  date: true,
+  mealType: true,
+  notes: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+meRouter.get("/nutrition/meal-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const limitRaw = parseInt(String(req.query.limit ?? "100"), 10);
+  const limit = Number.isFinite(limitRaw) ? Math.min(300, Math.max(1, limitRaw)) : 100;
+  const date = typeof req.query.date === "string" ? req.query.date.trim() || null : null;
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const mealLogs = await prisma.mealLog.findMany({
+      where: {
+        clientId: clientProfile.id,
+        ...(date ? { date } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: mealLogSelect,
+    });
+
+    return res.json({ mealLogs });
+  } catch (error) {
+    console.error("[me:nutrition:meal-logs:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+meRouter.post("/nutrition/meal-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const dateInput = req.body?.date;
+  const date =
+    dateInput && typeof dateInput === "string" && dateInput.trim()
+      ? dateInput.trim()
+      : today;
+  const mealType =
+    typeof req.body?.mealType === "string" ? req.body.mealType.trim() || null : null;
+  const notes =
+    typeof req.body?.notes === "string" ? req.body.notes.trim() || null : null;
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const mealLog = await prisma.mealLog.create({
+      data: { clientId: clientProfile.id, date, mealType, notes },
+      select: mealLogSelect,
+    });
+
+    return res.status(201).json({ mealLog });
+  } catch (error) {
+    console.error("[me:nutrition:meal-logs:create] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+meRouter.delete("/nutrition/meal-logs/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const idParam = req.params.id;
+  const itemId = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!itemId) return res.status(404).json({ message: "Not found" });
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const existing = await prisma.mealLog.findFirst({
+      where: { id: itemId, clientId: clientProfile.id },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ message: "Not found" });
+
+    await prisma.mealLog.delete({ where: { id: existing.id } });
+
+    return res.json({ deleted: true, id: itemId });
+  } catch (error) {
+    console.error("[me:nutrition:meal-logs:delete] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 export { meRouter };
 

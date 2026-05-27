@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import type { MealLog } from '@/lib/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -18,6 +17,32 @@ interface DayGroup {
   dateKey: string   // YYYY-MM-DD, used for sorting
   label: string     // human-readable label shown in UI
   items: MealLog[]
+}
+
+// ─── Backend shape ────────────────────────────────────────────────────────────
+
+type BackendMealLog = {
+  id: string
+  clientId: string
+  date: string
+  mealType: string | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+function mapMealLog(m: BackendMealLog): MealLog {
+  return {
+    id: m.id,
+    client_id: m.clientId,
+    meal_name: m.mealType ?? '',
+    // calories / protein_g / carbs_g / fat_g not in backend model — deferred
+    calories: null,
+    protein_g: null,
+    carbs_g: null,
+    fat_g: null,
+    logged_at: m.createdAt,
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -93,7 +118,6 @@ function MacroBadge({ value, unit, color }: { value: number; unit: string; color
 export default function MealsPage() {
   const formRef = useRef<HTMLDivElement>(null)
 
-  const [userId, setUserId] = useState<string | null>(null)
   const [logs, setLogs] = useState<MealLog[]>([])
   const [form, setForm] = useState<MealForm>(EMPTY_FORM)
   const [loading, setLoading] = useState(true)
@@ -104,17 +128,9 @@ export default function MealsPage() {
   // ── Load meals ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      setUserId(user.id)
-
-      const { data } = await supabase
-        .from('meal_logs')
-        .select('*')
-        .eq('client_id', user.id)
-        .order('logged_at', { ascending: false })
-
-      setLogs((data ?? []) as MealLog[])
+      const res = await fetch('/api/backend/me/nutrition/meal-logs')
+      const data = res.ok ? await res.json().catch(() => null) : null
+      setLogs(((data?.mealLogs ?? []) as BackendMealLog[]).map(mapMealLog))
       setLoading(false)
     }
     load()
@@ -123,32 +139,31 @@ export default function MealsPage() {
   // ── Save new meal ──────────────────────────────────────────────────────────
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!userId || !form.meal_name.trim()) return
+    if (!form.meal_name.trim()) return
     setSaving(true)
     setError('')
 
-    const { data, error: err } = await supabase
-      .from('meal_logs')
-      .insert({
-        client_id: userId,
-        meal_name: form.meal_name.trim(),
-        calories:  form.calories  ? parseInt(form.calories,  10)    : null,
-        protein_g: form.protein_g ? parseFloat(form.protein_g)      : null,
-        carbs_g:   form.carbs_g   ? parseFloat(form.carbs_g)        : null,
-        fat_g:     form.fat_g     ? parseFloat(form.fat_g)          : null,
+    try {
+      const res = await fetch('/api/backend/me/nutrition/meal-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mealType: form.meal_name.trim() }),
       })
-      .select()
-      .single()
-
-    if (err || !data) {
-      setError(err?.message ?? 'Fehler beim Speichern.')
-      setSaving(false)
-      return
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setError(data?.message ?? 'Fehler beim Speichern.')
+        setSaving(false)
+        return
+      }
+      const data = await res.json().catch(() => null)
+      if (data?.mealLog) {
+        setLogs(prev => [mapMealLog(data.mealLog as BackendMealLog), ...prev])
+        setForm(EMPTY_FORM)
+        showFlash('✓ Mahlzeit gespeichert')
+      }
+    } catch {
+      setError('Fehler beim Speichern.')
     }
-
-    setLogs(prev => [data as MealLog, ...prev])
-    setForm(EMPTY_FORM)
-    showFlash('✓ Mahlzeit gespeichert')
     setSaving(false)
   }
 
@@ -269,7 +284,6 @@ export default function MealsPage() {
           <h2 className="font-semibold text-gray-900">Verlauf</h2>
 
           {grouped.map(group => {
-            // Day-level totals
             const total = group.items.reduce(
               (acc, log) => ({
                 calories:  acc.calories  + (log.calories  ?? 0),
@@ -304,10 +318,10 @@ export default function MealsPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900 text-sm leading-snug">{log.meal_name}</p>
                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                          {log.calories  != null && <MacroBadge value={log.calories}          unit=" kcal" color="text-gray-500"  />}
-                          {log.protein_g != null && <MacroBadge value={log.protein_g}         unit="g E"   color="text-blue-600" />}
-                          {log.carbs_g   != null && <MacroBadge value={log.carbs_g}           unit="g K"   color="text-green-600"/>}
-                          {log.fat_g     != null && <MacroBadge value={log.fat_g}             unit="g F"   color="text-yellow-600"/>}
+                          {log.calories  != null && <MacroBadge value={log.calories}  unit=" kcal" color="text-gray-500"   />}
+                          {log.protein_g != null && <MacroBadge value={log.protein_g} unit="g E"   color="text-blue-600"  />}
+                          {log.carbs_g   != null && <MacroBadge value={log.carbs_g}   unit="g K"   color="text-green-600" />}
+                          {log.fat_g     != null && <MacroBadge value={log.fat_g}     unit="g F"   color="text-yellow-600"/>}
                         </div>
                       </div>
 

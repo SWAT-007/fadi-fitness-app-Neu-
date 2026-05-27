@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import type { MealLog } from '@/lib/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -18,6 +17,32 @@ interface DayGroup {
   dateKey: string
   label: string
   items: MealLog[]
+}
+
+// ─── Backend shape ────────────────────────────────────────────────────────────
+
+type BackendMealLog = {
+  id: string
+  clientId: string
+  date: string
+  mealType: string | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+function mapMealLog(m: BackendMealLog): MealLog {
+  return {
+    id: m.id,
+    client_id: m.clientId,
+    meal_name: m.mealType ?? '',
+    // calories / protein_g / carbs_g / fat_g not in backend model — deferred
+    calories: null,
+    protein_g: null,
+    carbs_g: null,
+    fat_g: null,
+    logged_at: m.createdAt,
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -60,7 +85,6 @@ function groupByDate(logs: MealLog[]): DayGroup[] {
 export default function MealLogger() {
   const formRef = useRef<HTMLDivElement>(null)
 
-  const [userId, setUserId]   = useState<string | null>(null)
   const [logs, setLogs]       = useState<MealLog[]>([])
   const [form, setForm]       = useState<MealForm>(EMPTY)
   const [loading, setLoading] = useState(true)
@@ -70,17 +94,9 @@ export default function MealLogger() {
 
   useEffect(() => {
     const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      setUserId(user.id)
-
-      const { data } = await supabase
-        .from('meal_logs')
-        .select('*')
-        .eq('client_id', user.id)
-        .order('logged_at', { ascending: false })
-
-      setLogs((data ?? []) as MealLog[])
+      const res = await fetch('/api/backend/me/nutrition/meal-logs')
+      const data = res.ok ? await res.json().catch(() => null) : null
+      setLogs(((data?.mealLogs ?? []) as BackendMealLog[]).map(mapMealLog))
       setLoading(false)
     }
     load()
@@ -88,29 +104,32 @@ export default function MealLogger() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!userId || !form.meal_name.trim()) return
+    if (!form.meal_name.trim()) return
     setSaving(true)
     setError('')
 
-    const { data, error: err } = await supabase
-      .from('meal_logs')
-      .insert({
-        client_id: userId,
-        meal_name: form.meal_name.trim(),
-        calories:  form.calories  ? parseInt(form.calories,  10) : null,
-        protein_g: form.protein_g ? parseFloat(form.protein_g)  : null,
-        carbs_g:   form.carbs_g   ? parseFloat(form.carbs_g)    : null,
-        fat_g:     form.fat_g     ? parseFloat(form.fat_g)      : null,
+    try {
+      const res = await fetch('/api/backend/me/nutrition/meal-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mealType: form.meal_name.trim() }),
       })
-      .select()
-      .single()
-
-    if (err || !data) { setError(err?.message ?? 'Fehler.'); setSaving(false); return }
-
-    setLogs(prev => [data as MealLog, ...prev])
-    setForm(EMPTY)
-    setFlash('✓ Mahlzeit gespeichert')
-    setTimeout(() => setFlash(''), 2500)
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setError(data?.message ?? 'Fehler.')
+        setSaving(false)
+        return
+      }
+      const data = await res.json().catch(() => null)
+      if (data?.mealLog) {
+        setLogs(prev => [mapMealLog(data.mealLog as BackendMealLog), ...prev])
+        setForm(EMPTY)
+        setFlash('✓ Mahlzeit gespeichert')
+        setTimeout(() => setFlash(''), 2500)
+      }
+    } catch {
+      setError('Fehler.')
+    }
     setSaving(false)
   }
 
