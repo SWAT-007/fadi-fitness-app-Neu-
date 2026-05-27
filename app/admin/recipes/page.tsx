@@ -1,22 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface RecipeRow {
   id: string
   name: string
-  ingredients: { name: string; amount: string }[]
-  instructions: string
-  total_calories: number | null
-  protein_g: number | null
-  carbs_g: number | null
-  fat_g: number | null
-  servings: number | null
-  source_pdf: string
-  created_at: string
+  description: string | null
+  instructions: string | null
+  imageUrl: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -34,11 +29,9 @@ export default function RecipesPage() {
   // ── Load ────────────────────────────────────────────────────────────────────
   const load = async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('recipes')
-      .select('*')
-      .order('name', { ascending: true })
-    setRecipes((data ?? []) as RecipeRow[])
+    const res = await fetch('/api/backend/nutrition/recipes')
+    const data = res.ok ? await res.json().catch(() => null) : null
+    setRecipes((data?.recipes ?? []) as RecipeRow[])
     setLoading(false)
   }
 
@@ -65,15 +58,14 @@ export default function RecipesPage() {
   // ── Delete ──────────────────────────────────────────────────────────────────
   const handleDelete = async (id: string) => {
     setDeleting(id)
-    await supabase.from('recipes').delete().eq('id', id)
-    setRecipes(prev => prev.filter(r => r.id !== id))
+    const res = await fetch(`/api/backend/nutrition/recipes/${id}`, { method: 'DELETE' })
+    if (res.ok) setRecipes(prev => prev.filter(r => r.id !== id))
     setDeleting(null)
   }
 
   // ── Filter ──────────────────────────────────────────────────────────────────
   const filtered = recipes.filter(r =>
-    r.name.toLowerCase().includes(search.toLowerCase()) ||
-    r.source_pdf.toLowerCase().includes(search.toLowerCase()),
+    r.name.toLowerCase().includes(search.toLowerCase()),
   )
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -136,14 +128,9 @@ export default function RecipesPage() {
               >
                 <div className="min-w-0">
                   <p className="font-semibold text-gray-900 text-sm leading-snug">{r.name}</p>
-                  <div className="flex flex-wrap gap-x-3 mt-1 text-xs text-gray-400">
-                    {r.total_calories != null && <span>{r.total_calories} kcal</span>}
-                    {r.protein_g     != null && <span className="text-blue-500">{r.protein_g}g Protein</span>}
-                    {r.carbs_g       != null && <span className="text-green-500">{r.carbs_g}g KH</span>}
-                    {r.fat_g         != null && <span className="text-yellow-500">{r.fat_g}g Fett</span>}
-                    <span className="text-gray-300">·</span>
-                    <span className="truncate max-w-[200px]">{r.source_pdf}</span>
-                  </div>
+                  {r.description && (
+                    <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[300px]">{r.description}</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span className="text-gray-400 text-lg">{expanded === r.id ? '▲' : '▼'}</span>
@@ -158,34 +145,10 @@ export default function RecipesPage() {
               </div>
 
               {/* Expanded detail */}
-              {expanded === r.id && (
-                <div className="border-t border-gray-100 px-5 py-4 space-y-4 text-sm">
-                  {/* Ingredients */}
-                  {r.ingredients.length > 0 && (
-                    <div>
-                      <p className="font-semibold text-gray-700 mb-2">Zutaten</p>
-                      <ul className="space-y-1">
-                        {r.ingredients.map((ing, i) => (
-                          <li key={i} className="flex gap-2 text-gray-600">
-                            {ing.amount && <span className="font-medium text-gray-800 min-w-[60px]">{ing.amount}</span>}
-                            <span>{ing.name}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Instructions */}
-                  {r.instructions && (
-                    <div>
-                      <p className="font-semibold text-gray-700 mb-2">Zubereitung</p>
-                      <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">{r.instructions}</p>
-                    </div>
-                  )}
-
-                  {r.servings && (
-                    <p className="text-xs text-gray-400">Portionen: {r.servings}</p>
-                  )}
+              {expanded === r.id && r.instructions && (
+                <div className="border-t border-gray-100 px-5 py-4 text-sm">
+                  <p className="font-semibold text-gray-700 mb-2">Zubereitung</p>
+                  <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">{r.instructions}</p>
                 </div>
               )}
             </div>

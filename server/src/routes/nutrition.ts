@@ -977,4 +977,91 @@ nutritionRouter.delete("/assignments/:assignmentId", requireAuth, async (req: Au
   }
 });
 
+// ─── Recipes ──────────────────────────────────────────────────────────────────
+
+const recipeSelect = {
+  id: true,
+  name: true,
+  description: true,
+  instructions: true,
+  imageUrl: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+nutritionRouter.get("/recipes", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+
+  const limitRaw = parseInt(String(req.query.limit ?? "100"), 10);
+  const limit = Number.isFinite(limitRaw) ? Math.min(300, Math.max(1, limitRaw)) : 100;
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : null;
+
+  try {
+    let trainerId: string | null = null;
+
+    if (req.user.role === "trainer") {
+      const trainerProfile = await prisma.trainerProfile.findUnique({
+        where: { userId: req.user.userId },
+        select: { id: true },
+      });
+      if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+      trainerId = trainerProfile.id;
+    } else {
+      const clientProfile = await prisma.clientProfile.findUnique({
+        where: { userId: req.user.userId },
+        select: { trainerId: true },
+      });
+      if (!clientProfile) return res.status(500).json({ message: "Internal server error" });
+      trainerId = clientProfile.trainerId;
+    }
+
+    const recipes = await prisma.recipe.findMany({
+      where: {
+        OR: [{ trainerId }, { trainerId: null }],
+        ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
+      },
+      orderBy: { name: "asc" },
+      take: limit,
+      select: recipeSelect,
+    });
+
+    return res.json({ recipes });
+  } catch (error) {
+    console.error("[nutrition:recipes:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+nutritionRouter.delete("/recipes/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const idParam = req.params.id;
+  const recipeId = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!recipeId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const recipe = await prisma.recipe.findFirst({
+      where: { id: recipeId, trainerId: trainerProfile.id },
+      select: { id: true },
+    });
+    if (!recipe) return res.status(404).json({ message: "Not found" });
+
+    await prisma.recipe.delete({ where: { id: recipe.id } });
+    return res.json({ deleted: true, recipeId: recipe.id });
+  } catch (error) {
+    console.error("[nutrition:recipes:delete] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 export { nutritionRouter };

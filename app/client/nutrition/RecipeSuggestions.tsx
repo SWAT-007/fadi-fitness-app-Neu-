@@ -1,39 +1,22 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Ingredient {
-  name: string
-  amount: string
-}
 
 interface Recipe {
   id: string
   name: string
-  ingredients: Ingredient[]
-  instructions: string
-  total_calories: number | null
-  protein_g: number | null
-  carbs_g: number | null
-  fat_g: number | null
-  servings: number | null
-  source_pdf: string
+  description: string | null
+  instructions: string | null
+  imageUrl: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 interface Props {
   /** Client's daily calorie target from the assigned nutrition plan */
   targetCalories: number | null
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Score a recipe by how close it is to a calorie target (lower = better) */
-function relevanceScore(recipe: Recipe, target: number): number {
-  if (recipe.total_calories == null) return Infinity
-  return Math.abs(recipe.total_calories - target)
 }
 
 // ─── Collapsible (local copy — identical to the one in page.tsx) ─────────────
@@ -85,11 +68,9 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase
-        .from('recipes')
-        .select('id,name,ingredients,instructions,total_calories,protein_g,carbs_g,fat_g,servings,source_pdf')
-        .order('name', { ascending: true })
-      setRecipes((data ?? []) as Recipe[])
+      const res = await fetch('/api/backend/nutrition/recipes')
+      const data = res.ok ? await res.json().catch(() => null) : null
+      setRecipes((data?.recipes ?? []) as Recipe[])
       setLoading(false)
     }
     load()
@@ -100,23 +81,9 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
     .filter(r => {
       if (!search.trim()) return true
       const q = search.toLowerCase()
-      return (
-        r.name.toLowerCase().includes(q) ||
-        r.ingredients.some(i => i.name.toLowerCase().includes(q))
-      )
+      return r.name.toLowerCase().includes(q)
     })
-    .sort((a, b) => {
-      if (!targetCalories) return a.name.localeCompare(b.name)
-      return relevanceScore(a, targetCalories) - relevanceScore(b, targetCalories)
-    })
-
-  // Best match within ±25 % of target
-  const bestMatches = targetCalories
-    ? filtered.filter(r =>
-        r.total_calories != null &&
-        Math.abs(r.total_calories - targetCalories) / targetCalories < 0.25,
-      )
-    : []
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -139,11 +106,12 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
       >
         <div>
           <h2 className="font-bold text-gray-900">Rezeptvorschläge</h2>
-          {targetCalories && (
+          {targetCalories ? (
             <p className="text-xs text-gray-400 mt-0.5">
-              Passend zu deinem Ziel von {targetCalories} kcal/Tag
-              {bestMatches.length > 0 && ` · ${bestMatches.length} Treffer`}
+              Tägliches Kalorienziel: {targetCalories} kcal · {recipes.length} Rezepte
             </p>
+          ) : (
+            <p className="text-xs text-gray-400 mt-0.5">{recipes.length} Rezepte verfügbar</p>
           )}
         </div>
         <svg
@@ -162,7 +130,7 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Rezept oder Zutat suchen…"
+            placeholder="Rezept suchen…"
             className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
           />
 
@@ -172,44 +140,23 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
           ) : (
             <div className="space-y-3">
               {filtered.map(r => {
-                const isOpen  = openIds.has(r.id)
-                const isMatch = targetCalories != null &&
-                  r.total_calories != null &&
-                  Math.abs(r.total_calories - targetCalories) / targetCalories < 0.25
+                const isOpen = openIds.has(r.id)
 
                 return (
                   <div
                     key={r.id}
                     className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
                   >
-                    {/* Card header — click to expand / collapse */}
+                    {/* Card header */}
                     <button
                       onClick={() => toggle(r.id)}
                       className="w-full text-left flex items-start justify-between gap-3 px-5 py-3 hover:bg-gray-50/60 transition-colors"
                     >
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold text-gray-900 text-sm leading-snug">{r.name}</p>
-                          {isMatch && (
-                            <span className="text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full whitespace-nowrap">
-                              ✓ Passt
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-x-3 mt-1 text-xs">
-                          {r.total_calories != null && (
-                            <span className="text-gray-500">{r.total_calories} kcal</span>
-                          )}
-                          {r.protein_g != null && (
-                            <span className="text-blue-500">{r.protein_g}g P</span>
-                          )}
-                          {r.carbs_g != null && (
-                            <span className="text-green-500">{r.carbs_g}g K</span>
-                          )}
-                          {r.fat_g != null && (
-                            <span className="text-yellow-500">{r.fat_g}g F</span>
-                          )}
-                        </div>
+                        <p className="font-semibold text-gray-900 text-sm leading-snug">{r.name}</p>
+                        {r.description && (
+                          <p className="text-xs text-gray-500 mt-0.5 truncate">{r.description}</p>
+                        )}
                       </div>
                       <svg
                         className={`w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
@@ -221,36 +168,11 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
 
                     {/* Collapsible body */}
                     <Collapsible open={isOpen}>
-                      <div className="border-t border-gray-100 px-5 py-4 space-y-4 text-sm">
-                        {/* Ingredients */}
-                        {r.ingredients.length > 0 && (
-                          <div>
-                            <p className="font-semibold text-gray-700 mb-2 text-xs uppercase tracking-wide">Zutaten</p>
-                            <ul className="space-y-1.5">
-                              {r.ingredients.map((ing, i) => (
-                                <li key={i} className="flex gap-3">
-                                  {ing.amount && (
-                                    <span className="font-medium text-gray-800 min-w-[64px] flex-shrink-0">
-                                      {ing.amount}
-                                    </span>
-                                  )}
-                                  <span className="text-gray-600">{ing.name}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {/* Instructions */}
-                        {r.instructions && (
-                          <div>
-                            <p className="font-semibold text-gray-700 mb-2 text-xs uppercase tracking-wide">Zubereitung</p>
-                            <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">{r.instructions}</p>
-                          </div>
-                        )}
-
-                        {r.servings && (
-                          <p className="text-xs text-gray-400">Portionen: {r.servings}</p>
+                      <div className="border-t border-gray-100 px-5 py-4 text-sm">
+                        {r.instructions ? (
+                          <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">{r.instructions}</p>
+                        ) : (
+                          <p className="text-gray-400 text-xs">Keine Zubereitung hinterlegt.</p>
                         )}
                       </div>
                     </Collapsible>
