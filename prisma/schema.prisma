@@ -80,6 +80,8 @@ model ClientProfile {
   drinkLogs              DrinkLog[]
   workoutLogs            WorkoutLog[]
   exerciseChangeRequests ExerciseChangeRequest[]
+  progressLogs           ProgressLog[]
+  weeklyCheckins         WeeklyCheckin[]
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
 
@@ -403,4 +405,51 @@ model ExerciseChangeRequest {
 
   @@index([clientId])
   @@index([dayId])
+}
+
+model ProgressLog {
+  id                          String        @id @default(cuid())
+  clientId                    String
+  client                      ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  date                        String
+  bodyWeight                  Float?
+  notes                       String?
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @updatedAt
+  legacySupabaseProgressLogId String?       @unique
+
+  @@index([clientId, date])
+}
+
+model WeeklyCheckin {
+  id                              String         @id @default(cuid())
+  clientId                        String
+  client                          ClientProfile  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  weekStart                       String
+  mood                            Int?
+  energy                          Int?
+  sleepQuality                    Int?
+  hunger                          Int?
+  stress                          Int?
+  bodyWeight                      Float?
+  comment                         String?
+  images                          CheckinImage[]
+  createdAt                       DateTime       @default(now())
+  updatedAt                       DateTime       @updatedAt
+  legacySupabaseWeeklyCheckinId   String?        @unique
+
+  @@unique([clientId, weekStart])
+  @@index([clientId, weekStart])
+}
+
+model CheckinImage {
+  id                            String        @id @default(cuid())
+  checkinId                     String
+  checkin                       WeeklyCheckin @relation(fields: [checkinId], references: [id], onDelete: Cascade)
+  storagePath                   String
+  createdAt                     DateTime      @default(now())
+  updatedAt                     DateTime      @updatedAt
+  legacySupabaseCheckinImageId  String?       @unique
+
+  @@index([checkinId])
 }
