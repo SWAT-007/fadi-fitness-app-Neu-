@@ -7,6 +7,51 @@ import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import type { CheckinImage, Client, AssignedPlan, WorkoutPlan, WorkoutLog, ProgressLog, WeeklyCheckin } from '@/lib/types'
 
+type BackendCheckinImage = {
+  id: string
+  checkinId: string
+  storagePath: string
+  createdAt: string
+}
+
+type BackendCheckin = {
+  id: string
+  clientId: string
+  weekStart: string
+  mood: number | null
+  energy: number | null
+  sleepQuality: number | null
+  hunger: number | null
+  stress: number | null
+  bodyWeight: number | null
+  comment: string | null
+  createdAt: string
+  updatedAt: string
+  images: BackendCheckinImage[]
+}
+
+function mapCheckin(c: BackendCheckin): WeeklyCheckin {
+  return {
+    id: c.id,
+    client_id: c.clientId,
+    week_start: c.weekStart,
+    mood: c.mood,
+    energy: c.energy,
+    sleep_quality: c.sleepQuality,
+    hunger: c.hunger,
+    stress: c.stress,
+    body_weight: c.bodyWeight,
+    comment: c.comment,
+    created_at: c.createdAt,
+    checkin_images: c.images.map(img => ({
+      id: img.id,
+      checkin_id: img.checkinId,
+      storage_path: img.storagePath,
+      created_at: img.createdAt,
+    })),
+  }
+}
+
 type BackendProgressLog = {
   id: string
   clientId: string
@@ -330,7 +375,13 @@ export default function ClientDetailPage() {
           .eq('client_id', id)
           .not('completed_at', 'is', null)
           .gte('date', chartStartStr),
-        supabase.from('weekly_checkins').select('*, checkin_images(id, storage_path, created_at)').eq('client_id', id).order('week_start', { ascending: false }),
+        fetch(`/api/backend/clients/${id}/checkins`, { cache: 'no-store' })
+          .then(r => r.ok ? r.json().catch(() => null) : null)
+          .then((d: { checkins?: BackendCheckin[] } | null) => ({
+            data: (d?.checkins ?? []).map(mapCheckin),
+            error: null,
+          }))
+          .catch(() => ({ data: [] as WeeklyCheckin[], error: null })),
         supabase.from('workout_logs')
           .select('id, duration_seconds, exercise_logs(id, completed)')
           .eq('client_id', id)
@@ -438,23 +489,7 @@ export default function ClientDetailPage() {
       setWorkoutLogs(Array.from({ length: logsRes?.count ?? 0 }) as WorkoutLog[])
       setHistoryLogs((historyRes?.data ?? []) as WorkoutLogDetail[])
       setProgressLogs(progressRes?.data ?? [])
-      const checkinsData = (checkinsRes?.data ?? []) as WeeklyCheckin[]
-      setCheckins(checkinsData)
-
-      // Batch signed URLs for all check-in images
-      const allImagePaths = checkinsData.flatMap(c =>
-        (c.checkin_images ?? []).map((img: CheckinImage) => img.storage_path)
-      )
-      if (allImagePaths.length > 0) {
-        const { data: signedData } = await supabase.storage
-          .from('checkin-images')
-          .createSignedUrls(allImagePaths, 3600)
-        const map: Record<string, string> = {}
-        signedData?.forEach(item => {
-          if (item.signedUrl && item.path) map[item.path] = item.signedUrl
-        })
-        setAdminSignedUrlMap(map)
-      }
+      setCheckins((checkinsRes?.data ?? []) as WeeklyCheckin[])
 
       type AnalyseLog = { id: string; duration_seconds: number | null; date: string; exercise_logs: Array<{ id: string; completed: boolean }> }
       const analyseLogs = (analyseRes?.data ?? []) as AnalyseLog[]

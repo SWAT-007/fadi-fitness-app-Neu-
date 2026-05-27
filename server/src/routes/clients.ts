@@ -513,6 +513,68 @@ clientAssignmentsRouter.delete("/:assignmentId", requireAuth, async (req: Authen
   }
 });
 
+const weeklyCheckinSelect = {
+  id: true,
+  clientId: true,
+  weekStart: true,
+  mood: true,
+  energy: true,
+  sleepQuality: true,
+  hunger: true,
+  stress: true,
+  bodyWeight: true,
+  comment: true,
+  createdAt: true,
+  updatedAt: true,
+  images: {
+    select: {
+      id: true,
+      checkinId: true,
+      storagePath: true,
+      createdAt: true,
+    },
+  },
+} as const;
+
+clientsRouter.get("/:clientId/checkins", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientIdParam = req.params.clientId;
+  const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
+  if (!clientId) return res.status(404).json({ message: "Not found" });
+
+  const rawLimit = parseInt(String(req.query.limit ?? "20"), 10);
+  const limit = isNaN(rawLimit) || rawLimit < 1 ? 20 : Math.min(rawLimit, 100);
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const clientProfile = await prisma.clientProfile.findFirst({
+      where: { id: clientId, trainerId: trainerProfile.id },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const checkins = await prisma.weeklyCheckin.findMany({
+      where: { clientId: clientProfile.id },
+      orderBy: { weekStart: "desc" },
+      take: limit,
+      select: weeklyCheckinSelect,
+    });
+
+    return res.json({ checkins });
+  } catch (error) {
+    console.error("[clients:checkins:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 const progressLogSelect = {
   id: true,
   clientId: true,

@@ -1279,6 +1279,139 @@ meRouter.delete("/nutrition/meal-logs/:id", requireAuth, async (req: Authenticat
   }
 });
 
+const weeklyCheckinSelect = {
+  id: true,
+  clientId: true,
+  weekStart: true,
+  mood: true,
+  energy: true,
+  sleepQuality: true,
+  hunger: true,
+  stress: true,
+  bodyWeight: true,
+  comment: true,
+  createdAt: true,
+  updatedAt: true,
+  images: {
+    select: {
+      id: true,
+      checkinId: true,
+      storagePath: true,
+      createdAt: true,
+    },
+  },
+} as const;
+
+meRouter.get("/checkins", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const rawLimit = parseInt(String(req.query.limit ?? "20"), 10);
+  const limit = isNaN(rawLimit) || rawLimit < 1 ? 20 : Math.min(rawLimit, 100);
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const checkins = await prisma.weeklyCheckin.findMany({
+      where: { clientId: clientProfile.id },
+      orderBy: { weekStart: "desc" },
+      take: limit,
+      select: weeklyCheckinSelect,
+    });
+
+    return res.json({ checkins });
+  } catch (error) {
+    console.error("[me:checkins:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+meRouter.post("/checkins", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const weekStartInput = req.body?.weekStart;
+  if (!weekStartInput || typeof weekStartInput !== "string" || !weekStartInput.trim()) {
+    return res.status(400).json({ message: "weekStart is required" });
+  }
+  const weekStart = weekStartInput.trim();
+
+  const parseRating = (val: unknown): number | null => {
+    if (val === null || val === undefined) return null;
+    const n = Number(val);
+    if (!Number.isFinite(n)) return null;
+    const i = Math.round(n);
+    if (i < 1 || i > 5) return null;
+    return i;
+  };
+
+  const mood = parseRating(req.body?.mood);
+  const energy = parseRating(req.body?.energy);
+  const sleepQuality = parseRating(req.body?.sleepQuality);
+  const hunger = parseRating(req.body?.hunger);
+  const stress = parseRating(req.body?.stress);
+
+  const rawWeight = req.body?.bodyWeight;
+  let bodyWeight: number | null = null;
+  if (rawWeight !== null && rawWeight !== undefined) {
+    const n = Number(rawWeight);
+    if (!Number.isFinite(n) || n < 0) {
+      return res.status(400).json({ message: "Invalid bodyWeight" });
+    }
+    bodyWeight = n;
+  }
+
+  const comment =
+    typeof req.body?.comment === "string" ? req.body.comment.trim() || null : null;
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: {
+        id: true,
+        fullName: true,
+        trainer: { select: { userId: true } },
+      },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const checkin = await prisma.weeklyCheckin.upsert({
+      where: { clientId_weekStart: { clientId: clientProfile.id, weekStart } },
+      create: { clientId: clientProfile.id, weekStart, mood, energy, sleepQuality, hunger, stress, bodyWeight, comment },
+      update: { mood, energy, sleepQuality, hunger, stress, bodyWeight, comment },
+      select: weeklyCheckinSelect,
+    });
+
+    let notificationCreated = false;
+    if (clientProfile.trainer?.userId) {
+      try {
+        await prisma.notification.create({
+          data: {
+            userId: clientProfile.trainer.userId,
+            type: NotificationType.CHECKIN,
+            title: "Check-in eingereicht",
+            body: `${clientProfile.fullName} hat einen Check-in eingereicht.`,
+          },
+        });
+        notificationCreated = true;
+      } catch (notifError) {
+        console.error("[me:checkins:upsert] notification error:", notifError);
+      }
+    }
+
+    return res.status(201).json({ checkin, notificationCreated });
+  } catch (error) {
+    console.error("[me:checkins:upsert] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 const progressLogSelect = {
   id: true,
   clientId: true,

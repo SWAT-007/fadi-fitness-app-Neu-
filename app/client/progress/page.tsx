@@ -32,6 +32,53 @@ type PersonalRecord = {
   date: string
 }
 
+// ─── Backend checkin shape ────────────────────────────────────────────────────
+
+type BackendCheckinImage = {
+  id: string
+  checkinId: string
+  storagePath: string
+  createdAt: string
+}
+
+type BackendCheckin = {
+  id: string
+  clientId: string
+  weekStart: string
+  mood: number | null
+  energy: number | null
+  sleepQuality: number | null
+  hunger: number | null
+  stress: number | null
+  bodyWeight: number | null
+  comment: string | null
+  createdAt: string
+  updatedAt: string
+  images: BackendCheckinImage[]
+}
+
+function mapCheckin(c: BackendCheckin): WeeklyCheckin {
+  return {
+    id: c.id,
+    client_id: c.clientId,
+    week_start: c.weekStart,
+    mood: c.mood,
+    energy: c.energy,
+    sleep_quality: c.sleepQuality,
+    hunger: c.hunger,
+    stress: c.stress,
+    body_weight: c.bodyWeight,
+    comment: c.comment,
+    created_at: c.createdAt,
+    checkin_images: c.images.map(img => ({
+      id: img.id,
+      checkin_id: img.checkinId,
+      storage_path: img.storagePath,
+      created_at: img.createdAt,
+    })),
+  }
+}
+
 // ─── Backend progress log shape ───────────────────────────────────────────────
 
 type BackendProgressLog = {
@@ -286,7 +333,7 @@ export default function ProgressPage() {
     setClientTrainerId((client as typeof client & { trainer_id: string }).trainer_id ?? null)
     setClientName((client as typeof client & { full_name: string }).full_name ?? '')
 
-    const [progressFetch, workoutsRes, totalRes, checkinsRes] = await Promise.all([
+    const [progressFetch, workoutsRes, totalRes, checkinsFetch] = await Promise.all([
       fetch('/api/backend/me/progress-logs?limit=30'),
       supabase
         .from('workout_logs')
@@ -296,11 +343,7 @@ export default function ProgressPage() {
         .order('date', { ascending: false })
         .limit(60),
       supabase.from('workout_logs').select('id', { count: 'exact', head: true }).eq('client_id', client.id).not('completed_at', 'is', null),
-      supabase
-        .from('weekly_checkins')
-        .select('*, checkin_images(id, storage_path, created_at)')
-        .eq('client_id', client.id)
-        .order('week_start', { ascending: false }),
+      fetch('/api/backend/me/checkins'),
     ])
 
     const progressData = progressFetch.ok ? await progressFetch.json().catch(() => null) : null
@@ -308,23 +351,8 @@ export default function ProgressPage() {
     setWorkoutLogs((workoutsRes.data ?? []) as unknown as WorkoutLogItem[])
     setTotalWorkouts(totalRes.count ?? 0)
 
-    const checkinsData = (checkinsRes.data ?? []) as WeeklyCheckin[]
-    setCheckins(checkinsData)
-
-    // Generate signed URLs for all images in one batch call
-    const allPaths = checkinsData.flatMap(c =>
-      (c.checkin_images ?? []).map((img: CheckinImage) => img.storage_path)
-    )
-    if (allPaths.length > 0) {
-      const { data: signedData } = await supabase.storage
-        .from('checkin-images')
-        .createSignedUrls(allPaths, 3600)
-      const map: Record<string, string> = {}
-      signedData?.forEach(item => {
-        if (item.signedUrl && item.path) map[item.path] = item.signedUrl
-      })
-      setSignedUrlMap(map)
-    }
+    const checkinsData = checkinsFetch.ok ? await checkinsFetch.json().catch(() => null) : null
+    setCheckins(((checkinsData?.checkins ?? []) as BackendCheckin[]).map(mapCheckin))
 
     setLoading(false)
     } catch (err) {
@@ -398,11 +426,6 @@ export default function ProgressPage() {
     e.preventDefault()
     setCheckinError(null)
 
-    if (!clientId) {
-      setCheckinError('Kein Kundenprofil gefunden – bitte Seite neu laden.')
-      return
-    }
-
     const rawWeight = ciWeight.trim()
     const normalizedWeight = rawWeight.replace(',', '.')
     let safeWeight: number | null = null
@@ -419,98 +442,36 @@ export default function ProgressPage() {
     setSavingCheckin(true)
 
     try {
+      const res = await fetch('/api/backend/me/checkins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          weekStart: thisWeekStart,
+          mood: ciMood || null,
+          energy: ciEnergy || null,
+          sleepQuality: ciSleep || null,
+          hunger: ciHunger || null,
+          stress: ciStress || null,
+          bodyWeight: safeWeight,
+          comment: ciComment || null,
+        }),
+      })
 
-      // 1. Upsert check-in and retrieve its id
-      const { data: savedCheckin, error: upsertError } = await supabase
-        .from('weekly_checkins')
-        .upsert(
-          {
-            client_id: clientId,
-            week_start: thisWeekStart,
-            mood: ciMood || null,
-            energy: ciEnergy || null,
-            sleep_quality: ciSleep || null,
-            hunger: ciHunger || null,
-            stress: ciStress || null,
-            body_weight: safeWeight,
-            comment: ciComment || null,
-          },
-          { onConflict: 'client_id,week_start' }
-        )
-        .select('id')
-        .single()
-
-      if (upsertError) {
-        console.error('[Check-in] upsert error:', upsertError)
-        setCheckinError(
-          `Speichern fehlgeschlagen: ${upsertError.message}` +
-          (upsertError.code === '42P01' ? ' (Tabelle fehlt – Migration ausführen!)' : '')
-        )
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setCheckinError(data?.message ?? 'Speichern fehlgeschlagen.')
         return
       }
 
-      if (!savedCheckin?.id) {
-        setCheckinError('Check-in wurde nicht gespeichert. Bitte erneut versuchen.')
-        return
-      }
-
-      // 2. Upload new images
-      const uploadErrors: string[] = []
-      if (ciFiles.length > 0) {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          for (let i = 0; i < ciFiles.length; i++) {
-            const file = ciFiles[i]
-            setUploadProgress(`Bild ${i + 1} von ${ciFiles.length} wird hochgeladen…`)
-            const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
-            const path = `${user.id}/${savedCheckin.id}/${crypto.randomUUID()}.${ext}`
-
-            const { error: uploadError } = await supabase.storage
-              .from('checkin-images')
-              .upload(path, file, { contentType: file.type, upsert: false })
-
-            if (!uploadError) {
-              await supabase
-                .from('checkin_images')
-                .insert({ checkin_id: savedCheckin.id, storage_path: path })
-            } else {
-              console.error(`[Upload] Bild ${i + 1}:`, uploadError)
-              uploadErrors.push(uploadError.message)
-            }
-          }
-        }
-      }
-
-      // 3. Reset form
       setCiMood(0); setCiEnergy(0); setCiSleep(0)
       setCiHunger(0); setCiStress(0); setCiWeight(''); setCiComment('')
       ciPreviews.forEach(p => URL.revokeObjectURL(p))
       setCiFiles([])
       setCiPreviews([])
-      setUploadProgress('')
       setShowCheckinForm(false)
-
-      if (uploadErrors.length > 0) {
-        // Show the EXACT Supabase error so we can diagnose it
-        const unique = [...new Set(uploadErrors)]
-        setCheckinError(
-          `Check-in gespeichert ✓, aber ${uploadErrors.length} Bild(er) fehlgeschlagen.\n` +
-          `Fehler: ${unique.join(' | ')}`
-        )
-      } else {
       setCheckinSuccess(true)
       showToast('Check-in gespeichert ✓', 'success')
       setTimeout(() => setCheckinSuccess(false), 4000)
-      if (clientTrainerId) {
-        await supabase.from('notifications').insert({
-          client_id: clientTrainerId,
-          type: 'checkin',
-          title: `${clientName || 'Ein Kunde'} hat einen Check-in eingereicht`,
-          body: ciComment?.trim() ? ciComment.trim().slice(0, 80) : null,
-          is_read: false,
-        })
-      }
-      }
 
       await load()
     } catch (err) {
@@ -839,114 +800,11 @@ export default function ProgressPage() {
                 />
               </div>
 
-              {/* ── Image Upload ── */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Progress-Fotos
-                  <span className="ml-1.5 text-xs font-normal text-gray-400">
-                    (optional · bis zu 5 · max. 10 MB je Bild)
-                  </span>
-                </label>
-
-                {/* Existing images (already uploaded for this week) */}
-                {(thisWeekCheckin?.checkin_images?.length ?? 0) > 0 && (
-                  <div className="mb-3">
-                    <p className="text-xs text-gray-400 mb-2">Bereits hochgeladen:</p>
-                    <div className="grid grid-cols-4 gap-2">
-                      {thisWeekCheckin!.checkin_images!.map((img, i) => {
-                        const url = signedUrlMap[img.storage_path]
-                        return url ? (
-                          <button
-                            key={img.id}
-                            type="button"
-                            onClick={() => openLightbox(thisWeekCheckin!.checkin_images!, i)}
-                            className="relative aspect-square rounded-xl overflow-hidden ring-1 ring-gray-200 hover:ring-emerald-400 transition-all"
-                          >
-                            <Image src={url} alt="" fill className="object-cover" />
-                          </button>
-                        ) : (
-                          <div key={img.id} className="aspect-square rounded-xl bg-gray-100 animate-pulse" />
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Hidden file input */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={e => handleFiles(e.target.files)}
-                />
-
-                {/* New file previews */}
-                {ciPreviews.length > 0 && (
-                  <div className="grid grid-cols-4 gap-2 mb-3">
-                    {ciPreviews.map((url, i) => (
-                      <div key={i} className="relative aspect-square">
-                        <Image
-                          src={url}
-                          alt=""
-                          fill
-                          unoptimized
-                          className="object-cover rounded-xl ring-1 ring-gray-200"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeNewFile(i)}
-                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-gray-900 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600 transition-colors leading-none"
-                          aria-label="Entfernen"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                    {/* Add-more button */}
-                    {(thisWeekCheckin?.checkin_images?.length ?? 0) + ciFiles.length < 5 && (
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="aspect-square rounded-xl border-2 border-dashed border-gray-200 hover:border-emerald-400 hover:bg-emerald-50 flex items-center justify-center text-gray-400 hover:text-emerald-500 transition-colors text-xl"
-                        aria-label="Weiteres Bild hinzufügen"
-                      >
-                        +
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Drop zone (only show when no previews yet and slots remain) */}
-                {ciPreviews.length === 0 && (thisWeekCheckin?.checkin_images?.length ?? 0) < 5 && (
-                  <div
-                    onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
-                    onDragEnter={e => { e.preventDefault(); setIsDragging(true) }}
-                    onDragLeave={() => setIsDragging(false)}
-                    onDrop={e => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files) }}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors select-none ${
-                      isDragging
-                        ? 'border-emerald-400 bg-emerald-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="text-2xl mb-1.5">📸</div>
-                    <p className="text-sm font-medium text-gray-600">Fotos hinzufügen</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Tippen zum Auswählen · Drag &amp; Drop · Kamera oder Galerie
-                    </p>
-                  </div>
-                )}
-
-                {/* Upload progress indicator */}
-                {uploadProgress && (
-                  <div className="flex items-center gap-2 mt-2 text-xs text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg">
-                    <div className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
-                    {uploadProgress}
-                  </div>
-                )}
+              {/* ── Image Upload – deferred ── */}
+              <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-4 py-3">
+                <p className="text-xs text-gray-400">
+                  📷 Bild-Upload wird in einem späteren Migrationsschritt umgestellt.
+                </p>
               </div>
 
               {/* Inline error inside form */}
@@ -970,9 +828,7 @@ export default function ProgressPage() {
                   disabled={savingCheckin}
                   className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-60"
                 >
-                  {savingCheckin
-                    ? (uploadProgress || 'Speichern…')
-                    : thisWeekCheckin ? 'Check-in aktualisieren' : 'Check-in senden'}
+                  {savingCheckin ? 'Speichern…' : thisWeekCheckin ? 'Check-in aktualisieren' : 'Check-in senden'}
                 </button>
               </div>
             </form>
