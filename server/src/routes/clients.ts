@@ -513,4 +513,53 @@ clientAssignmentsRouter.delete("/:assignmentId", requireAuth, async (req: Authen
   }
 });
 
+const progressLogSelect = {
+  id: true,
+  clientId: true,
+  date: true,
+  bodyWeight: true,
+  notes: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+clientsRouter.get("/:clientId/progress-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientIdParam = req.params.clientId;
+  const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
+  if (!clientId) return res.status(404).json({ message: "Not found" });
+
+  const rawLimit = parseInt(String(req.query.limit ?? "20"), 10);
+  const limit = isNaN(rawLimit) || rawLimit < 1 ? 20 : Math.min(rawLimit, 200);
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const clientProfile = await prisma.clientProfile.findFirst({
+      where: { id: clientId, trainerId: trainerProfile.id },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const progressLogs = await prisma.progressLog.findMany({
+      where: { clientId: clientProfile.id },
+      orderBy: { date: "desc" },
+      take: limit,
+      select: progressLogSelect,
+    });
+
+    return res.json({ progressLogs });
+  } catch (error) {
+    console.error("[clients:progress-logs:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 export { clientsRouter, clientAssignmentsRouter };

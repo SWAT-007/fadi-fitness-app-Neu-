@@ -32,6 +32,29 @@ type PersonalRecord = {
   date: string
 }
 
+// ─── Backend progress log shape ───────────────────────────────────────────────
+
+type BackendProgressLog = {
+  id: string
+  clientId: string
+  date: string
+  bodyWeight: number | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+function mapProgressLog(p: BackendProgressLog): ProgressLog {
+  return {
+    id: p.id,
+    client_id: p.clientId,
+    date: p.date,
+    body_weight: p.bodyWeight,
+    notes: p.notes,
+    created_at: p.createdAt,
+  }
+}
+
 // ─── Pure helpers ────────────────────────────────────────────────────────────
 
 function getMonday(date: Date): string {
@@ -263,8 +286,8 @@ export default function ProgressPage() {
     setClientTrainerId((client as typeof client & { trainer_id: string }).trainer_id ?? null)
     setClientName((client as typeof client & { full_name: string }).full_name ?? '')
 
-    const [progressRes, workoutsRes, totalRes, checkinsRes] = await Promise.all([
-      supabase.from('progress_logs').select('*').eq('client_id', client.id).order('date', { ascending: false }).limit(30),
+    const [progressFetch, workoutsRes, totalRes, checkinsRes] = await Promise.all([
+      fetch('/api/backend/me/progress-logs?limit=30'),
       supabase
         .from('workout_logs')
         .select('id, date, duration_seconds, workout_day:workout_days(name), exercise_logs(actual_weight, actual_reps, sets_done, completed, exercise:exercises(name))')
@@ -280,7 +303,8 @@ export default function ProgressPage() {
         .order('week_start', { ascending: false }),
     ])
 
-    setProgressLogs(progressRes.data ?? [])
+    const progressData = progressFetch.ok ? await progressFetch.json().catch(() => null) : null
+    setProgressLogs(((progressData?.progressLogs ?? []) as BackendProgressLog[]).map(mapProgressLog))
     setWorkoutLogs((workoutsRes.data ?? []) as unknown as WorkoutLogItem[])
     setTotalWorkouts(totalRes.count ?? 0)
 

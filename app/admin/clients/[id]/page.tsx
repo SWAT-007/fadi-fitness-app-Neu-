@@ -6,6 +6,27 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import type { CheckinImage, Client, AssignedPlan, WorkoutPlan, WorkoutLog, ProgressLog, WeeklyCheckin } from '@/lib/types'
+
+type BackendProgressLog = {
+  id: string
+  clientId: string
+  date: string
+  bodyWeight: number | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+function mapProgressLog(p: BackendProgressLog): ProgressLog {
+  return {
+    id: p.id,
+    client_id: p.clientId,
+    date: p.date,
+    body_weight: p.bodyWeight,
+    notes: p.notes,
+    created_at: p.createdAt,
+  }
+}
 import Lightbox from '@/components/Lightbox'
 import { useToast } from '@/components/Motion'
 
@@ -292,7 +313,13 @@ export default function ClientDetailPage() {
           .not('completed_at', 'is', null)
           .order('date', { ascending: false })
           .limit(10),
-        supabase.from('progress_logs').select('*').eq('client_id', id).order('date', { ascending: false }).limit(20),
+        fetch(`/api/backend/clients/${id}/progress-logs`, { cache: 'no-store' })
+          .then(r => r.ok ? r.json().catch(() => null) : null)
+          .then((d: { progressLogs?: BackendProgressLog[] } | null) => ({
+            data: (d?.progressLogs ?? []).map(mapProgressLog),
+            error: null,
+          }))
+          .catch(() => ({ data: [] as ProgressLog[], error: null })),
         supabase.from('workout_logs')
           .select('id, duration_seconds, date, exercise_logs(id, completed)')
           .eq('client_id', id)

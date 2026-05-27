@@ -1279,5 +1279,119 @@ meRouter.delete("/nutrition/meal-logs/:id", requireAuth, async (req: Authenticat
   }
 });
 
+const progressLogSelect = {
+  id: true,
+  clientId: true,
+  date: true,
+  bodyWeight: true,
+  notes: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+meRouter.get("/progress-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const rawLimit = parseInt(String(req.query.limit ?? "30"), 10);
+  const limit = isNaN(rawLimit) || rawLimit < 1 ? 30 : Math.min(rawLimit, 200);
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const progressLogs = await prisma.progressLog.findMany({
+      where: { clientId: clientProfile.id },
+      orderBy: { date: "desc" },
+      take: limit,
+      select: progressLogSelect,
+    });
+
+    return res.json({ progressLogs });
+  } catch (error) {
+    console.error("[me:progress-logs:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+meRouter.post("/progress-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const dateInput = req.body?.date;
+  const date =
+    dateInput && typeof dateInput === "string" && dateInput.trim()
+      ? dateInput.trim()
+      : today;
+
+  const rawWeight = req.body?.bodyWeight;
+  let bodyWeight: number | null = null;
+  if (rawWeight !== null && rawWeight !== undefined) {
+    const n = Number(rawWeight);
+    if (!Number.isFinite(n) || n < 0) {
+      return res.status(400).json({ message: "Invalid bodyWeight" });
+    }
+    bodyWeight = n;
+  }
+
+  const notes =
+    typeof req.body?.notes === "string" ? req.body.notes.trim() || null : null;
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const progressLog = await prisma.progressLog.create({
+      data: { clientId: clientProfile.id, date, bodyWeight, notes },
+      select: progressLogSelect,
+    });
+
+    return res.status(201).json({ progressLog });
+  } catch (error) {
+    console.error("[me:progress-logs:create] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+meRouter.delete("/progress-logs/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const idParam = req.params.id;
+  const itemId = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!itemId) return res.status(404).json({ message: "Not found" });
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const existing = await prisma.progressLog.findFirst({
+      where: { id: itemId, clientId: clientProfile.id },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ message: "Not found" });
+
+    await prisma.progressLog.delete({ where: { id: existing.id } });
+
+    return res.json({ deleted: true, id: itemId });
+  } catch (error) {
+    console.error("[me:progress-logs:delete] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 export { meRouter };
 
