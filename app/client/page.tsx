@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import type { Profile, Client, AssignedPlan, WorkoutPlan, WorkoutDay, ProgressLog } from '@/lib/types'
 import { AnimatedNumber, StaggerItem, SuccessButton, useToast } from '@/components/Motion'
 
@@ -54,6 +53,7 @@ export default function ClientDashboard() {
   const [weeklyStats, setWeeklyStats] = useState({ workouts: 0, seconds: 0 })
   const [monthlyStats, setMonthlyStats] = useState({ workouts: 0, seconds: 0 })
   const [hasWeeklyCheckin, setHasWeeklyCheckin] = useState(false)
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -62,60 +62,129 @@ export default function ClientDashboard() {
   const [weightSaving, setWeightSaving] = useState(false)
   const [weightSaved, setWeightSaved] = useState(false)
 
+  interface DashboardPayload {
+    client?: {
+      id: string
+      fullName: string
+      email: string
+      trainerId: string
+    } | null
+    activePlan?: {
+      id: string
+      planId: string
+      plan: {
+        id: string
+        name: string
+        days: WorkoutDay[]
+      }
+    } | null
+    workoutStats?: {
+      completedCount: number
+      completedThisWeekDayIds: string[]
+      activeDayIds: string[]
+      monthlyWorkouts: Array<{ id: string; durationSeconds: number | null; date: string; completedAt: string | null }>
+    }
+    latestProgressLog?: {
+      id: string
+      date: string
+      bodyWeight: number | null
+      notes?: string | null
+    } | null
+    hasCurrentWeekCheckin?: boolean
+    unreadMessageCount?: number
+    message?: string
+  }
+
   useEffect(() => {
     const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      try {
+        const response = await fetch('/api/backend/me/dashboard', {
+          method: 'GET',
+          cache: 'no-store',
+        })
 
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-      if (prof?.role === 'trainer') { router.replace('/admin'); return }
-      setProfile(prof)
+        if (response.status === 401) {
+          router.replace('/login')
+          return
+        }
+        if (response.status === 403) {
+          router.replace('/admin')
+          return
+        }
 
-      const { data: cl } = await supabase.from('clients').select('*').eq('user_id', user.id).maybeSingle()
-      if (!cl) { setLoading(false); return }
-      setClient(cl)
+        const payload = await response.json().catch(() => null) as DashboardPayload | null
+        if (!response.ok || !payload?.client) {
+          setLoading(false)
+          return
+        }
 
-      const now = new Date()
-      const dayOfWeek = now.getDay()
-      const monday = new Date(now)
-      monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
-      monday.setHours(0, 0, 0, 0)
-      const weekStart = monday.toISOString().split('T')[0]
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+        const clientData: Client = {
+          id: payload.client.id,
+          trainer_id: payload.client.trainerId,
+          full_name: payload.client.fullName,
+          email: payload.client.email,
+          created_at: '',
+        }
+        setClient(clientData)
+        setProfile({
+          id: payload.client.id,
+          email: payload.client.email,
+          full_name: payload.client.fullName,
+          role: 'client',
+          created_at: '',
+        })
 
-      const [assignedRes, logsCountRes, progressRes, weekLogsRes, activeLogsRes, analyseLogsRes, checkinRes] = await Promise.all([
-        supabase.from('assigned_plans').select('*, plan:workout_plans(*, workout_days(*))').eq('client_id', cl.id).eq('is_active', true).order('assigned_at', { ascending: false }).limit(1),
-        supabase.from('workout_logs').select('id', { count: 'exact', head: true }).eq('client_id', cl.id).not('completed_at', 'is', null),
-        supabase.from('progress_logs').select('*').eq('client_id', cl.id).order('date', { ascending: false }).limit(1),
-        supabase.from('workout_logs').select('day_id').eq('client_id', cl.id).not('completed_at', 'is', null).gte('date', weekStart),
-        supabase.from('workout_logs').select('day_id').eq('client_id', cl.id).is('completed_at', null),
-        supabase.from('workout_logs').select('id, duration_seconds, date').eq('client_id', cl.id).not('completed_at', 'is', null).gte('date', monthStart),
-        supabase.from('weekly_checkins').select('id').eq('client_id', cl.id).eq('week_start', weekStart).limit(1),
-      ])
+        if (payload.activePlan?.plan) {
+          const mappedPlan: WorkoutPlan = {
+            id: payload.activePlan.plan.id,
+            trainer_id: payload.client.trainerId,
+            name: payload.activePlan.plan.name,
+            created_at: '',
+          }
+          setActivePlan(mappedPlan)
+          setPlanDays((payload.activePlan.plan.days ?? []).sort((a, b) => a.sort_order - b.sort_order))
+        }
 
-      const assigned = assignedRes.data?.[0] as (AssignedPlan & { plan: WorkoutPlan & { workout_days: WorkoutDay[] } }) | undefined
-      if (assigned?.plan) {
-        setActivePlan(assigned.plan)
-        setPlanDays(assigned.plan.workout_days?.sort((a, b) => a.sort_order - b.sort_order) ?? [])
+        const completedIds = payload.workoutStats?.completedThisWeekDayIds ?? []
+        const activeIds = payload.workoutStats?.activeDayIds ?? []
+        const monthlyWorkouts = payload.workoutStats?.monthlyWorkouts ?? []
+        const weekStart = (() => {
+          const now = new Date()
+          const dayOfWeek = now.getDay()
+          const monday = new Date(now)
+          monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+          monday.setHours(0, 0, 0, 0)
+          return monday.toISOString().split('T')[0]
+        })()
+        const weekMonthlySubset = monthlyWorkouts.filter(log => log.date >= weekStart)
+
+        setTotalWorkouts(payload.workoutStats?.completedCount ?? 0)
+        setCompletedDayIds(new Set(completedIds))
+        setActiveDayIds(new Set(activeIds))
+        setWeeklyStats({
+          workouts: weekMonthlySubset.length,
+          seconds: weekMonthlySubset.reduce((sum, log) => sum + (log.durationSeconds ?? 0), 0),
+        })
+        setMonthlyStats({
+          workouts: monthlyWorkouts.length,
+          seconds: monthlyWorkouts.reduce((sum, log) => sum + (log.durationSeconds ?? 0), 0),
+        })
+        setHasWeeklyCheckin(Boolean(payload.hasCurrentWeekCheckin))
+        setUnreadMessageCount(payload.unreadMessageCount ?? 0)
+
+        setLastWeight(payload.latestProgressLog
+          ? {
+              id: payload.latestProgressLog.id,
+              client_id: payload.client.id,
+              date: payload.latestProgressLog.date,
+              body_weight: payload.latestProgressLog.bodyWeight,
+              notes: payload.latestProgressLog.notes ?? null,
+              created_at: '',
+            }
+          : null)
+      } finally {
+        setLoading(false)
       }
-      setTotalWorkouts(logsCountRes.count ?? 0)
-      setLastWeight(progressRes.data?.[0] ?? null)
-      setCompletedDayIds(new Set((weekLogsRes.data ?? []).map(r => r.day_id)))
-      setActiveDayIds(new Set((activeLogsRes.data ?? []).map(r => r.day_id)))
-
-      const analyseLogs = (analyseLogsRes.data ?? []) as Array<{ duration_seconds: number | null; date: string }>
-      const weekAnalyseLogs = analyseLogs.filter(l => l.date >= weekStart)
-      setWeeklyStats({
-        workouts: weekAnalyseLogs.length,
-        seconds: weekAnalyseLogs.reduce((s, l) => s + (l.duration_seconds ?? 0), 0),
-      })
-      setMonthlyStats({
-        workouts: analyseLogs.length,
-        seconds: analyseLogs.reduce((s, l) => s + (l.duration_seconds ?? 0), 0),
-      })
-      setHasWeeklyCheckin((checkinRes.data?.length ?? 0) > 0)
-
-      setLoading(false)
     }
     load()
   }, [router])
@@ -124,12 +193,24 @@ export default function ClientDashboard() {
     if (!client || !weightInput) return
     setWeightSaving(true)
     const today = new Date().toISOString().split('T')[0]
-    const { data } = await supabase
-      .from('progress_logs')
-      .insert({ client_id: client.id, date: today, body_weight: parseFloat(weightInput) })
-      .select()
-      .single()
-    if (data) setLastWeight(data)
+    const response = await fetch('/api/backend/me/progress-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: today, bodyWeight: parseFloat(weightInput) }),
+    })
+    const payload = await response.json().catch(() => null) as {
+      progressLog?: { id: string; date: string; bodyWeight: number | null; notes?: string | null }
+    } | null
+    if (response.ok && payload?.progressLog) {
+      setLastWeight({
+        id: payload.progressLog.id,
+        client_id: client.id,
+        date: payload.progressLog.date,
+        body_weight: payload.progressLog.bodyWeight,
+        notes: payload.progressLog.notes ?? null,
+        created_at: '',
+      })
+    }
     setWeightInput('')
     setWeightOpen(false)
     setWeightSaving(false)
@@ -365,6 +446,11 @@ export default function ClientDashboard() {
           </div>
           <div className="font-semibold text-[14px] text-gray-900 tracking-tight">Trainer schreiben</div>
           <div className="text-gray-500 text-[12px] mt-0.5">Frage stellen oder Update</div>
+          {unreadMessageCount > 0 && (
+            <div className="mt-2 inline-flex min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold items-center justify-center">
+              {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+            </div>
+          )}
         </Link>
       </div>
 

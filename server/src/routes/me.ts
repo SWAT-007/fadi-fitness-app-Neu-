@@ -12,8 +12,169 @@ import {
 
 const meRouter = Router();
 
+const getCurrentWeekStartKey = () => {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  monday.setHours(0, 0, 0, 0);
+  return monday.toISOString().slice(0, 10);
+};
+
+const getCurrentMonthStartKey = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+};
+
 meRouter.get("/", requireAuth, (req: AuthenticatedRequest, res) => {
   res.json({ user: req.user });
+});
+
+meRouter.get("/dashboard", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  try {
+    const clientProfile = await prisma.clientProfile.findFirst({
+      where: { userId: req.user.userId },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        trainerId: true,
+      },
+    });
+
+    if (!clientProfile) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const weekStart = getCurrentWeekStartKey();
+    const monthStart = getCurrentMonthStartKey();
+
+    const [
+      assignment,
+      completedCount,
+      completedThisWeekLogs,
+      activeLogs,
+      monthlyWorkouts,
+      latestProgressLog,
+      currentWeekCheckin,
+      unreadMessageCount,
+    ] = await Promise.all([
+      prisma.assignedPlan.findFirst({
+        where: { clientId: clientProfile.id, active: true },
+        orderBy: { assignedAt: "desc" },
+        select: {
+          id: true,
+          planId: true,
+          plan: {
+            select: {
+              id: true,
+              name: true,
+              days: {
+                orderBy: { sortOrder: "asc" },
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  sortOrder: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.workoutLog.count({
+        where: { clientId: clientProfile.id, completedAt: { not: null } },
+      }),
+      prisma.workoutLog.findMany({
+        where: {
+          clientId: clientProfile.id,
+          completedAt: { not: null },
+          date: { gte: weekStart },
+        },
+        select: { dayId: true },
+      }),
+      prisma.workoutLog.findMany({
+        where: {
+          clientId: clientProfile.id,
+          completedAt: null,
+        },
+        select: { dayId: true },
+      }),
+      prisma.workoutLog.findMany({
+        where: {
+          clientId: clientProfile.id,
+          completedAt: { not: null },
+          date: { gte: monthStart },
+        },
+        orderBy: { completedAt: "desc" },
+        select: {
+          id: true,
+          durationSeconds: true,
+          date: true,
+          completedAt: true,
+        },
+      }),
+      prisma.progressLog.findFirst({
+        where: { clientId: clientProfile.id },
+        orderBy: { date: "desc" },
+        select: {
+          id: true,
+          date: true,
+          bodyWeight: true,
+          notes: true,
+        },
+      }),
+      prisma.weeklyCheckin.findFirst({
+        where: {
+          clientId: clientProfile.id,
+          weekStart,
+        },
+        select: { id: true },
+      }),
+      prisma.message.count({
+        where: {
+          receiverId: req.user.userId,
+          readAt: null,
+        },
+      }),
+    ]);
+
+    return res.json({
+      client: {
+        id: clientProfile.id,
+        fullName: clientProfile.fullName,
+        email: clientProfile.email,
+        trainerId: clientProfile.trainerId,
+      },
+      activePlan: assignment
+        ? {
+            id: assignment.id,
+            planId: assignment.planId,
+            plan: {
+              id: assignment.plan.id,
+              name: assignment.plan.name,
+              days: assignment.plan.days,
+            },
+          }
+        : null,
+      workoutStats: {
+        completedCount,
+        completedThisWeekDayIds: [...new Set(completedThisWeekLogs.map((log) => log.dayId))],
+        activeDayIds: [...new Set(activeLogs.map((log) => log.dayId))],
+        monthlyWorkouts,
+      },
+      latestProgressLog,
+      hasCurrentWeekCheckin: Boolean(currentWeekCheckin),
+      unreadMessageCount,
+    });
+  } catch (error) {
+    console.error("[me:dashboard] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
 });
 
 meRouter.get("/notifications", requireAuth, async (req: AuthenticatedRequest, res) => {
