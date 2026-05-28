@@ -1,9 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/lib/types'
 import { PageFade, ToastProvider } from '@/components/Motion'
 import TrainerNotificationBell from '@/components/TrainerNotificationBell'
@@ -51,12 +50,23 @@ type NavBadgeKey = 'messages' | 'requests'
 const navItems: { href: string; label: string; icon: ReactNode; badgeKey?: NavBadgeKey }[] = [
   { href: '/admin', label: 'Dashboard', icon: Icon.dashboard },
   { href: '/admin/clients', label: 'Kunden', icon: Icon.users },
-  { href: '/admin/plans', label: 'Trainingspläne', icon: Icon.plans },
-  { href: '/admin/nutrition', label: 'Ernährung', icon: Icon.nutrition },
+  { href: '/admin/plans', label: 'Trainingsplaene', icon: Icon.plans },
+  { href: '/admin/nutrition', label: 'Ernaehrung', icon: Icon.nutrition },
   { href: '/admin/recipes', label: 'Rezepte', icon: Icon.recipes },
   { href: '/admin/requests', label: 'Anfragen', icon: Icon.requests, badgeKey: 'requests' },
   { href: '/admin/messages', label: 'Nachrichten', icon: Icon.messages, badgeKey: 'messages' },
 ]
+
+interface AuthMeResponse {
+  ok?: boolean
+  user?: {
+    userId?: string
+    role?: string
+    email?: string
+    fullName?: string
+  } | null
+  message?: string
+}
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -65,42 +75,42 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [loading, setLoading] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [navBadges, setNavBadges] = useState<Record<NavBadgeKey, number>>({ messages: 0, requests: 0 })
-
-  const loadNavBadges = useCallback(async (trainerId: string) => {
-    const [messagesRes, requestsRes] = await Promise.all([
-      supabase
-        .from('notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('client_id', trainerId)
-        .eq('type', 'message')
-        .eq('is_read', false),
-      supabase
-        .from('exercise_change_requests')
-        .select('id, clients!inner(trainer_id)', { count: 'exact', head: true })
-        .eq('status', 'pending')
-        .eq('clients.trainer_id', trainerId),
-    ])
-
-    setNavBadges({
-      messages: messagesRes.count ?? 0,
-      requests: requestsRes.count ?? 0,
-    })
-  }, [])
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
         setAuthError(null)
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) { router.replace('/login'); return }
+        const response = await fetch('/api/backend/auth/me', {
+          method: 'GET',
+          cache: 'no-store',
+        })
 
-        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
-        setProfile(data ?? {
-          id: user.id,
-          email: user.email ?? '',
-          full_name: user.user_metadata?.full_name ?? 'Admin',
-          role: 'trainer',
+        const payload = await response.json().catch(() => null) as AuthMeResponse | null
+        if (!response.ok || !payload?.ok || !payload.user?.userId) {
+          router.replace('/login')
+          return
+        }
+
+        const role = typeof payload.user.role === 'string' ? payload.user.role.toLowerCase() : ''
+        if (role === 'client') {
+          router.replace('/client')
+          return
+        }
+        if (role !== 'trainer' && role !== 'admin') {
+          router.replace('/login')
+          return
+        }
+
+        const fullName = typeof payload.user.fullName === 'string' && payload.user.fullName.trim()
+          ? payload.user.fullName.trim()
+          : 'Trainer'
+        const email = typeof payload.user.email === 'string' ? payload.user.email : ''
+
+        setProfile({
+          id: payload.user.userId,
+          email,
+          full_name: fullName,
+          role: role === 'admin' ? 'trainer' : role,
           created_at: '',
         })
       } catch {
@@ -109,90 +119,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         setLoading(false)
       }
     }
+
     checkAuth()
   }, [router])
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'TOKEN_REFRESHED' && session) {
-        try {
-          await fetch('/api/auth/session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              accessToken: session.access_token,
-              expiresAt: session.expires_at,
-            }),
-          })
-        } catch {
-          return
-        }
-      }
-      if (event === 'SIGNED_OUT') {
-        router.replace('/login')
-      }
-    })
-    return () => subscription.unsubscribe()
-  }, [router])
-
-  useEffect(() => {
-    if (!profile) return
-    loadNavBadges(profile.id)
-
-    const channel = supabase
-      .channel(`admin-nav-badges-${profile.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notifications', filter: `client_id=eq.${profile.id}` },
-        () => loadNavBadges(profile.id)
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'exercise_change_requests' },
-        () => loadNavBadges(profile.id)
-      )
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  }, [profile, loadNavBadges])
-
-  useEffect(() => {
-    if (!profile) return
-    const trainerId = profile.id
-    const refresh = () => { void loadNavBadges(trainerId) }
-    const intervalId = setInterval(refresh, 8000)
-    window.addEventListener('focus', refresh)
-    const onVisibility = () => { if (document.visibilityState === 'visible') refresh() }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      clearInterval(intervalId)
-      window.removeEventListener('focus', refresh)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [profile, loadNavBadges])
-
-  useEffect(() => {
-    if (!profile || !pathname.startsWith('/admin/messages')) return
-
-    const markMessageNotificationsRead = async () => {
-      setNavBadges(prev => ({ ...prev, messages: 0 }))
-      await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('client_id', profile.id)
-        .eq('type', 'message')
-        .eq('is_read', false)
-    }
-
-    markMessageNotificationsRead()
-  }, [profile, pathname])
-
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/session', { method: 'DELETE' })
-      await supabase.auth.signOut()
+      await fetch('/api/backend/auth/logout', { method: 'POST' })
     } catch {
-      return
+      // Ignore and redirect anyway.
     } finally {
       router.replace('/login')
     }
@@ -225,18 +160,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <ToastProvider>
-    <div className="min-h-screen flex bg-gray-50">
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-20 bg-black/50 backdrop-blur-sm lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      <div className="min-h-screen flex bg-gray-50">
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-20 bg-black/50 backdrop-blur-sm lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
-      {/* Sidebar */}
-      <aside
-        className={`
+        <aside
+          className={`
           fixed inset-y-0 left-0 z-30 w-[260px] flex flex-col overflow-visible
           bg-[#0b0c0f] text-gray-300
           border-r border-white/[0.06]
@@ -244,101 +177,96 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           lg:translate-x-0 lg:static lg:z-auto
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
-        style={{ transitionTimingFunction: 'var(--ease-out)' }}
-      >
-        {/* Logo */}
-        <div className="px-5 pt-6 pb-5">
-          <div className="flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="MilaCoach" className="w-9 h-9 rounded-lg object-contain ring-1 ring-white/10" />
-            <div className="leading-tight">
-              <div className="text-white font-semibold text-[15px] tracking-tight">MilaCoach</div>
-              <div className="text-gray-500 text-[11px] uppercase tracking-[0.12em] mt-0.5">Trainer</div>
+          style={{ transitionTimingFunction: 'var(--ease-out)' }}
+        >
+          <div className="px-5 pt-6 pb-5">
+            <div className="flex items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="MilaCoach" className="w-9 h-9 rounded-lg object-contain ring-1 ring-white/10" />
+              <div className="leading-tight">
+                <div className="text-white font-semibold text-[15px] tracking-tight">MilaCoach</div>
+                <div className="text-gray-500 text-[11px] uppercase tracking-[0.12em] mt-0.5">Trainer</div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-3 pt-2 space-y-0.5 overflow-y-auto">
-          {navItems.map(item => {
-            const active = item.href === '/admin'
-              ? pathname === '/admin'
-              : pathname.startsWith(item.href)
-            const badgeCount = item.badgeKey ? navBadges[item.badgeKey] : 0
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setSidebarOpen(false)}
-                className={`press group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13.5px] font-medium ${
-                  active
-                    ? 'text-white bg-white/[0.06]'
-                    : 'text-gray-400 hover:text-white hover:bg-white/[0.04]'
-                }`}
-              >
-                {active && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-indigo-500" />
-                )}
-                <span className={`w-[18px] h-[18px] flex items-center justify-center ${active ? 'text-indigo-400' : 'text-gray-500 group-hover:text-gray-300'}`}>
-                  {item.icon}
-                </span>
-                <span className="flex-1 truncate">{item.label}</span>
-                {badgeCount > 0 && (
-                  <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-indigo-500 text-white text-[11px] font-bold leading-none flex items-center justify-center ring-1 ring-white/10 tabular-nums">
-                    {badgeCount > 99 ? '99+' : badgeCount}
+          <nav className="flex-1 px-3 pt-2 space-y-0.5 overflow-y-auto">
+            {navItems.map(item => {
+              const active = item.href === '/admin'
+                ? pathname === '/admin'
+                : pathname.startsWith(item.href)
+              const badgeCount = 0
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setSidebarOpen(false)}
+                  className={`press group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13.5px] font-medium ${
+                    active
+                      ? 'text-white bg-white/[0.06]'
+                      : 'text-gray-400 hover:text-white hover:bg-white/[0.04]'
+                  }`}
+                >
+                  {active && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-indigo-500" />
+                  )}
+                  <span className={`w-[18px] h-[18px] flex items-center justify-center ${active ? 'text-indigo-400' : 'text-gray-500 group-hover:text-gray-300'}`}>
+                    {item.icon}
                   </span>
-                )}
-              </Link>
-            )
-          })}
-        </nav>
+                  <span className="flex-1 truncate">{item.label}</span>
+                  {badgeCount > 0 && (
+                    <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-indigo-500 text-white text-[11px] font-bold leading-none flex items-center justify-center ring-1 ring-white/10 tabular-nums">
+                      {badgeCount > 99 ? '99+' : badgeCount}
+                    </span>
+                  )}
+                </Link>
+              )
+            })}
+          </nav>
 
-        {/* Profile + Logout */}
-        <div className="px-3 py-3 border-t border-white/[0.06] shrink-0 overflow-visible">
-          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] pr-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-[13px] font-semibold ring-1 ring-white/20">
-              {profile?.full_name?.charAt(0)?.toUpperCase() ?? 'A'}
+          <div className="px-3 py-3 border-t border-white/[0.06] shrink-0 overflow-visible">
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] pr-2">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-[13px] font-semibold ring-1 ring-white/20">
+                {profile?.full_name?.charAt(0)?.toUpperCase() ?? 'T'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-white text-[13px] font-medium truncate">{profile?.full_name}</div>
+                <div className="text-gray-500 text-[11px] truncate">{profile?.email}</div>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-white text-[13px] font-medium truncate">{profile?.full_name}</div>
-              <div className="text-gray-500 text-[11px] truncate">{profile?.email}</div>
+            <div className="mt-2 mb-1 px-2 py-2 rounded-lg bg-white/[0.02] border border-white/[0.06] flex items-center justify-between overflow-visible">
+              <span className="text-[12px] text-gray-400">Benachrichtigungen</span>
+              {profile && <TrainerNotificationBell trainerId={profile.id} />}
             </div>
+            <button
+              onClick={handleLogout}
+              className="press w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-gray-400 hover:text-white hover:bg-white/[0.04]"
+            >
+              <span className="w-[18px] h-[18px] flex items-center justify-center text-gray-500">{Icon.logout}</span>
+              Abmelden
+            </button>
           </div>
-          <div className="mt-2 mb-1 px-2 py-2 rounded-lg bg-white/[0.02] border border-white/[0.06] flex items-center justify-between overflow-visible">
-            <span className="text-[12px] text-gray-400">Benachrichtigungen</span>
-            {profile && <TrainerNotificationBell trainerId={profile.id} />}
-          </div>
-          <button
-            onClick={handleLogout}
-            className="press w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-gray-400 hover:text-white hover:bg-white/[0.04]"
-          >
-            <span className="w-[18px] h-[18px] flex items-center justify-center text-gray-500">{Icon.logout}</span>
-            Abmelden
-          </button>
+        </aside>
+
+        <div className="flex-1 flex flex-col min-w-0">
+          <header className="lg:hidden sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200/80 px-4 py-3 flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="press p-1.5 rounded-lg text-gray-700 hover:bg-gray-100"
+            >
+              <span className="w-5 h-5 block">{Icon.menu}</span>
+            </button>
+            <span className="font-semibold text-gray-900 tracking-tight flex-1">MilaCoach</span>
+            {profile && <TrainerNotificationBell trainerId={profile.id} theme="light" />}
+          </header>
+
+          <main className="flex-1 overflow-y-auto">
+            <PageFade key={pathname}>
+              {children}
+            </PageFade>
+          </main>
         </div>
-      </aside>
-
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile header */}
-        <header className="lg:hidden sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200/80 px-4 py-3 flex items-center gap-3">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="press p-1.5 rounded-lg text-gray-700 hover:bg-gray-100"
-          >
-            <span className="w-5 h-5 block">{Icon.menu}</span>
-          </button>
-          <span className="font-semibold text-gray-900 tracking-tight flex-1">MilaCoach</span>
-          {profile && <TrainerNotificationBell trainerId={profile.id} theme="light" />}
-        </header>
-
-        <main className="flex-1 overflow-y-auto">
-          <PageFade key={pathname}>
-            {children}
-          </PageFade>
-        </main>
       </div>
-    </div>
     </ToastProvider>
   )
 }
