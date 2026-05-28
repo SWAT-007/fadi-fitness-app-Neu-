@@ -30,6 +30,116 @@ meRouter.get("/", requireAuth, (req: AuthenticatedRequest, res) => {
   res.json({ user: req.user });
 });
 
+meRouter.get("/trainer-dashboard", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: {
+        id: true,
+        userId: true,
+        user: {
+          select: {
+            email: true,
+            fullName: true,
+          },
+        },
+      },
+    });
+
+    if (!trainerProfile) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const [
+      clientCount,
+      activeClientCount,
+      workoutPlanCount,
+      activePlanAssignmentCount,
+      nutritionPlanCount,
+      pendingRequestCount,
+      unreadMessageCount,
+      recentClients,
+    ] = await Promise.all([
+      prisma.clientProfile.count({
+        where: { trainerId: trainerProfile.id },
+      }),
+      prisma.clientProfile.count({
+        where: {
+          trainerId: trainerProfile.id,
+          status: { equals: "active", mode: "insensitive" },
+        },
+      }),
+      prisma.workoutPlan.count({
+        where: { trainerId: trainerProfile.id },
+      }),
+      prisma.assignedPlan.count({
+        where: {
+          active: true,
+          client: { trainerId: trainerProfile.id },
+          plan: { trainerId: trainerProfile.id },
+        },
+      }),
+      prisma.nutritionPlan.count({
+        where: { trainerId: trainerProfile.id },
+      }),
+      prisma.exerciseChangeRequest.count({
+        where: {
+          status: { equals: "pending", mode: "insensitive" },
+          client: { trainerId: trainerProfile.id },
+        },
+      }),
+      prisma.message.count({
+        where: {
+          receiverId: req.user.userId,
+          readAt: null,
+        },
+      }),
+      prisma.clientProfile.findMany({
+        where: { trainerId: trainerProfile.id },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    return res.json({
+      trainer: {
+        id: trainerProfile.id,
+        userId: trainerProfile.userId,
+        email: trainerProfile.user.email ?? "",
+        fullName: trainerProfile.user.fullName ?? "",
+      },
+      stats: {
+        clientCount,
+        activeClientCount,
+        workoutPlanCount,
+        activePlanAssignmentCount,
+        nutritionPlanCount,
+        pendingRequestCount,
+        unreadMessageCount,
+      },
+      recentClients: recentClients.map((client) => ({
+        id: client.id,
+        fullName: client.fullName,
+        email: client.email,
+        createdAt: client.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error("[me:trainer-dashboard] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 meRouter.get("/dashboard", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "client") {
     return res.status(403).json({ message: "Forbidden" });

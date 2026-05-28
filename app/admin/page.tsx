@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 import type { Client } from '@/lib/types'
 import { AnimatedNumber, StaggerItem } from '@/components/Motion'
 
@@ -12,6 +11,31 @@ interface Stats {
   nutritionPlans: number
   pendingRequests: number
   unreadMessages: number
+}
+
+interface TrainerDashboardResponse {
+  trainer?: {
+    id?: string
+    userId?: string
+    email?: string
+    fullName?: string
+  } | null
+  stats?: {
+    clientCount?: number
+    activeClientCount?: number
+    workoutPlanCount?: number
+    activePlanAssignmentCount?: number
+    nutritionPlanCount?: number
+    pendingRequestCount?: number
+    unreadMessageCount?: number
+  } | null
+  recentClients?: Array<{
+    id: string
+    fullName?: string
+    email?: string
+    createdAt?: string
+  }> | null
+  message?: string
 }
 
 const stroke = {
@@ -59,85 +83,48 @@ export default function TrainerDashboard() {
       try {
         setLoading(true)
         setErrorMessage(null)
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-        setTrainerName((user.user_metadata?.full_name as string)?.split(' ')[0] ?? '')
+        const response = await fetch('/api/backend/me/trainer-dashboard', { cache: 'no-store' })
+        const payload = await response.json().catch(() => null) as TrainerDashboardResponse | null
 
-        const backendClientsRes = await fetch('/api/backend/clients', { cache: 'no-store' })
-        if (backendClientsRes.status === 401) {
-          setStats((prev) => ({ ...prev, clients: 0 }))
+        if (response.status === 401) {
+          setStats({
+            clients: 0,
+            activePlanAssignments: 0,
+            nutritionPlans: 0,
+            pendingRequests: 0,
+            unreadMessages: 0,
+          })
           setRecentClients([])
           setErrorMessage('Backend-Login erforderlich.')
           return
         }
-        const backendClientsPayload = (await backendClientsRes.json().catch(() => null)) as
-          | { clients?: Array<{ id: string; name?: string; displayName?: string; email?: string; createdAt?: string }> }
-          | null
-        const backendClients = Array.isArray(backendClientsPayload?.clients)
-          ? backendClientsPayload.clients
-          : []
-        if (!backendClientsRes.ok) {
-          throw new Error('Backend clients request failed')
+
+        if (!response.ok) {
+          throw new Error(payload?.message ?? 'Trainer dashboard request failed')
         }
 
-        const clientIdsRes = await supabase
-          .from('clients')
-          .select('id')
-          .eq('trainer_id', user.id)
+        const trainerFullName = payload?.trainer?.fullName?.trim() ?? ''
+        setTrainerName(trainerFullName ? trainerFullName.split(' ')[0] ?? '' : '')
 
-        if (clientIdsRes.error) throw clientIdsRes.error
-
-        const clientIds = clientIdsRes.data?.map(client => client.id) ?? []
-        const activeAssignmentsQuery = clientIds.length
-          ? supabase
-            .from('assigned_plans')
-            .select('id', { count: 'exact', head: true })
-            .in('client_id', clientIds)
-            .eq('is_active', true)
-          : Promise.resolve({ count: 0, error: null })
-        const pendingRequestsQuery = clientIds.length
-          ? supabase
-            .from('exercise_change_requests')
-            .select('id', { count: 'exact', head: true })
-            .in('client_id', clientIds)
-            .eq('status', 'pending')
-          : Promise.resolve({ count: 0, error: null })
-
-        const [activeAssignmentsRes, nutritionPlansRes, pendingRequestsRes, unreadMessagesRes] = await Promise.all([
-          activeAssignmentsQuery,
-          supabase.from('nutrition_plans').select('id', { count: 'exact', head: true }).eq('trainer_id', user.id),
-          pendingRequestsQuery,
-          supabase.from('messages').select('id', { count: 'exact', head: true }).eq('receiver_id', user.id).is('read_at', null),
-        ])
-
-        const firstError =
-          activeAssignmentsRes.error ??
-          nutritionPlansRes.error ??
-          pendingRequestsRes.error ??
-          unreadMessagesRes.error
-        if (firstError) throw firstError
-
-        const mappedRecentClients: Client[] = backendClients
-          .slice()
-          .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
-          .slice(0, 5)
-          .map((client) => ({
+        const mappedRecentClients: Client[] = Array.isArray(payload?.recentClients)
+          ? payload.recentClients.map((client) => ({
             id: client.id,
             trainer_id: '',
             user_id: null,
-            full_name: client.name ?? client.displayName ?? '',
+            full_name: client.fullName?.trim() || client.email?.trim() || 'Kunde',
             email: client.email ?? '',
             phone: null,
             notes: null,
             created_at: client.createdAt ?? new Date(0).toISOString(),
           }))
+          : []
 
         setStats({
-          clients: backendClients.length,
-          activePlanAssignments: activeAssignmentsRes.count ?? 0,
-          nutritionPlans: nutritionPlansRes.count ?? 0,
-          pendingRequests: pendingRequestsRes.count ?? 0,
-          unreadMessages: unreadMessagesRes.count ?? 0,
+          clients: payload?.stats?.clientCount ?? 0,
+          activePlanAssignments: payload?.stats?.activePlanAssignmentCount ?? 0,
+          nutritionPlans: payload?.stats?.nutritionPlanCount ?? 0,
+          pendingRequests: payload?.stats?.pendingRequestCount ?? 0,
+          unreadMessages: payload?.stats?.unreadMessageCount ?? 0,
         })
         setRecentClients(mappedRecentClients)
       } catch (error) {
