@@ -589,18 +589,57 @@ clientsRouter.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res)
         id: clientId,
         trainerId: trainerProfile.id,
       },
-      select: { id: true },
+      select: { id: true, userId: true },
     });
 
     if (!existing) {
       return res.status(404).json({ message: "Not found" });
     }
 
-    await prisma.clientProfile.delete({
-      where: { id: existing.id },
+    const deleteResult = await prisma.$transaction(async (tx) => {
+      let userDeactivated = false;
+      let notificationsCleaned = 0;
+      let messagesCleaned = 0;
+
+      if (existing.userId) {
+        const updatedUser = await tx.user.updateMany({
+          where: {
+            id: existing.userId,
+            isActive: true,
+          },
+          data: {
+            isActive: false,
+          },
+        });
+        userDeactivated = updatedUser.count > 0;
+
+        const notificationsResult = await tx.notification.deleteMany({
+          where: { userId: existing.userId },
+        });
+        notificationsCleaned = notificationsResult.count;
+
+        const messagesResult = await tx.message.deleteMany({
+          where: {
+            OR: [{ senderId: existing.userId }, { receiverId: existing.userId }],
+          },
+        });
+        messagesCleaned = messagesResult.count;
+      }
+
+      await tx.clientProfile.delete({
+        where: { id: existing.id },
+      });
+
+      return {
+        deleted: true,
+        id: existing.id,
+        userDeactivated,
+        notificationsCleaned,
+        messagesCleaned,
+      };
     });
 
-    return res.json({ ok: true });
+    return res.json(deleteResult);
   } catch (error) {
     console.error("[clients:delete] error:", error);
     return res.status(500).json({ message: "Internal server error" });
