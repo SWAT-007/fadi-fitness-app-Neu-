@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { useCallback, useEffect, useState } from 'react'
 import { StaggerItem, useToast } from '@/components/Motion'
 
 type ChangeRequest = {
@@ -20,56 +19,78 @@ export default function RequestsPage() {
   const [updating, setUpdating] = useState<string | null>(null)
   const [error, setError] = useState('')
 
-  const load = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+  const load = useCallback(async () => {
+    try {
+      setError('')
+      const response = await fetch('/api/backend/clients/exercise-change-requests', {
+        cache: 'no-store',
+      })
+      const payload = await response.json().catch(() => null) as
+        | { requests?: ChangeRequest[]; message?: string }
+        | null
 
-    setError('')
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError('Backend-Login erforderlich.')
+        } else {
+          setError(payload?.message ?? 'Anfragen konnten nicht geladen werden.')
+        }
+        return
+      }
 
-    const { data, error } = await supabase
-      .from('exercise_change_requests')
-      .select('*, clients(full_name, trainer_id, user_id), exercises(name)')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      setError(error.message)
+      setRequests(payload?.requests ?? [])
+    } catch {
+      setError('Anfragen konnten nicht geladen werden.')
+    } finally {
       setLoading(false)
-      return
     }
+  }, [])
 
-    setRequests((data ?? []) as ChangeRequest[])
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    void load()
+  }, [load])
 
   const updateStatus = async (id: string, status: 'resolved' | 'rejected') => {
     setUpdating(id)
-    const request = requests.find(item => item.id === id)
-    const { error } = await supabase.from('exercise_change_requests').update({ status }).eq('id', id)
-    if (!error) {
-      if (request?.clients?.user_id) {
-        await supabase.from('notifications').insert({
-          client_id: request.clients.user_id,
-          type: 'request',
-          title: status === 'resolved' ? 'Deine Anfrage wurde akzeptiert' : 'Deine Anfrage wurde abgelehnt',
-          body: request.exercises?.name ?? null,
-          is_read: false,
-        })
+    setError('')
+
+    try {
+      const response = await fetch(`/api/backend/clients/exercise-change-requests/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      })
+      const payload = await response.json().catch(() => null) as { message?: string } | null
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError('Backend-Login erforderlich.')
+        } else {
+          setError(payload?.message ?? 'Anfrage konnte nicht aktualisiert werden.')
+        }
+        return
       }
+
       setRequests(prev => prev.filter(r => r.id !== id))
-      showToast(status === 'resolved' ? 'Anfrage erledigt ✓' : 'Anfrage abgelehnt', status === 'resolved' ? 'success' : 'danger')
+      showToast(
+        status === 'resolved' ? 'Anfrage erledigt âœ“' : 'Anfrage abgelehnt',
+        status === 'resolved' ? 'success' : 'danger',
+      )
+    } catch {
+      setError('Anfrage konnte nicht aktualisiert werden.')
+    } finally {
+      setUpdating(null)
     }
-    setUpdating(null)
   }
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Übungswechsel-Anfragen</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Ãœbungswechsel-Anfragen</h1>
         <p className="text-gray-500 text-sm mt-1">
-          {loading ? '…' : `${requests.length} offene Anfrage${requests.length !== 1 ? 'n' : ''}`}
+          {loading ? 'â€¦' : `${requests.length} offene Anfrage${requests.length !== 1 ? 'n' : ''}`}
         </p>
       </div>
 
@@ -83,7 +104,7 @@ export default function RequestsPage() {
         </div>
       ) : requests.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 py-16 text-center shadow-sm">
-          <div className="text-5xl mb-3">✅</div>
+          <div className="text-5xl mb-3">âœ…</div>
           <p className="text-gray-500">Keine offenen Anfragen.</p>
         </div>
       ) : (
@@ -92,18 +113,16 @@ export default function RequestsPage() {
             <StaggerItem key={req.id} index={index} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
               <div className="flex items-start justify-between gap-4 mb-3">
                 <div className="flex-1 min-w-0">
-                  {/* Client + exercise */}
                   <div className="flex flex-wrap items-center gap-2 mb-1">
                     <span className="font-semibold text-gray-900">
-                      {req.clients?.full_name ?? '—'}
+                      {req.clients?.full_name ?? 'â€”'}
                     </span>
-                    <span className="text-gray-400 text-sm">möchte tauschen:</span>
+                    <span className="text-gray-400 text-sm">mÃ¶chte tauschen:</span>
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
-                      {req.exercises?.name ?? '—'}
+                      {req.exercises?.name ?? 'â€”'}
                     </span>
                   </div>
 
-                  {/* Date */}
                   <p className="text-xs text-gray-400">
                     {new Date(req.created_at).toLocaleDateString('de-DE', {
                       day: '2-digit', month: '2-digit', year: 'numeric',
@@ -112,19 +131,16 @@ export default function RequestsPage() {
                   </p>
                 </div>
 
-                {/* Status badge */}
                 <span className="flex-shrink-0 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
                   Offen
                 </span>
               </div>
 
-              {/* Reason */}
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4">
-                <p className="text-xs font-medium text-gray-400 mb-1">Begründung</p>
+                <p className="text-xs font-medium text-gray-400 mb-1">BegrÃ¼ndung</p>
                 <p className="text-sm text-gray-700">{req.reason}</p>
               </div>
 
-              {/* Actions */}
               <div className="flex gap-2">
                 <button
                   onClick={() => updateStatus(req.id, 'rejected')}
@@ -138,7 +154,7 @@ export default function RequestsPage() {
                   disabled={updating === req.id}
                   className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl disabled:opacity-50 transition-colors"
                 >
-                  {updating === req.id ? 'Wird gespeichert…' : 'Als erledigt markieren'}
+                  {updating === req.id ? 'Wird gespeichertâ€¦' : 'Als erledigt markieren'}
                 </button>
               </div>
             </StaggerItem>

@@ -79,6 +79,166 @@ const resolveOwnedClientProfile = async (trainerId: string, clientId: string) =>
   });
 };
 
+clientsRouter.get("/exercise-change-requests", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const statusQuery = typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : "";
+  const whereStatus =
+    !statusQuery || statusQuery === "pending"
+      ? { equals: "pending", mode: "insensitive" as const }
+      : statusQuery === "all"
+        ? undefined
+        : { equals: statusQuery, mode: "insensitive" as const };
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const requests = await prisma.exerciseChangeRequest.findMany({
+      where: {
+        ...(whereStatus ? { status: whereStatus } : {}),
+        client: { trainerId: trainerProfile.id },
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        reason: true,
+        status: true,
+        createdAt: true,
+        client: {
+          select: {
+            fullName: true,
+            userId: true,
+          },
+        },
+        exercise: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    return res.json({
+      requests: requests.map((request) => ({
+        id: request.id,
+        reason: request.reason,
+        status: request.status,
+        created_at: request.createdAt.toISOString(),
+        clients: {
+          full_name: request.client.fullName,
+          user_id: request.client.userId,
+        },
+        exercises: {
+          name: request.exercise.name,
+        },
+      })),
+    });
+  } catch (error) {
+    console.error("[clients:exercise-change-requests:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+clientsRouter.patch(
+  "/exercise-change-requests/:requestId",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {
+    if (req.user?.role !== "trainer") {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const requestIdParam = req.params.requestId;
+    const requestId = Array.isArray(requestIdParam) ? requestIdParam[0] : requestIdParam;
+    if (!requestId) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const statusInput = typeof req.body?.status === "string" ? req.body.status.trim().toLowerCase() : "";
+    if (statusInput !== 'resolved' && statusInput !== 'rejected') {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+
+    try {
+      const trainerProfile = await resolveTrainerProfile(req.user.userId);
+      if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+      const existing = await prisma.exerciseChangeRequest.findFirst({
+        where: {
+          id: requestId,
+          client: { trainerId: trainerProfile.id },
+        },
+        select: {
+          id: true,
+          client: {
+            select: {
+              userId: true,
+            },
+          },
+          exercise: {
+            select: {
+              name: true,
+            },
+          },
+          reason: true,
+          status: true,
+          createdAt: true,
+        },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ message: "Not found" });
+      }
+
+      const updated = await prisma.exerciseChangeRequest.update({
+        where: { id: existing.id },
+        data: { status: statusInput },
+        select: {
+          id: true,
+          reason: true,
+          status: true,
+          createdAt: true,
+        },
+      });
+
+      let notificationCreated = false;
+      if (existing.client.userId) {
+        try {
+          await prisma.notification.create({
+            data: {
+              userId: existing.client.userId,
+              type: NotificationType.REQUEST,
+              title:
+                statusInput === 'resolved'
+                  ? "Deine Anfrage wurde akzeptiert"
+                  : "Deine Anfrage wurde abgelehnt",
+              body: existing.exercise.name,
+            },
+          });
+          notificationCreated = true;
+        } catch (notifError) {
+          console.error("[clients:exercise-change-requests:update] notification error:", notifError);
+        }
+      }
+
+      return res.json({
+        request: {
+          id: updated.id,
+          reason: updated.reason,
+          status: updated.status,
+          created_at: updated.createdAt.toISOString(),
+        },
+        notificationCreated,
+      });
+    } catch (error) {
+      console.error("[clients:exercise-change-requests:update] error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  },
+);
+
 clientsRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });
