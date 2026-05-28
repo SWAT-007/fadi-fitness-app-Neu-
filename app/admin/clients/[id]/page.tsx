@@ -740,13 +740,11 @@ export default function ClientDetailPage() {
 
     setResettingPassword(true)
     try {
-      const response = await fetch('/api/admin/reset-client-password', {
+      const response = await fetch(`/api/backend/clients/${client.id}/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clientId: client.id,
           password: newPassword,
-          confirmPassword: confirmNewPassword,
         }),
       })
 

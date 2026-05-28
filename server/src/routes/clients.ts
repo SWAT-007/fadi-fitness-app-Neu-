@@ -1,5 +1,6 @@
 import { NotificationType } from "@prisma/client";
 import { Router } from "express";
+import bcrypt from "bcrypt";
 import { prisma } from "../db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 
@@ -520,6 +521,45 @@ clientsRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) 
     return res.json({ client: mapClientProfile(client) });
   } catch (error) {
     console.error("[clients:update] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+clientsRouter.post("/:id/reset-password", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!clientId) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  if (!password || password.length < 6) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+    if (!clientProfile.userId) {
+      return res.status(400).json({ message: "Client has no linked user" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await prisma.user.update({
+      where: { id: clientProfile.userId },
+      data: { passwordHash },
+      select: { id: true },
+    });
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("[clients:reset-password] error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 });
