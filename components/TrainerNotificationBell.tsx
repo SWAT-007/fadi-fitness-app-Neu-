@@ -1,12 +1,23 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import type { Notification, NotificationType } from '@/lib/types'
-const trainerBellTypes = ['workout', 'checkin', 'training_plan', 'workout_plan', 'nutrition_plan', 'request'] as const
+const trainerBellTypes = ['message', 'workout', 'checkin', 'training_plan', 'workout_plan', 'nutrition_plan', 'request', 'system'] as const
 type TrainerBellType = typeof trainerBellTypes[number]
-const isTrainerBellNotification = (notification: Notification): notification is Notification & { type: TrainerBellType } =>
+
+interface BellNotification {
+  id: string
+  user_id: string
+  type: string
+  title: string
+  body?: string | null
+  is_read: boolean
+  created_at: string
+}
+
+const isTrainerBellNotification = (
+  notification: BellNotification,
+): notification is BellNotification & { type: TrainerBellType } =>
   trainerBellTypes.includes(notification.type as TrainerBellType)
 
 const stroke = {
@@ -24,7 +35,7 @@ const BellIcon = (
   </svg>
 )
 
-const TypeIcon: Record<NotificationType, ReactNode> = {
+const TypeIcon: Record<TrainerBellType, ReactNode> = {
   message: (
     <svg viewBox="0 0 24 24" {...stroke}>
       <path d="M4 6a2 2 0 012-2h12a2 2 0 012 2v9a2 2 0 01-2 2h-7l-4 3.5V17H6a2 2 0 01-2-2V6z" />
@@ -65,9 +76,16 @@ const TypeIcon: Record<NotificationType, ReactNode> = {
       <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
     </svg>
   ),
+  system: (
+    <svg viewBox="0 0 24 24" {...stroke}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8v4" />
+      <path d="M12 16h.01" />
+    </svg>
+  ),
 }
 
-const TypeColor: Record<NotificationType, string> = {
+const TypeColor: Record<TrainerBellType, string> = {
   message:       'bg-indigo-50 text-indigo-600 ring-indigo-100',
   workout:       'bg-emerald-50 text-emerald-600 ring-emerald-100',
   checkin:       'bg-violet-50 text-violet-600 ring-violet-100',
@@ -75,9 +93,10 @@ const TypeColor: Record<NotificationType, string> = {
   workout_plan:  'bg-blue-50 text-blue-600 ring-blue-100',
   nutrition_plan:'bg-orange-50 text-orange-600 ring-orange-100',
   request:       'bg-indigo-50 text-indigo-600 ring-indigo-100',
+  system:        'bg-gray-100 text-gray-600 ring-gray-200',
 }
 
-const TypeHref: Record<NotificationType, string> = {
+const TypeHref: Record<TrainerBellType, string> = {
   message:       '/admin/messages',
   workout:       '/admin/clients',
   checkin:       '/admin/clients',
@@ -85,6 +104,7 @@ const TypeHref: Record<NotificationType, string> = {
   workout_plan:  '/admin/plans',
   nutrition_plan:'/admin/nutrition',
   request:       '/admin/requests',
+  system:        '/admin',
 }
 
 function timeAgo(value: string) {
@@ -99,45 +119,34 @@ function timeAgo(value: string) {
   return new Date(value).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })
 }
 
-export default function TrainerNotificationBell({ trainerId, theme = 'dark' }: { trainerId: string; theme?: 'dark' | 'light' }) {
+export default function TrainerNotificationBell({ trainerId: _trainerId, theme = 'dark' }: { trainerId: string; theme?: 'dark' | 'light' }) {
+  void _trainerId
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [notifications, setNotifications] = useState<BellNotification[]>([])
   const wrapRef = useRef<HTMLDivElement>(null)
-  const channelIdRef = useRef<string | null>(null)
 
-  const append = useCallback((n: Notification) => {
-    if (!isTrainerBellNotification(n)) return
-    setNotifications(prev => {
-      if (prev.some(x => x.id === n.id)) return prev
-      return [n, ...prev].sort((a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      )
-    })
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const response = await fetch('/api/backend/notifications?limit=30', {
+          method: 'GET',
+          cache: 'no-store',
+        })
+        if (!response.ok) return
+
+        const payload = await response.json().catch(() => null) as {
+          notifications?: BellNotification[]
+        } | null
+
+        setNotifications((payload?.notifications ?? []).filter(isTrainerBellNotification))
+      } catch {
+        setNotifications([])
+      }
+    }
+
+    load()
   }, [])
-
-  useEffect(() => {
-    supabase
-      .from('notifications')
-      .select('*')
-      .eq('client_id', trainerId)
-      .in('type', [...trainerBellTypes])
-      .order('created_at', { ascending: false })
-      .limit(20)
-      .then(({ data }) => setNotifications(((data ?? []) as Notification[]).filter(isTrainerBellNotification)))
-  }, [trainerId])
-
-  useEffect(() => {
-    channelIdRef.current ??= globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
-    const ch = supabase.channel(`trainer-notifications-${trainerId}-${channelIdRef.current}`)
-    ch.on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'notifications', filter: `client_id=eq.${trainerId}` },
-      payload => append(payload.new as Notification)
-    )
-    ch.subscribe()
-    return () => { supabase.removeChannel(ch) }
-  }, [trainerId, append])
 
   useEffect(() => {
     if (!open) return
@@ -154,15 +163,36 @@ export default function TrainerNotificationBell({ trainerId, theme = 'dark' }: {
     const ids = notifications.filter(n => !n.is_read).map(n => n.id)
     if (!ids.length) return
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
-    const { error } = await supabase.from('notifications').update({ is_read: true }).in('id', ids)
-    if (error) setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, is_read: false } : n))
+
+    try {
+      const response = await fetch('/api/backend/notifications/read-all', {
+        method: 'PATCH',
+      })
+
+      if (response.ok) return
+    } catch {
+      // Fall through to rollback.
+    }
+
+    setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, is_read: false } : n))
   }
 
-  const handleClick = async (n: Notification) => {
+  const handleClick = async (n: BellNotification & { type: TrainerBellType }) => {
     setOpen(false)
     if (!n.is_read) {
       setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x))
-      await supabase.from('notifications').update({ is_read: true }).eq('id', n.id)
+
+      try {
+        const response = await fetch(`/api/backend/notifications/${n.id}/read`, {
+          method: 'PATCH',
+        })
+
+        if (!response.ok) {
+          setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: false } : x))
+        }
+      } catch {
+        setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: false } : x))
+      }
     }
     router.push(TypeHref[n.type])
   }

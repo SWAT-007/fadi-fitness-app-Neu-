@@ -1,14 +1,24 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import type { Notification } from '@/lib/types'
 
 const clientNotificationTypes = ['workout_plan', 'nutrition_plan', 'request'] as const
 type ClientNotificationType = typeof clientNotificationTypes[number]
 
-const isClientNotification = (notification: Notification): notification is Notification & { type: ClientNotificationType } =>
+interface BellNotification {
+  id: string
+  user_id: string
+  type: string
+  title: string
+  body?: string | null
+  is_read: boolean
+  created_at: string
+}
+
+const isClientNotification = (
+  notification: BellNotification,
+): notification is BellNotification & { type: ClientNotificationType } =>
   clientNotificationTypes.includes(notification.type as ClientNotificationType)
 
 const typeIcon: Record<ClientNotificationType, string> = {
@@ -36,55 +46,37 @@ function timeAgo(value: string) {
 }
 
 export default function NotificationBell({
-  clientUserId,
+  clientUserId: _clientUserId,
 }: {
   clientUserId: string
 }) {
+  void _clientUserId
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [notifications, setNotifications] = useState<BellNotification[]>([])
   const menuRef = useRef<HTMLDivElement>(null)
-
-  const appendNotification = useCallback((notification: Notification) => {
-    if (!isClientNotification(notification)) return
-    setNotifications(prev => {
-      if (prev.some(existing => existing.id === notification.id)) return prev
-      return [notification, ...prev].sort((a, b) => (
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      ))
-    })
-  }, [])
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('client_id', clientUserId)
-        .in('type', [...clientNotificationTypes])
-        .order('created_at', { ascending: false })
-        .limit(20)
+      try {
+        const response = await fetch('/api/backend/me/notifications?limit=30', {
+          method: 'GET',
+          cache: 'no-store',
+        })
+        if (!response.ok) return
 
-      setNotifications(((data ?? []) as Notification[]).filter(isClientNotification))
+        const payload = await response.json().catch(() => null) as {
+          notifications?: BellNotification[]
+        } | null
+
+        setNotifications((payload?.notifications ?? []).filter(isClientNotification))
+      } catch {
+        setNotifications([])
+      }
     }
-    load()
-  }, [clientUserId])
 
-  useEffect(() => {
-    const channel = supabase.channel(`notifications-${clientUserId}`)
-    channel.on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'notifications',
-        filter: `client_id=eq.${clientUserId}`,
-      },
-      payload => appendNotification(payload.new as Notification)
-    )
-    channel.subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [appendNotification, clientUserId])
+    load()
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -102,26 +94,45 @@ export default function NotificationBell({
     if (unreadIds.length === 0) return
 
     setNotifications(prev => prev.map(notification => ({ ...notification, is_read: true })))
-    const { error } = await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .in('id', unreadIds)
+    try {
+      const response = await fetch('/api/backend/me/notifications/read-all', {
+        method: 'PATCH',
+      })
 
-    if (error) {
-      setNotifications(prev => prev.map(notification => (
-        unreadIds.includes(notification.id) ? { ...notification, is_read: false } : notification
-      )))
+      if (response.ok) return
+    } catch {
+      // Fall through to rollback.
     }
+
+    setNotifications(prev => prev.map(notification => (
+      unreadIds.includes(notification.id) ? { ...notification, is_read: false } : notification
+    )))
   }
 
-  const openNotification = async (notification: Notification & { type: ClientNotificationType }) => {
+  const openNotification = async (notification: BellNotification & { type: ClientNotificationType }) => {
     setOpen(false)
     if (!notification.is_read) {
       setNotifications(prev => prev.map(item => (
         item.id === notification.id ? { ...item, is_read: true } : item
       )))
-      await supabase.from('notifications').update({ is_read: true }).eq('id', notification.id)
+
+      try {
+        const response = await fetch(`/api/backend/me/notifications/${notification.id}/read`, {
+          method: 'PATCH',
+        })
+
+        if (!response.ok) {
+          setNotifications(prev => prev.map(item => (
+            item.id === notification.id ? { ...item, is_read: false } : item
+          )))
+        }
+      } catch {
+        setNotifications(prev => prev.map(item => (
+          item.id === notification.id ? { ...item, is_read: false } : item
+        )))
+      }
     }
+
     router.push(typeHref[notification.type])
   }
 
