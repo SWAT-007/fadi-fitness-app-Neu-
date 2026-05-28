@@ -1003,6 +1003,20 @@ const progressLogSelect = {
   updatedAt: true,
 } as const;
 
+const assignedNutritionPlanSelect = {
+  id: true,
+  clientId: true,
+  planId: true,
+  active: true,
+  assignedAt: true,
+  plan: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+} as const;
+
 clientsRouter.get("/:clientId/progress-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });
@@ -1038,6 +1052,129 @@ clientsRouter.get("/:clientId/progress-logs", requireAuth, async (req: Authentic
     return res.json({ progressLogs });
   } catch (error) {
     console.error("[clients:progress-logs:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+clientsRouter.get("/:clientId/nutrition-assignments", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientIdParam = req.params.clientId;
+  const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
+  if (!clientId) return res.status(404).json({ message: "Not found" });
+
+  const rawLimit = parseInt(String(req.query.limit ?? "50"), 10);
+  const limit = Number.isFinite(rawLimit) ? Math.min(200, Math.max(1, rawLimit)) : 50;
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const assignments = await prisma.assignedNutritionPlan.findMany({
+      where: { clientId: clientProfile.id },
+      orderBy: { assignedAt: "desc" },
+      take: limit,
+      select: assignedNutritionPlanSelect,
+    });
+
+    return res.json({
+      assignments,
+    });
+  } catch (error) {
+    console.error("[clients:nutrition-assignments:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+clientsRouter.get("/:clientId/workout-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientIdParam = req.params.clientId;
+  const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
+  if (!clientId) return res.status(404).json({ message: "Not found" });
+
+  const rawLimit = parseInt(String(req.query.limit ?? "50"), 10);
+  const limit = Number.isFinite(rawLimit) ? Math.min(200, Math.max(1, rawLimit)) : 50;
+  const completedOnly = String(req.query.completed ?? "true").toLowerCase() !== "false";
+  const dateGte = typeof req.query.dateGte === "string" ? req.query.dateGte.trim() : "";
+  const dateLt = typeof req.query.dateLt === "string" ? req.query.dateLt.trim() : "";
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const where = {
+      clientId: clientProfile.id,
+      ...(completedOnly ? { completedAt: { not: null as Date | null } } : {}),
+      ...(dateGte || dateLt
+        ? {
+            date: {
+              ...(dateGte ? { gte: dateGte } : {}),
+              ...(dateLt ? { lt: dateLt } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [totalCount, workoutLogs] = await Promise.all([
+      prisma.workoutLog.count({ where }),
+      prisma.workoutLog.findMany({
+        where,
+        orderBy: { date: "desc" },
+        take: limit,
+        select: {
+          id: true,
+          clientId: true,
+          dayId: true,
+          date: true,
+          notes: true,
+          completedAt: true,
+          durationSeconds: true,
+          createdAt: true,
+          day: {
+            select: {
+              id: true,
+              name: true,
+              plan: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+          exerciseLogs: {
+            select: {
+              id: true,
+              setsDone: true,
+              actualWeight: true,
+              actualReps: true,
+              completed: true,
+              exercise: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return res.json({ totalCount, workoutLogs });
+  } catch (error) {
+    console.error("[clients:workout-logs:list] error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 });

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { supabase } from '@/lib/supabase'
 import type { CheckinImage, Client, AssignedPlan, WorkoutPlan, WorkoutLog, ProgressLog, WeeklyCheckin } from '@/lib/types'
 
 type BackendCheckinImage = {
@@ -133,6 +132,40 @@ type BackendAssignmentItem = {
     name: string
     description?: string | null
   } | null
+}
+
+type BackendNutritionAssignmentItem = {
+  id: string
+  clientId: string
+  planId: string
+  active: boolean
+  assignedAt: string
+  plan?: {
+    id: string
+    name: string
+  } | null
+}
+
+type BackendExerciseLogItem = {
+  id: string
+  setsDone: number | null
+  actualWeight: number | null
+  actualReps: string | null
+  completed: boolean
+  exercise: { id: string; name: string } | null
+}
+
+type BackendWorkoutLogItem = {
+  id: string
+  clientId: string
+  dayId: string
+  date: string
+  notes: string | null
+  completedAt: string | null
+  durationSeconds: number | null
+  createdAt: string
+  day: { id: string; name: string; plan: { id: string; name: string } | null } | null
+  exerciseLogs: BackendExerciseLogItem[]
 }
 
 function formatDuration(seconds: number | null | undefined) {
@@ -346,18 +379,52 @@ export default function ClientDetailPage() {
       const chartStartStr = chartStart.toISOString().split('T')[0]
 
       const [assignedNutritionResult, logsResult, historyResult, progressResult, analyseResult, chartResult, checkinsResult, lastWeekResult] = await Promise.allSettled([
-        supabase
-          .from('assigned_nutrition_plans')
-          .select('id, client_id, plan_id, assigned_at, is_active, plan:nutrition_plans(id, name)')
-          .eq('client_id', id)
-          .order('assigned_at', { ascending: false }),
-        supabase.from('workout_logs').select('id', { count: 'exact', head: true }).eq('client_id', id).not('completed_at', 'is', null),
-        supabase.from('workout_logs')
-          .select('*, workout_day:workout_days(name), exercise_logs(id, sets_done, actual_weight, actual_reps, completed, exercise:exercises(name))')
-          .eq('client_id', id)
-          .not('completed_at', 'is', null)
-          .order('date', { ascending: false })
-          .limit(10),
+        fetch(`/api/backend/clients/${id}/nutrition-assignments?limit=200`, { cache: 'no-store' })
+          .then(r => r.ok ? r.json().catch(() => null) : null)
+          .then((d: { assignments?: BackendNutritionAssignmentItem[] } | null) => ({
+            data: (d?.assignments ?? []).map((item) => ({
+              id: item.id,
+              client_id: item.clientId,
+              plan_id: item.planId,
+              assigned_at: item.assignedAt,
+              is_active: item.active,
+              plan: item.plan ? { name: item.plan.name } : null,
+            })),
+            error: null,
+          }))
+          .catch(() => ({ data: [] as Array<{ id: string; client_id: string; plan_id: string; assigned_at: string; is_active: boolean; plan: { name: string } | null }>, error: null })),
+        fetch(`/api/backend/clients/${id}/workout-logs?completed=true&limit=1`, { cache: 'no-store' })
+          .then(r => r.ok ? r.json().catch(() => null) : null)
+          .then((d: { totalCount?: number } | null) => ({
+            count: d?.totalCount ?? 0,
+            error: null,
+          }))
+          .catch(() => ({ count: 0, error: null })),
+        fetch(`/api/backend/clients/${id}/workout-logs?completed=true&limit=10`, { cache: 'no-store' })
+          .then(r => r.ok ? r.json().catch(() => null) : null)
+          .then((d: { workoutLogs?: BackendWorkoutLogItem[] } | null) => ({
+            data: (d?.workoutLogs ?? []).map((log) => ({
+              id: log.id,
+              client_id: log.clientId,
+              day_id: log.dayId,
+              date: log.date,
+              notes: log.notes,
+              completed_at: log.completedAt,
+              duration_seconds: log.durationSeconds,
+              created_at: log.createdAt,
+              workout_day: log.day ? { name: log.day.name } : null,
+              exercise_logs: (log.exerciseLogs ?? []).map((exerciseLog) => ({
+                id: exerciseLog.id,
+                sets_done: exerciseLog.setsDone,
+                actual_weight: exerciseLog.actualWeight,
+                actual_reps: exerciseLog.actualReps,
+                completed: exerciseLog.completed,
+                exercise: exerciseLog.exercise ? { name: exerciseLog.exercise.name } : null,
+              })),
+            })),
+            error: null,
+          }))
+          .catch(() => ({ data: [] as WorkoutLogDetail[], error: null })),
         fetch(`/api/backend/clients/${id}/progress-logs`, { cache: 'no-store' })
           .then(r => r.ok ? r.json().catch(() => null) : null)
           .then((d: { progressLogs?: BackendProgressLog[] } | null) => ({
@@ -365,16 +432,31 @@ export default function ClientDetailPage() {
             error: null,
           }))
           .catch(() => ({ data: [] as ProgressLog[], error: null })),
-        supabase.from('workout_logs')
-          .select('id, duration_seconds, date, exercise_logs(id, completed)')
-          .eq('client_id', id)
-          .not('completed_at', 'is', null)
-          .gte('date', monthStart),
-        supabase.from('workout_logs')
-          .select('date, duration_seconds')
-          .eq('client_id', id)
-          .not('completed_at', 'is', null)
-          .gte('date', chartStartStr),
+        fetch(`/api/backend/clients/${id}/workout-logs?completed=true&limit=200&dateGte=${monthStart}`, { cache: 'no-store' })
+          .then(r => r.ok ? r.json().catch(() => null) : null)
+          .then((d: { workoutLogs?: BackendWorkoutLogItem[] } | null) => ({
+            data: (d?.workoutLogs ?? []).map((log) => ({
+              id: log.id,
+              duration_seconds: log.durationSeconds,
+              date: log.date,
+              exercise_logs: (log.exerciseLogs ?? []).map((exerciseLog) => ({
+                id: exerciseLog.id,
+                completed: exerciseLog.completed,
+              })),
+            })),
+            error: null,
+          }))
+          .catch(() => ({ data: [] as Array<{ id: string; duration_seconds: number | null; date: string; exercise_logs: Array<{ id: string; completed: boolean }> }>, error: null })),
+        fetch(`/api/backend/clients/${id}/workout-logs?completed=true&limit=200&dateGte=${chartStartStr}`, { cache: 'no-store' })
+          .then(r => r.ok ? r.json().catch(() => null) : null)
+          .then((d: { workoutLogs?: BackendWorkoutLogItem[] } | null) => ({
+            data: (d?.workoutLogs ?? []).map((log) => ({
+              date: log.date,
+              duration_seconds: log.durationSeconds,
+            })),
+            error: null,
+          }))
+          .catch(() => ({ data: [] as Array<{ date: string; duration_seconds: number | null }>, error: null })),
         fetch(`/api/backend/clients/${id}/checkins`, { cache: 'no-store' })
           .then(r => r.ok ? r.json().catch(() => null) : null)
           .then((d: { checkins?: BackendCheckin[] } | null) => ({
@@ -382,12 +464,20 @@ export default function ClientDetailPage() {
             error: null,
           }))
           .catch(() => ({ data: [] as WeeklyCheckin[], error: null })),
-        supabase.from('workout_logs')
-          .select('id, duration_seconds, exercise_logs(id, completed)')
-          .eq('client_id', id)
-          .not('completed_at', 'is', null)
-          .gte('date', lastWeekStart)
-          .lt('date', weekStart),
+        fetch(`/api/backend/clients/${id}/workout-logs?completed=true&limit=200&dateGte=${lastWeekStart}&dateLt=${weekStart}`, { cache: 'no-store' })
+          .then(r => r.ok ? r.json().catch(() => null) : null)
+          .then((d: { workoutLogs?: BackendWorkoutLogItem[] } | null) => ({
+            data: (d?.workoutLogs ?? []).map((log) => ({
+              id: log.id,
+              duration_seconds: log.durationSeconds,
+              exercise_logs: (log.exerciseLogs ?? []).map((exerciseLog) => ({
+                id: exerciseLog.id,
+                completed: exerciseLog.completed,
+              })),
+            })),
+            error: null,
+          }))
+          .catch(() => ({ data: [] as Array<{ id: string; duration_seconds: number | null; exercise_logs: Array<{ id: string; completed: boolean }> }>, error: null })),
       ])
 
       const resolveLegacy = <T,>(result: PromiseSettledResult<T>, scope: string): T | null => {
