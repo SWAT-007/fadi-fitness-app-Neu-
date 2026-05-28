@@ -3,13 +3,24 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 
 type ActiveWorkout = {
   id: string
-  day_id: string
-  created_at: string
-  workout_days: { name: string } | null
+  dayId: string
+  createdAt: string
+  day: {
+    id: string
+    name: string
+    plan: {
+      id: string
+      name: string
+    } | null
+  } | null
+}
+
+type ActiveWorkoutResponse = {
+  activeWorkout?: ActiveWorkout | null
+  message?: string
 }
 
 function formatTime(totalSeconds: number) {
@@ -31,26 +42,23 @@ export default function ActiveWorkoutBanner() {
     if (isOnPlayer) { setActiveWorkout(null); return }
 
     const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      try {
+        const response = await fetch('/api/backend/me/active-workout', { cache: 'no-store' })
+        if (response.status === 401) {
+          setActiveWorkout(null)
+          return
+        }
 
-      const { data: client } = await supabase
-        .from('clients')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle()
-      if (!client) return
+        const payload = await response.json().catch(() => null) as ActiveWorkoutResponse | null
+        if (!response.ok) {
+          setActiveWorkout(null)
+          return
+        }
 
-      const { data } = await supabase
-        .from('workout_logs')
-        .select('id, day_id, created_at, workout_days(name)')
-        .eq('client_id', client.id)
-        .is('completed_at', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      setActiveWorkout(data as ActiveWorkout | null)
+        setActiveWorkout(payload?.activeWorkout ?? null)
+      } catch {
+        setActiveWorkout(null)
+      }
     }
 
     load()
@@ -65,12 +73,12 @@ export default function ActiveWorkoutBanner() {
 
   if (!activeWorkout || isOnPlayer) return null
 
-  const startedAt = new Date(activeWorkout.created_at).getTime()
+  const startedAt = new Date(activeWorkout.createdAt).getTime()
   const elapsed = Math.max(0, Math.floor(((now ?? startedAt) - startedAt) / 1000))
 
   return (
     <Link
-      href={`/client/workout/${activeWorkout.day_id}/play`}
+      href={`/client/workout/${activeWorkout.dayId}/play`}
       className="flex items-center justify-between bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 transition-colors"
     >
       <div className="flex items-center gap-3 min-w-0">
@@ -82,7 +90,7 @@ export default function ActiveWorkoutBanner() {
             Aktives Training
           </p>
           <p className="font-bold text-sm truncate">
-            {activeWorkout.workout_days?.name ?? 'Training'}
+            {activeWorkout.day?.name ?? 'Training'}
             <span className="font-normal text-emerald-300 ml-2 tabular-nums">{formatTime(elapsed)}</span>
           </p>
         </div>

@@ -443,6 +443,53 @@ meRouter.get("/active-plan", requireAuth, async (req: AuthenticatedRequest, res)
   }
 });
 
+meRouter.get("/active-workout", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  try {
+    const clientProfile = await prisma.clientProfile.findFirst({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!clientProfile) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const activeWorkout = await prisma.workoutLog.findFirst({
+      where: {
+        clientId: clientProfile.id,
+        completedAt: null,
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        dayId: true,
+        createdAt: true,
+        day: {
+          select: {
+            id: true,
+            name: true,
+            plan: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return res.json({ activeWorkout });
+  } catch (error) {
+    console.error("[me:active-workout] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 meRouter.get("/plan-days/:dayId", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "client") {
     return res.status(403).json({ message: "Forbidden" });
