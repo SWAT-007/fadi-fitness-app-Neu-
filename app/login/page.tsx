@@ -8,6 +8,7 @@ const normalizeEmail = (value: string) => value.trim().toLowerCase()
 interface LoginResponse {
   ok?: boolean
   message?: string
+  errorId?: string
 }
 
 interface MeResponse {
@@ -16,7 +17,11 @@ interface MeResponse {
     role?: string
   } | null
   message?: string
+  errorId?: string
 }
+
+const withErrorId = (message: string, errorId?: string) =>
+  errorId ? `${message} (Fehler-ID: ${errorId})` : message
 
 export default function LoginPage() {
   const router = useRouter()
@@ -41,7 +46,7 @@ export default function LoginPage() {
 
       const loginPayload = await loginResponse.json().catch(() => null) as LoginResponse | null
       if (!loginResponse.ok) {
-        setError(loginPayload?.message ?? 'Anmeldung fehlgeschlagen.')
+        setError(withErrorId(loginPayload?.message ?? 'Anmeldung fehlgeschlagen.', loginPayload?.errorId))
         setLoading(false)
         return
       }
@@ -52,7 +57,7 @@ export default function LoginPage() {
       })
       const mePayload = await meResponse.json().catch(() => null) as MeResponse | null
       if (!meResponse.ok || !mePayload?.ok || !mePayload.user?.role) {
-        setError(mePayload?.message ?? 'Sitzung konnte nicht validiert werden.')
+        setError(withErrorId(mePayload?.message ?? 'Sitzung konnte nicht validiert werden.', mePayload?.errorId))
         setLoading(false)
         return
       }

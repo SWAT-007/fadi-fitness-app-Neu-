@@ -36,7 +36,11 @@ interface TrainerDashboardResponse {
     createdAt?: string
   }> | null
   message?: string
+  errorId?: string
 }
+
+const withErrorId = (message: string, errorId?: string) =>
+  errorId ? `${message} (Fehler-ID: ${errorId})` : message
 
 const stroke = {
   fill: 'none' as const,
@@ -100,7 +104,7 @@ export default function TrainerDashboard() {
         }
 
         if (!response.ok) {
-          throw new Error(payload?.message ?? 'Trainer dashboard request failed')
+          throw new Error(withErrorId(payload?.message ?? 'Trainer dashboard request failed', payload?.errorId))
         }
 
         const trainerFullName = payload?.trainer?.fullName?.trim() ?? ''
@@ -137,7 +141,8 @@ export default function TrainerDashboard() {
           unreadMessages: 0,
         })
         setRecentClients([])
-        setErrorMessage('Dashboard-Daten konnten gerade nicht geladen werden.')
+        const fallback = 'Dashboard-Daten konnten gerade nicht geladen werden.'
+        setErrorMessage(error instanceof Error ? error.message : fallback)
       } finally {
         setLoading(false)
       }

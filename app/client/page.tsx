@@ -38,6 +38,9 @@ function formatDuration(seconds: number): string {
   return rem === 0 ? `${h}h` : `${h}h ${rem}m`
 }
 
+const withErrorId = (message: string, errorId?: string) =>
+  errorId ? `${message} (Fehler-ID: ${errorId})` : message
+
 export default function ClientDashboard() {
   const router = useRouter()
   const { showToast } = useToast()
@@ -62,7 +65,7 @@ export default function ClientDashboard() {
   const [weightSaving, setWeightSaving] = useState(false)
   const [weightSaved, setWeightSaved] = useState(false)
 
-  interface DashboardPayload {
+interface DashboardPayload {
     client?: {
       id: string
       fullName: string
@@ -93,6 +96,7 @@ export default function ClientDashboard() {
     hasCurrentWeekCheckin?: boolean
     unreadMessageCount?: number
     message?: string
+    errorId?: string
   }
 
   useEffect(() => {
@@ -114,6 +118,10 @@ export default function ClientDashboard() {
 
         const payload = await response.json().catch(() => null) as DashboardPayload | null
         if (!response.ok || !payload?.client) {
+          showToast(
+            withErrorId(payload?.message ?? 'Dashboard-Daten konnten nicht geladen werden.', payload?.errorId),
+            'danger',
+          )
           setLoading(false)
           return
         }
@@ -182,6 +190,8 @@ export default function ClientDashboard() {
               created_at: '',
             }
           : null)
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Netzwerkfehler beim Laden.', 'danger')
       } finally {
         setLoading(false)
       }
@@ -200,7 +210,14 @@ export default function ClientDashboard() {
     })
     const payload = await response.json().catch(() => null) as {
       progressLog?: { id: string; date: string; bodyWeight: number | null; notes?: string | null }
+      message?: string
+      errorId?: string
     } | null
+    if (!response.ok) {
+      setWeightSaving(false)
+      showToast(withErrorId(payload?.message ?? 'Gewicht konnte nicht gespeichert werden.', payload?.errorId), 'danger')
+      return
+    }
     if (response.ok && payload?.progressLog) {
       setLastWeight({
         id: payload.progressLog.id,

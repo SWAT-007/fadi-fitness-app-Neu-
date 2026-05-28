@@ -3,6 +3,7 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import { prisma } from "../db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
+import { unexpectedErrorResponse } from "../utils/errors";
 
 const clientsRouter = Router();
 
@@ -137,8 +138,7 @@ clientsRouter.get("/exercise-change-requests", requireAuth, async (req: Authenti
       })),
     });
   } catch (error) {
-    console.error("[clients:exercise-change-requests:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:exercise-change-requests:list", error);
   }
 });
 
@@ -233,8 +233,7 @@ clientsRouter.patch(
         notificationCreated,
       });
     } catch (error) {
-      console.error("[clients:exercise-change-requests:update] error:", error);
-      return res.status(500).json({ message: "Internal server error" });
+            return unexpectedErrorResponse(res, "clients:exercise-change-requests:update", error);
     }
   },
 );
@@ -286,8 +285,7 @@ clientsRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
 
     return res.status(201).json({ client: mapClientProfile(client) });
   } catch (error) {
-    console.error("[clients:create] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:create", error);
   }
 });
 
@@ -324,8 +322,7 @@ clientsRouter.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
 
     return res.json({ clients: clients.map(mapClientProfile) });
   } catch (error) {
-    console.error("[clients:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:list", error);
   }
 });
 
@@ -373,8 +370,7 @@ clientsRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) =>
 
     return res.json({ client: mapClientProfile(client) });
   } catch (error) {
-    console.error("[clients:get] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:get", error);
   }
 });
 
@@ -421,8 +417,7 @@ clientsRouter.get("/:clientId/messages", requireAuth, async (req: AuthenticatedR
       messages,
     });
   } catch (error) {
-    console.error("[clients:messages:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:messages:list", error);
   }
 });
 
@@ -477,8 +472,7 @@ clientsRouter.post("/:clientId/messages", requireAuth, async (req: Authenticated
 
     return res.status(201).json({ message, notificationCreated });
   } catch (error) {
-    console.error("[clients:messages:create] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:messages:create", error);
   }
 });
 
@@ -512,8 +506,7 @@ clientsRouter.post("/:clientId/messages/read", requireAuth, async (req: Authenti
 
     return res.json({ updatedCount: result.count });
   } catch (error) {
-    console.error("[clients:messages:read] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:messages:read", error);
   }
 });
 
@@ -588,8 +581,7 @@ clientsRouter.get("/:id/assignments", requireAuth, async (req: AuthenticatedRequ
       })),
     });
   } catch (error) {
-    console.error("[clients:assignments] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:assignments", error);
   }
 });
 
@@ -680,12 +672,49 @@ clientsRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) 
 
     return res.json({ client: mapClientProfile(client) });
   } catch (error) {
-    console.error("[clients:update] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:update", error);
   }
 });
 
 clientsRouter.post("/:id/reset-password", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
+
+  const clientId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!clientId) {
+    return res.status(400).json({ ok: false, message: "Invalid request" });
+  }
+
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  if (!password || password.length < 6) {
+    return res.status(400).json({ ok: false, message: "Passwort muss mindestens 6 Zeichen haben." });
+  }
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ ok: false, message: "Internal server error" });
+
+    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    if (!clientProfile) return res.status(404).json({ ok: false, message: "Not found" });
+    if (!clientProfile.userId) {
+      return res.status(400).json({ ok: false, message: "Der Kunde hat noch keinen App-Zugang." });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await prisma.user.update({
+      where: { id: clientProfile.userId },
+      data: { passwordHash, isActive: true },
+      select: { id: true },
+    });
+
+    return res.json({ ok: true, message: "Passwort wurde zurueckgesetzt." });
+  } catch (error) {
+        return unexpectedErrorResponse(res, "clients:reset-password", error);
+  }
+});
+
+clientsRouter.post("/:id/app-access", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });
   }
@@ -706,21 +735,107 @@ clientsRouter.post("/:id/reset-password", requireAuth, async (req: Authenticated
 
     const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
     if (!clientProfile) return res.status(404).json({ message: "Not found" });
-    if (!clientProfile.userId) {
-      return res.status(400).json({ message: "Client has no linked user" });
+
+    const normalizedEmail = clientProfile.email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Client has no email" });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    await prisma.user.update({
-      where: { id: clientProfile.userId },
-      data: { passwordHash },
-      select: { id: true },
+
+    const result = await prisma.$transaction(async (tx) => {
+      const existingUser = await tx.user.findUnique({
+        where: { email: normalizedEmail },
+        select: {
+          id: true,
+          role: true,
+          clientProfile: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      if (existingUser && existingUser.role !== "CLIENT") {
+        throw new Error("Email belongs to a trainer account");
+      }
+
+      if (
+        existingUser?.clientProfile &&
+        existingUser.clientProfile.id !== clientProfile.id
+      ) {
+        throw new Error("Email already linked to a different client");
+      }
+
+      let userCreated = false;
+      let userLinked = false;
+
+      const user = existingUser
+        ? await tx.user.update({
+            where: { id: existingUser.id },
+            data: {
+              passwordHash,
+              role: "CLIENT",
+              isActive: true,
+            },
+            select: { id: true, email: true },
+          })
+        : await tx.user.create({
+            data: {
+              email: normalizedEmail,
+              passwordHash,
+              role: "CLIENT",
+              fullName: clientProfile.fullName,
+              isActive: true,
+            },
+            select: { id: true, email: true },
+          });
+
+      if (!existingUser) {
+        userCreated = true;
+      }
+
+      if (clientProfile.userId !== user.id) {
+        await tx.clientProfile.update({
+          where: { id: clientProfile.id },
+          data: {
+            userId: user.id,
+            email: normalizedEmail,
+            fullName: clientProfile.fullName,
+            status: "active",
+          },
+          select: { id: true },
+        });
+        userLinked = true;
+      }
+
+      return {
+        user,
+        userCreated,
+        userLinked,
+      };
     });
 
-    return res.json({ ok: true });
+    return res.json({
+      client: {
+        id: clientProfile.id,
+        userId: clientProfile.userId ?? result.user.id,
+        email: normalizedEmail,
+      },
+      userCreated: result.userCreated,
+      userLinked: result.userLinked,
+    });
   } catch (error) {
-    console.error("[clients:reset-password] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    if (error instanceof Error) {
+      if (error.message === "Email belongs to a trainer account") {
+        return res.status(409).json({ message: "Diese E-Mail gehört zu einem Trainerkonto." });
+      }
+      if (error.message === "Email already linked to a different client") {
+        return res.status(409).json({ message: "Diese E-Mail ist bereits einem anderen Client zugeordnet." });
+      }
+    }
+        return unexpectedErrorResponse(res, "clients:app-access:create", error);
   }
 });
 
@@ -801,8 +916,7 @@ clientsRouter.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res)
 
     return res.json(deleteResult);
   } catch (error) {
-    console.error("[clients:delete] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:delete", error);
   }
 });
 
@@ -881,8 +995,7 @@ clientAssignmentsRouter.patch("/:assignmentId", requireAuth, async (req: Authent
       },
     });
   } catch (error) {
-    console.error("[client-assignments:update] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "client-assignments:update", error);
   }
 });
 
@@ -926,8 +1039,7 @@ clientAssignmentsRouter.delete("/:assignmentId", requireAuth, async (req: Authen
 
     return res.json({ deleted: true, assignmentId: existing.id });
   } catch (error) {
-    console.error("[client-assignments:delete] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "client-assignments:delete", error);
   }
 });
 
@@ -988,8 +1100,7 @@ clientsRouter.get("/:clientId/checkins", requireAuth, async (req: AuthenticatedR
 
     return res.json({ checkins });
   } catch (error) {
-    console.error("[clients:checkins:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:checkins:list", error);
   }
 });
 
@@ -1051,8 +1162,7 @@ clientsRouter.get("/:clientId/progress-logs", requireAuth, async (req: Authentic
 
     return res.json({ progressLogs });
   } catch (error) {
-    console.error("[clients:progress-logs:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:progress-logs:list", error);
   }
 });
 
@@ -1086,8 +1196,7 @@ clientsRouter.get("/:clientId/nutrition-assignments", requireAuth, async (req: A
       assignments,
     });
   } catch (error) {
-    console.error("[clients:nutrition-assignments:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:nutrition-assignments:list", error);
   }
 });
 
@@ -1174,8 +1283,7 @@ clientsRouter.get("/:clientId/workout-logs", requireAuth, async (req: Authentica
 
     return res.json({ totalCount, workoutLogs });
   } catch (error) {
-    console.error("[clients:workout-logs:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:workout-logs:list", error);
   }
 });
 
@@ -1237,8 +1345,7 @@ clientsRouter.get("/messages/clients", requireAuth, async (req: AuthenticatedReq
       })),
     });
   } catch (error) {
-    console.error("[clients:messages:clients] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "clients:messages:clients", error);
   }
 });
 

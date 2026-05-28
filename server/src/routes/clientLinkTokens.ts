@@ -4,6 +4,7 @@ import bcrypt from "bcrypt";
 import { Prisma, UserRole } from "@prisma/client";
 import { prisma } from "../db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
+import { unexpectedErrorResponse } from "../utils/errors";
 
 const clientLinkTokensRouter = Router();
 
@@ -89,8 +90,11 @@ clientLinkTokensRouter.post("/", requireAuth, async (req: AuthenticatedRequest, 
 
     return res.status(201).json({ token, expiresAt });
   } catch (error) {
-    console.error("[client-link-tokens] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    return unexpectedErrorResponse(res, "client-link-tokens:create", error, {
+      userId: req.user?.userId,
+      role: req.user?.role,
+      email,
+    });
   }
 });
 
@@ -124,8 +128,9 @@ clientLinkTokensRouter.get("/accept/:token", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("[client-link-tokens:accept:get] error:", error);
-    return res.status(500).json({ ok: false, message: "Internal server error" });
+    return unexpectedErrorResponse(res, "client-link-tokens:accept:get", error, {
+      tokenPresent: Boolean(token),
+    });
   }
 });
 
@@ -281,11 +286,23 @@ clientLinkTokensRouter.post("/accept/:token", async (req, res) => {
       return res.status(409).json({ ok: false, message: "Diese E-Mail-Adresse ist bereits vergeben." });
     }
 
-    const message = error instanceof Error
-      ? error.message
-      : "Einladung konnte nicht angenommen werden.";
+    if (error instanceof Error) {
+      const expectedErrorMessages = new Set([
+        "Diese E-Mail-Adresse gehÃ¶rt bereits zu einem Trainerkonto.",
+        "Dieses Client-Konto ist bereits einem anderen Trainer zugeordnet.",
+        "FÃ¼r diese Einladung existiert bereits ein verknÃ¼pftes Client-Profil.",
+      ]);
 
-    return res.status(400).json({ ok: false, message });
+      if (expectedErrorMessages.has(error.message)) {
+        return res.status(400).json({ ok: false, message: error.message });
+      }
+    }
+
+    return unexpectedErrorResponse(res, "client-link-tokens:accept:post", error, {
+      email,
+      fullNameLength: fullName.length,
+      tokenPresent: Boolean(token),
+    });
   }
 });
 

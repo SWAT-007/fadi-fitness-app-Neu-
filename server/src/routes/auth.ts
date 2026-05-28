@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
+import { errorResponse, unexpectedErrorResponse } from "../utils/errors";
 
 const authRouter = Router();
 
@@ -70,7 +71,7 @@ authRouter.post("/register", async (req, res) => {
 
     const token = createToken(user.id, role);
     if (!token) {
-      return res.status(500).json({ message: "Internal server error" });
+      return errorResponse(res, 500, "Interner Serverfehler.");
     }
 
     return res.status(201).json({
@@ -82,11 +83,13 @@ authRouter.post("/register", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("[register] error:", error);
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return res.status(409).json({ message: "Email already in use" });
     }
-    return res.status(500).json({ message: "Internal server error" });
+    return unexpectedErrorResponse(res, "auth:register", error, {
+      email,
+      role,
+    });
   }
 });
 
@@ -121,7 +124,7 @@ authRouter.post("/login", async (req, res) => {
     const role = user.role.toLowerCase() as RegisterRole;
     const token = createToken(user.id, role);
     if (!token) {
-      return res.status(500).json({ message: "Internal server error" });
+      return errorResponse(res, 500, "Interner Serverfehler.");
     }
 
     return res.status(200).json({
@@ -132,8 +135,10 @@ authRouter.post("/login", async (req, res) => {
         role,
       },
     });
-  } catch {
-    return res.status(500).json({ message: "Internal server error" });
+  } catch (error) {
+    return unexpectedErrorResponse(res, "auth:login", error, {
+      email,
+    });
   }
 });
 

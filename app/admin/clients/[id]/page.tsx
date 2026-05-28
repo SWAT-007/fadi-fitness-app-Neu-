@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -168,6 +168,9 @@ type BackendWorkoutLogItem = {
   exerciseLogs: BackendExerciseLogItem[]
 }
 
+const withErrorId = (message: string, errorId?: string) =>
+  errorId ? `${message} (Fehler-ID: ${errorId})` : message
+
 function formatDuration(seconds: number | null | undefined) {
   if (!seconds) return null
   const m = Math.floor(seconds / 60)
@@ -177,7 +180,7 @@ function formatDuration(seconds: number | null | undefined) {
 }
 
 function formatTotalDuration(seconds: number): string {
-  if (seconds === 0) return '–'
+  if (seconds === 0) return 'â€“'
   const m = Math.floor(seconds / 60)
   if (m < 60) return `${m}m`
   const h = Math.floor(m / 60)
@@ -186,7 +189,7 @@ function formatTotalDuration(seconds: number): string {
 }
 
 function formatMinutes(min: number): string {
-  if (min === 0) return '–'
+  if (min === 0) return 'â€“'
   if (min < 60) return `${min}m`
   const h = Math.floor(min / 60)
   const rem = min % 60
@@ -311,6 +314,8 @@ export default function ClientDetailPage() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
   const [resettingPassword, setResettingPassword] = useState(false)
+  const [creatingAppAccess, setCreatingAppAccess] = useState(false)
+  const [appAccessPassword, setAppAccessPassword] = useState('')
   const [editingNotes, setEditingNotes] = useState(false)
   const [notesValue, setNotesValue] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
@@ -346,7 +351,7 @@ export default function ClientDetailPage() {
       const normalizedClient: Client = {
         id: backendClient.id,
         trainer_id: '',
-        user_id: null,
+        user_id: backendClient.linked ? 'linked' : null,
         full_name: (backendClient.name ?? backendClient.displayName ?? '').trim(),
         email: (backendClient.email ?? '').trim(),
         phone: backendClient.phone ?? null,
@@ -658,7 +663,7 @@ export default function ClientDetailPage() {
         return
       }
 
-      showToast('Plan zugewiesen ✓', 'success')
+      showToast('Plan zugewiesen âœ“', 'success')
       setSelectedPlanId('')
       await load()
     } catch {
@@ -682,7 +687,7 @@ export default function ClientDetailPage() {
       showToast(msg, 'danger')
       return
     }
-    showToast(!current ? 'Plan aktiviert ✓' : 'Plan deaktiviert', 'success')
+    showToast(!current ? 'Plan aktiviert âœ“' : 'Plan deaktiviert', 'success')
     await load()
   }
 
@@ -732,7 +737,7 @@ export default function ClientDetailPage() {
 
     const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
     if (!emailValid) {
-      showToast('Bitte eine gültige E-Mail-Adresse angeben.', 'danger')
+      showToast('Bitte eine gÃ¼ltige E-Mail-Adresse angeben.', 'danger')
       return
     }
 
@@ -759,7 +764,7 @@ export default function ClientDetailPage() {
         return
       }
 
-      showToast('Kundendaten gespeichert ✓', 'success')
+      showToast('Kundendaten gespeichert âœ“', 'success')
       setEditingProfile(false)
       await load()
     } catch {
@@ -798,7 +803,7 @@ export default function ClientDetailPage() {
         return
       }
 
-      showToast('Notiz gespeichert ✓', 'success')
+      showToast('Notiz gespeichert âœ“', 'success')
       setEditingNotes(false)
       await load()
     } catch {
@@ -816,7 +821,7 @@ export default function ClientDetailPage() {
     }
 
     if (!newPassword || !confirmNewPassword) {
-      showToast('Bitte Passwort und Bestätigung eingeben.', 'danger')
+      showToast('Bitte Passwort und BestÃ¤tigung eingeben.', 'danger')
       return
     }
     if (newPassword.length < 6) {
@@ -824,7 +829,7 @@ export default function ClientDetailPage() {
       return
     }
     if (newPassword !== confirmNewPassword) {
-      showToast('Passwörter stimmen nicht überein.', 'danger')
+      showToast('PasswÃ¶rter stimmen nicht Ã¼berein.', 'danger')
       return
     }
 
@@ -838,20 +843,64 @@ export default function ClientDetailPage() {
         }),
       })
 
-      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      const payload = (await response.json().catch(() => null)) as { error?: string; message?: string; errorId?: string } | null
       if (!response.ok) {
-        showToast(payload?.error ?? 'Passwort konnte nicht zurückgesetzt werden.', 'danger')
+        showToast(
+          withErrorId(payload?.message ?? payload?.error ?? 'Passwort konnte nicht zurÃ¼ckgesetzt werden.', payload?.errorId),
+          'danger',
+        )
         return
       }
 
-      showToast('Passwort erfolgreich zurückgesetzt ✓', 'success')
+      showToast('Passwort erfolgreich zurÃ¼ckgesetzt âœ“', 'success')
       setNewPassword('')
       setConfirmNewPassword('')
       setResetPasswordOpen(false)
     } catch {
-      showToast('Netzwerkfehler beim Zurücksetzen des Passworts.', 'danger')
+      showToast('Netzwerkfehler beim ZurÃ¼cksetzen des Passworts.', 'danger')
     } finally {
       setResettingPassword(false)
+    }
+  }
+
+  const handleCreateAppAccess = async () => {
+    if (!client) return
+    if (client.user_id) {
+      showToast('Dieser Kunde hat bereits einen App-Zugang.', 'danger')
+      return
+    }
+
+    if (appAccessPassword.length < 6) {
+      showToast('Passwort muss mindestens 6 Zeichen lang sein.', 'danger')
+      return
+    }
+
+    setCreatingAppAccess(true)
+    try {
+      const response = await fetch(`/api/backend/clients/${client.id}/app-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: appAccessPassword }),
+      })
+
+      const payload = (await response.json().catch(() => null)) as {
+        message?: string
+        errorId?: string
+        client?: { userId?: string | null }
+      } | null
+
+      if (!response.ok || !payload?.client?.userId) {
+        showToast(withErrorId(payload?.message ?? 'App-Zugang konnte nicht erstellt werden.', payload?.errorId), 'danger')
+        return
+      }
+
+      setClient((prev) => (prev ? { ...prev, user_id: payload.client?.userId ?? prev.user_id } : prev))
+      setAppAccessPassword('')
+      showToast('App-Zugang erstellt âœ“', 'success')
+    } catch {
+      showToast('Netzwerkfehler beim Erstellen des App-Zugangs.', 'danger')
+    } finally {
+      setCreatingAppAccess(false)
     }
   }
 
@@ -870,8 +919,8 @@ export default function ClientDetailPage() {
   }
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'overview', label: 'Übersicht' },
-    { key: 'plans', label: 'Pläne' },
+    { key: 'overview', label: 'Ãœbersicht' },
+    { key: 'plans', label: 'PlÃ¤ne' },
     { key: 'history', label: 'Training' },
     { key: 'progress', label: 'Fortschritt' },
     { key: 'analyse', label: 'Analyse' },
@@ -911,7 +960,7 @@ export default function ClientDetailPage() {
       <div className="mb-6">
         <Link href="/admin/clients" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-4">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-          Zurück zu Kunden
+          ZurÃ¼ck zu Kunden
         </Link>
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-600 text-2xl font-bold">
@@ -919,16 +968,16 @@ export default function ClientDetailPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{client.full_name}</h1>
-            <p className="text-gray-500 text-sm">{client.email}{client.phone ? ` · ${client.phone}` : ''}</p>
+            <p className="text-gray-500 text-sm">{client.email}{client.phone ? ` Â· ${client.phone}` : ''}</p>
           </div>
           <Link href="/admin/clients" className="ml-auto inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
             Kundenliste
           </Link>
           <Link href="/admin/plans" className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-            Trainingspläne
+            TrainingsplÃ¤ne
           </Link>
           <Link href="/admin/nutrition" className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-            Ernährung
+            ErnÃ¤hrung
           </Link>
           <Link href={`/admin/messages?client=${id}`} className="inline-flex items-center rounded-lg bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100">
             Nachricht
@@ -982,7 +1031,7 @@ export default function ClientDetailPage() {
                     value={profileName}
                     onChange={(e) => setProfileName(e.target.value)}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Vollständiger Name"
+                    placeholder="VollstÃ¤ndiger Name"
                   />
                 </div>
                 <div>
@@ -1051,14 +1100,34 @@ export default function ClientDetailPage() {
               <div className="flex gap-4">
                 <dt className="text-sm text-gray-500 w-24 flex-shrink-0">App-Zugang</dt>
                 <dd className={`text-sm font-medium ${client.user_id ? 'text-green-600' : 'text-gray-400'}`}>
-                  {client.user_id ? '✓ Verknüpft' : 'Noch nicht eingeloggt'}
+                  {client.user_id ? 'âœ“ VerknÃ¼pft' : 'Noch nicht eingeloggt'}
                 </dd>
               </div>
+              {!client.user_id && (
+                <div className="pl-28 space-y-2">
+                  <p className="text-xs font-semibold text-gray-700">App-Zugang erstellen</p>
+                  <input
+                    type="password"
+                    value={appAccessPassword}
+                    onChange={(e) => setAppAccessPassword(e.target.value)}
+                    placeholder="Passwort (mind. 6 Zeichen)"
+                    className="w-full max-w-xs px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCreateAppAccess}
+                    disabled={creatingAppAccess}
+                    className="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                  >
+                    {creatingAppAccess ? 'Erstelle...' : 'App-Zugang erstellen'}
+                  </button>
+                </div>
+              )}
             </dl>
 
             <div className="mt-5 pt-5 border-t border-gray-100">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-gray-900">Passwort zurücksetzen</span>
+                <span className="text-sm font-semibold text-gray-900">Passwort zurÃ¼cksetzen</span>
                 {!resetPasswordOpen && (
                   <button
                     onClick={() => setResetPasswordOpen(true)}
@@ -1071,7 +1140,7 @@ export default function ClientDetailPage() {
               </div>
               {!client.user_id ? (
                 <p className="text-sm text-gray-500">
-                  Passwort-Reset ist erst möglich, wenn der Kunde einen App-Zugang hat.
+                  Passwort-Reset ist erst mÃ¶glich, wenn der Kunde einen App-Zugang hat.
                 </p>
               ) : resetPasswordOpen ? (
                 <div className="space-y-2">
@@ -1086,7 +1155,7 @@ export default function ClientDetailPage() {
                     type="password"
                     value={confirmNewPassword}
                     onChange={(e) => setConfirmNewPassword(e.target.value)}
-                    placeholder="Passwort bestätigen"
+                    placeholder="Passwort bestÃ¤tigen"
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   />
                   <div className="flex gap-2">
@@ -1106,7 +1175,7 @@ export default function ClientDetailPage() {
                       disabled={resettingPassword}
                       className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg disabled:opacity-60"
                     >
-                      {resettingPassword ? 'Setze zurück...' : 'Zurücksetzen'}
+                      {resettingPassword ? 'Setze zurÃ¼ck...' : 'ZurÃ¼cksetzen'}
                     </button>
                   </div>
                 </div>
@@ -1131,7 +1200,7 @@ export default function ClientDetailPage() {
                     value={notesValue}
                     onChange={e => setNotesValue(e.target.value)}
                     rows={4}
-                    placeholder="Notizen zum Kunden…"
+                    placeholder="Notizen zum Kundenâ€¦"
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
                   />
                   <div className="flex gap-2">
@@ -1139,7 +1208,7 @@ export default function ClientDetailPage() {
                       Abbrechen
                     </button>
                     <button onClick={handleSaveNotesViaAdminRoute} disabled={savingNotes} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg disabled:opacity-60">
-                      {savingNotes ? 'Speichern…' : 'Speichern'}
+                      {savingNotes ? 'Speichernâ€¦' : 'Speichern'}
                     </button>
                   </div>
                 </div>
@@ -1154,7 +1223,7 @@ export default function ClientDetailPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm text-center">
               <div className="text-2xl font-bold text-gray-900">{assignedPlans.filter(a => a.is_active).length}</div>
-              <div className="text-gray-500 text-xs mt-1">Aktive Pläne</div>
+              <div className="text-gray-500 text-xs mt-1">Aktive PlÃ¤ne</div>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm text-center">
               <div className="text-2xl font-bold text-gray-900">{workoutLogs.length}</div>
@@ -1162,7 +1231,7 @@ export default function ClientDetailPage() {
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm text-center col-span-2 sm:col-span-1">
               <div className="text-2xl font-bold text-gray-900">
-                {progressLogs[0]?.body_weight ? `${progressLogs[0].body_weight} kg` : '–'}
+                {progressLogs[0]?.body_weight ? `${progressLogs[0].body_weight} kg` : 'â€“'}
               </div>
               <div className="text-gray-500 text-xs mt-1">Letztes Gewicht</div>
             </div>
@@ -1172,8 +1241,8 @@ export default function ClientDetailPage() {
             <div className="flex items-center justify-between gap-3 mb-3">
               <h3 className="font-semibold text-gray-900">Aktueller Status</h3>
               <div className="flex flex-wrap gap-2">
-                <Link href="/admin/plans" className="text-xs text-indigo-600 hover:underline">Trainingspläne</Link>
-                <Link href="/admin/nutrition" className="text-xs text-indigo-600 hover:underline">Ernährung</Link>
+                <Link href="/admin/plans" className="text-xs text-indigo-600 hover:underline">TrainingsplÃ¤ne</Link>
+                <Link href="/admin/nutrition" className="text-xs text-indigo-600 hover:underline">ErnÃ¤hrung</Link>
                 <Link href={`/admin/messages?client=${id}`} className="text-xs text-indigo-600 hover:underline">Nachrichten</Link>
               </div>
             </div>
@@ -1189,14 +1258,14 @@ export default function ClientDetailPage() {
                     href={`/admin/plans/${activeTrainingPlan.plan.id}`}
                     className="inline-flex mt-2 text-xs text-indigo-600 hover:underline"
                   >
-                    Aktiven Plan öffnen
+                    Aktiven Plan Ã¶ffnen
                   </Link>
                 ) : null}
               </div>
               <div className="rounded-lg bg-gray-50 px-3 py-2">
-                <dt className="text-gray-500 text-xs">Ernährung</dt>
+                <dt className="text-gray-500 text-xs">ErnÃ¤hrung</dt>
                 <dd className="text-gray-900 font-medium mt-0.5">
-                  {activeNutritionPlan?.plan_name ?? 'Kein aktiver Ernährungsplan'}
+                  {activeNutritionPlan?.plan_name ?? 'Kein aktiver ErnÃ¤hrungsplan'}
                 </dd>
                 <p className="text-xs text-gray-500 mt-1">{assignedNutritionPlans.length} Zuweisungen gesamt</p>
                 {activeNutritionPlan?.plan_id ? (
@@ -1204,12 +1273,12 @@ export default function ClientDetailPage() {
                     href={`/admin/nutrition/${activeNutritionPlan.plan_id}`}
                     className="inline-flex mt-2 text-xs text-indigo-600 hover:underline"
                   >
-                    Aktiven Ernährungsplan öffnen
+                    Aktiven ErnÃ¤hrungsplan Ã¶ffnen
                   </Link>
                 ) : null}
               </div>
               <div className="rounded-lg bg-gray-50 px-3 py-2">
-                <dt className="text-gray-500 text-xs">Letzte Aktivität</dt>
+                <dt className="text-gray-500 text-xs">Letzte AktivitÃ¤t</dt>
                 <dd className="text-gray-900 font-medium mt-0.5">
                   {lastWorkout
                     ? new Date(lastWorkout.date).toLocaleDateString('de-DE')
@@ -1240,7 +1309,7 @@ export default function ClientDetailPage() {
             <div className="flex items-center justify-between gap-3 mb-3">
               <h3 className="font-semibold text-gray-900">Trainingsfortschritt</h3>
               <Link href="#" onClick={(e) => { e.preventDefault(); setTab('history') }} className="text-xs text-indigo-600 hover:underline">
-                Verlauf öffnen
+                Verlauf Ã¶ffnen
               </Link>
             </div>
             {recentWorkouts.length === 0 ? (
@@ -1267,7 +1336,7 @@ export default function ClientDetailPage() {
                         </div>
                         <div className="text-right text-xs text-gray-500 shrink-0">
                           {duration ? <p className="font-medium text-gray-700">{duration}</p> : null}
-                          <p>{completedExerciseCount} Übung{completedExerciseCount !== 1 ? 'en' : ''} erledigt</p>
+                          <p>{completedExerciseCount} Ãœbung{completedExerciseCount !== 1 ? 'en' : ''} erledigt</p>
                         </div>
                       </div>
                     </li>
@@ -1279,18 +1348,18 @@ export default function ClientDetailPage() {
 
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3 mb-3">
-              <h3 className="font-semibold text-gray-900">Ernährungsübersicht</h3>
+              <h3 className="font-semibold text-gray-900">ErnÃ¤hrungsÃ¼bersicht</h3>
               <div className="flex flex-wrap gap-2">
                 {nutritionManagePlanId ? (
                   <Link href={`/admin/nutrition/${nutritionManagePlanId}`} className="text-xs text-indigo-600 hover:underline">
-                    Für Kunden verwalten
+                    FÃ¼r Kunden verwalten
                   </Link>
                 ) : (
                   <Link href="/admin/nutrition/new" className="text-xs text-indigo-600 hover:underline">
                     Plan erstellen
                   </Link>
                 )}
-                <Link href="/admin/nutrition" className="text-xs text-indigo-600 hover:underline">Pläne</Link>
+                <Link href="/admin/nutrition" className="text-xs text-indigo-600 hover:underline">PlÃ¤ne</Link>
                 <Link href="/admin/nutrition/foods" className="text-xs text-indigo-600 hover:underline">Lebensmittel</Link>
                 {activeNutritionPlan?.plan_id ? (
                   <Link href={`/admin/nutrition/${activeNutritionPlan.plan_id}`} className="text-xs text-indigo-600 hover:underline">
@@ -1331,7 +1400,7 @@ export default function ClientDetailPage() {
               <h3 className="font-semibold text-gray-900">Nachrichten & Kontakt</h3>
               <div className="flex flex-wrap gap-2">
                 <Link href={`/admin/messages?client=${id}`} className="text-xs text-indigo-600 hover:underline">
-                  Chat öffnen
+                  Chat Ã¶ffnen
                 </Link>
                 <Link href="/admin/messages" className="text-xs text-indigo-600 hover:underline">
                   Inbox
@@ -1344,11 +1413,11 @@ export default function ClientDetailPage() {
                   href={`/admin/messages?client=${id}`}
                   className="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                 >
-                  Nachricht an Kunden öffnen
+                  Nachricht an Kunden Ã¶ffnen
                 </Link>
               ) : (
                 <p className="text-sm text-gray-500">
-                  Messaging ist verfügbar, sobald der Kunde einen App-Zugang hat.
+                  Messaging ist verfÃ¼gbar, sobald der Kunde einen App-Zugang hat.
                 </p>
               )}
             </div>
@@ -1356,10 +1425,10 @@ export default function ClientDetailPage() {
               <div className="rounded-lg bg-gray-50 px-3 py-2">
                 <p className="text-xs text-gray-500">Messaging-Status</p>
                 <p className="font-medium text-gray-900 mt-0.5">
-                  {client.user_id ? 'Verfügbar' : 'Noch nicht verfügbar'}
+                  {client.user_id ? 'VerfÃ¼gbar' : 'Noch nicht verfÃ¼gbar'}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {client.user_id ? 'Kunde hat App-Zugang.' : 'Kein App-Zugang verknüpft.'}
+                  {client.user_id ? 'Kunde hat App-Zugang.' : 'Kein App-Zugang verknÃ¼pft.'}
                 </p>
               </div>
               <div className="rounded-lg bg-gray-50 px-3 py-2">
@@ -1391,14 +1460,14 @@ export default function ClientDetailPage() {
                   href={`/admin/plans/${activeTrainingPlan.plan.id}`}
                   className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
                 >
-                  Plan öffnen
+                  Plan Ã¶ffnen
                 </Link>
               ) : (
                 <Link
                   href="/admin/plans"
                   className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
                 >
-                  Zu Plänen
+                  Zu PlÃ¤nen
                 </Link>
               )}
             </div>
@@ -1412,7 +1481,7 @@ export default function ClientDetailPage() {
                 onChange={e => setSelectedPlanId(e.target.value)}
                 className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               >
-                <option value="">Plan auswählen…</option>
+                <option value="">Plan auswÃ¤hlenâ€¦</option>
                 {availablePlans.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
@@ -1458,7 +1527,7 @@ export default function ClientDetailPage() {
                         href={`/admin/plans/${(ap.plan as WorkoutPlan).id}`}
                         className="text-xs text-indigo-600 hover:text-indigo-700 px-2 py-1 rounded-lg hover:bg-indigo-50"
                       >
-                        Öffnen
+                        Ã–ffnen
                       </Link>
                     ) : null}
                     <button onClick={() => removePlan(ap.id)} className="text-xs text-red-500 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">
@@ -1477,7 +1546,7 @@ export default function ClientDetailPage() {
         <div className="space-y-3">
           {historyLogs.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-100 py-16 text-center shadow-sm">
-              <div className="text-4xl mb-3">🏋️</div>
+              <div className="text-4xl mb-3">ðŸ‹ï¸</div>
               <p className="text-gray-500 text-sm">Noch kein Training abgeschlossen.</p>
             </div>
           ) : historyLogs.map(log => {
@@ -1519,7 +1588,7 @@ export default function ClientDetailPage() {
                     )}
                     {exerciseCount > 0 && (
                       <span className="text-xs text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
-                        {exerciseCount} Üb.
+                        {exerciseCount} Ãœb.
                       </span>
                     )}
                     <svg
@@ -1558,9 +1627,9 @@ export default function ClientDetailPage() {
                               >
                                 <span className="text-xs font-bold text-gray-400">{set.sets_done ?? i + 1}</span>
                                 <span className="text-gray-700">
-                                  {set.actual_weight ? `${set.actual_weight} kg` : '–'}
+                                  {set.actual_weight ? `${set.actual_weight} kg` : 'â€“'}
                                 </span>
-                                <span className="text-gray-700">{set.actual_reps ?? '–'}</span>
+                                <span className="text-gray-700">{set.actual_reps ?? 'â€“'}</span>
                                 <span className={set.completed ? 'text-green-500' : 'text-gray-300'}>
                                   {set.completed
                                     ? <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
@@ -1594,7 +1663,7 @@ export default function ClientDetailPage() {
               {[
                 { label: 'Trainings', cur: weeklyStats.workouts, prev: lastWeekStats.workouts, fmt: (v: number) => String(v) },
                 { label: 'Zeit', cur: weeklyStats.seconds, prev: lastWeekStats.seconds, fmt: (v: number) => formatTotalDuration(v) },
-                { label: 'Sätze', cur: weeklyStats.sets, prev: lastWeekStats.sets, fmt: (v: number) => String(v) },
+                { label: 'SÃ¤tze', cur: weeklyStats.sets, prev: lastWeekStats.sets, fmt: (v: number) => String(v) },
               ].map(({ label, cur, prev, fmt }) => {
                 const diff = cur - prev
                 const color = diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-500' : 'text-gray-400'
@@ -1628,7 +1697,7 @@ export default function ClientDetailPage() {
               </div>
               <div className="col-span-2 sm:col-span-1">
                 <div className="text-2xl font-bold text-gray-900">{weeklyStats.sets}</div>
-                <div className="text-xs text-gray-500 mt-1">Erledigte Sätze</div>
+                <div className="text-xs text-gray-500 mt-1">Erledigte SÃ¤tze</div>
               </div>
             </div>
           </div>
@@ -1647,7 +1716,7 @@ export default function ClientDetailPage() {
               </div>
               <div className="col-span-2 sm:col-span-1">
                 <div className="text-2xl font-bold text-gray-900">{monthlyStats.sets}</div>
-                <div className="text-xs text-gray-500 mt-1">Erledigte Sätze</div>
+                <div className="text-xs text-gray-500 mt-1">Erledigte SÃ¤tze</div>
               </div>
             </div>
           </div>
@@ -1706,7 +1775,7 @@ export default function ClientDetailPage() {
                 return chartData.length >= 2 ? (
                   <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-1">
-                      <h3 className="font-semibold text-gray-900">Körpergewicht</h3>
+                      <h3 className="font-semibold text-gray-900">KÃ¶rpergewicht</h3>
                       {change !== null && (
                         <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${change < 0 ? 'text-green-700 bg-green-50' : change > 0 ? 'text-red-700 bg-red-50' : 'text-gray-500 bg-gray-100'}`}>
                           {change > 0 ? '+' : ''}{change.toFixed(1)} kg gesamt
@@ -1732,7 +1801,7 @@ export default function ClientDetailPage() {
                       <li key={log.id} className="flex items-center gap-4 px-6 py-3">
                         <div className="flex-1">
                           <div className="text-sm font-medium text-gray-900">
-                            {log.body_weight ? `${log.body_weight} kg` : '–'}
+                            {log.body_weight ? `${log.body_weight} kg` : 'â€“'}
                           </div>
                           <div className="text-xs text-gray-500">
                             {new Date(log.date).toLocaleDateString('de-DE')}
@@ -1759,14 +1828,14 @@ export default function ClientDetailPage() {
         <div className="space-y-4">
           {checkins.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-100 py-14 text-center shadow-sm">
-              <div className="text-3xl mb-2">📝</div>
+              <div className="text-3xl mb-2">ðŸ“</div>
               <p className="text-gray-500 text-sm">Noch keine Check-ins vorhanden.</p>
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
               <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900">Wöchentliche Check-ins</h3>
-                <span className="text-xs text-gray-400">{checkins.length} Einträge</span>
+                <h3 className="font-semibold text-gray-900">WÃ¶chentliche Check-ins</h3>
+                <span className="text-xs text-gray-400">{checkins.length} EintrÃ¤ge</span>
               </div>
               <ul className="divide-y divide-gray-100">
                 {checkins.map(ci => (
@@ -1843,3 +1912,5 @@ export default function ClientDetailPage() {
     </div>
   )
 }
+
+

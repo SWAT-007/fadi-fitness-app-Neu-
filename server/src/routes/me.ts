@@ -2,6 +2,7 @@ import { Router } from "express";
 import { NotificationType } from "@prisma/client";
 import { prisma } from "../db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
+import { unexpectedErrorResponse } from "../utils/errors";
 import {
   listNotificationsForUser,
   mapNotification,
@@ -135,8 +136,7 @@ meRouter.get("/trainer-dashboard", requireAuth, async (req: AuthenticatedRequest
       })),
     });
   } catch (error) {
-    console.error("[me:trainer-dashboard] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:trainer-dashboard", error);
   }
 });
 
@@ -282,8 +282,7 @@ meRouter.get("/dashboard", requireAuth, async (req: AuthenticatedRequest, res) =
       unreadMessageCount,
     });
   } catch (error) {
-    console.error("[me:dashboard] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:dashboard", error);
   }
 });
 
@@ -296,8 +295,7 @@ meRouter.get("/notifications", requireAuth, async (req: AuthenticatedRequest, re
 
     return res.json({ notifications: notifications.map(mapNotification) });
   } catch (error) {
-    console.error("[me:notifications:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:notifications:list", error);
   }
 });
 
@@ -315,8 +313,7 @@ meRouter.patch("/notifications/:id/read", requireAuth, async (req: Authenticated
 
     return res.json({ notification: mapNotification(notification) });
   } catch (error) {
-    console.error("[me:notifications:read] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:notifications:read", error);
   }
 });
 
@@ -325,8 +322,7 @@ meRouter.patch("/notifications/read-all", requireAuth, async (req: Authenticated
     const result = await markAllNotificationsReadForUser(req.user!.userId);
     return res.json({ updatedCount: result.count });
   } catch (error) {
-    console.error("[me:notifications:read-all] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:notifications:read-all", error);
   }
 });
 
@@ -352,8 +348,7 @@ meRouter.get("/client-profile", requireAuth, async (req: AuthenticatedRequest, r
 
     return res.json({ client: clientProfile });
   } catch (error) {
-    console.error("[me:client-profile] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:client-profile", error);
   }
 });
 
@@ -438,8 +433,7 @@ meRouter.get("/active-plan", requireAuth, async (req: AuthenticatedRequest, res)
       },
     });
   } catch (error) {
-    console.error("[me:active-plan] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:active-plan", error);
   }
 });
 
@@ -485,8 +479,7 @@ meRouter.get("/active-workout", requireAuth, async (req: AuthenticatedRequest, r
 
     return res.json({ activeWorkout });
   } catch (error) {
-    console.error("[me:active-workout] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:active-workout", error);
   }
 });
 
@@ -567,8 +560,7 @@ meRouter.get("/plan-days/:dayId", requireAuth, async (req: AuthenticatedRequest,
       exerciseLogs: [],    // ExerciseLog model deferred
     });
   } catch (error) {
-    console.error("[me:plan-days] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:plan-days", error);
   }
 });
 
@@ -679,8 +671,7 @@ meRouter.get("/workouts/:dayId/play", requireAuth, async (req: AuthenticatedRequ
       exerciseLogs,
     });
   } catch (error) {
-    console.error("[me:workouts:play] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:workouts:play", error);
   }
 });
 
@@ -729,8 +720,7 @@ meRouter.post("/workout-logs", requireAuth, async (req: AuthenticatedRequest, re
 
     return res.status(201).json({ workoutLog, resumed: false });
   } catch (error) {
-    console.error("[me:workout-logs:create] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:workout-logs:create", error);
   }
 });
 
@@ -834,8 +824,7 @@ meRouter.put("/workout-logs/:logId/exercise-logs", requireAuth, async (req: Auth
 
     return res.json({ exerciseLogs });
   } catch (error) {
-    console.error("[me:exercise-logs:upsert] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:exercise-logs:upsert", error);
   }
 });
 
@@ -905,8 +894,7 @@ meRouter.patch("/workout-logs/:logId", requireAuth, async (req: AuthenticatedReq
 
     return res.json({ workoutLog: updatedLog, deletedOrphanCount, notificationCreated });
   } catch (error) {
-    console.error("[me:workout-logs:complete] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:workout-logs:complete", error);
   }
 });
 
@@ -938,8 +926,7 @@ meRouter.delete("/workout-logs/:logId", requireAuth, async (req: AuthenticatedRe
 
     return res.json({ deleted: true, workoutLogId: logId });
   } catch (error) {
-    console.error("[me:workout-logs:delete] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:workout-logs:delete", error);
   }
 });
 
@@ -1015,8 +1002,7 @@ meRouter.post("/exercise-change-requests", requireAuth, async (req: Authenticate
 
     return res.status(201).json({ request, notificationCreated });
   } catch (error) {
-    console.error("[me:exercise-change-requests:create] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:exercise-change-requests:create", error);
   }
 });
 
@@ -1165,8 +1151,7 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
       drinkLogs,
     });
   } catch (error) {
-    console.error("[me:nutrition] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:nutrition", error);
   }
 });
 
@@ -1231,8 +1216,7 @@ meRouter.post("/nutrition/client-meal-foods", requireAuth, async (req: Authentic
 
     return res.status(201).json({ clientMealFood: cmf });
   } catch (error) {
-    console.error("[me:nutrition:cmf:create] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:nutrition:cmf:create", error);
   }
 });
 
@@ -1301,8 +1285,7 @@ meRouter.patch("/nutrition/client-meal-foods/:id", requireAuth, async (req: Auth
 
     return res.json({ clientMealFood: cmf });
   } catch (error) {
-    console.error("[me:nutrition:cmf:update] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:nutrition:cmf:update", error);
   }
 });
 
@@ -1331,8 +1314,7 @@ meRouter.delete("/nutrition/client-meal-foods/:id", requireAuth, async (req: Aut
 
     return res.json({ deleted: true, id: cmfId });
   } catch (error) {
-    console.error("[me:nutrition:cmf:delete] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:nutrition:cmf:delete", error);
   }
 });
 
@@ -1360,8 +1342,7 @@ meRouter.get("/nutrition/drink-logs", requireAuth, async (req: AuthenticatedRequ
 
     return res.json({ drinkLogs: logs });
   } catch (error) {
-    console.error("[me:nutrition:drink-logs:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:nutrition:drink-logs:list", error);
   }
 });
 
@@ -1396,8 +1377,7 @@ meRouter.post("/nutrition/drink-logs", requireAuth, async (req: AuthenticatedReq
 
     return res.status(201).json({ drinkLog: log });
   } catch (error) {
-    console.error("[me:nutrition:drink-logs:create] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:nutrition:drink-logs:create", error);
   }
 });
 
@@ -1426,8 +1406,7 @@ meRouter.delete("/nutrition/drink-logs/:id", requireAuth, async (req: Authentica
 
     return res.json({ deleted: true, id: logId });
   } catch (error) {
-    console.error("[me:nutrition:drink-logs:delete] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:nutrition:drink-logs:delete", error);
   }
 });
 
@@ -1455,8 +1434,7 @@ meRouter.get("/nutrition/meal-history", requireAuth, async (req: AuthenticatedRe
 
     return res.json({ mealHistory: history });
   } catch (error) {
-    console.error("[me:nutrition:meal-history:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:nutrition:meal-history:list", error);
   }
 });
 
@@ -1501,8 +1479,7 @@ meRouter.post("/nutrition/meal-history", requireAuth, async (req: AuthenticatedR
 
     return res.status(201).json({ mealHistoryItem: item });
   } catch (error) {
-    console.error("[me:nutrition:meal-history:create] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:nutrition:meal-history:create", error);
   }
 });
 
@@ -1531,8 +1508,7 @@ meRouter.delete("/nutrition/meal-history/:id", requireAuth, async (req: Authenti
 
     return res.json({ deleted: true, id: itemId });
   } catch (error) {
-    console.error("[me:nutrition:meal-history:delete] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:nutrition:meal-history:delete", error);
   }
 });
 
@@ -1576,8 +1552,7 @@ meRouter.get("/nutrition/meal-logs", requireAuth, async (req: AuthenticatedReque
 
     return res.json({ mealLogs });
   } catch (error) {
-    console.error("[me:nutrition:meal-logs:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:nutrition:meal-logs:list", error);
   }
 });
 
@@ -1611,8 +1586,7 @@ meRouter.post("/nutrition/meal-logs", requireAuth, async (req: AuthenticatedRequ
 
     return res.status(201).json({ mealLog });
   } catch (error) {
-    console.error("[me:nutrition:meal-logs:create] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:nutrition:meal-logs:create", error);
   }
 });
 
@@ -1642,8 +1616,7 @@ meRouter.delete("/nutrition/meal-logs/:id", requireAuth, async (req: Authenticat
 
     return res.json({ deleted: true, id: itemId });
   } catch (error) {
-    console.error("[me:nutrition:meal-logs:delete] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:nutrition:meal-logs:delete", error);
   }
 });
 
@@ -1694,8 +1667,7 @@ meRouter.get("/checkins", requireAuth, async (req: AuthenticatedRequest, res) =>
 
     return res.json({ checkins });
   } catch (error) {
-    console.error("[me:checkins:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:checkins:list", error);
   }
 });
 
@@ -1775,8 +1747,7 @@ meRouter.post("/checkins", requireAuth, async (req: AuthenticatedRequest, res) =
 
     return res.status(201).json({ checkin, notificationCreated });
   } catch (error) {
-    console.error("[me:checkins:upsert] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:checkins:upsert", error);
   }
 });
 
@@ -1814,8 +1785,7 @@ meRouter.get("/progress-logs", requireAuth, async (req: AuthenticatedRequest, re
 
     return res.json({ progressLogs });
   } catch (error) {
-    console.error("[me:progress-logs:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:progress-logs:list", error);
   }
 });
 
@@ -1858,8 +1828,7 @@ meRouter.post("/progress-logs", requireAuth, async (req: AuthenticatedRequest, r
 
     return res.status(201).json({ progressLog });
   } catch (error) {
-    console.error("[me:progress-logs:create] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:progress-logs:create", error);
   }
 });
 
@@ -1889,8 +1858,7 @@ meRouter.delete("/progress-logs/:id", requireAuth, async (req: AuthenticatedRequ
 
     return res.json({ deleted: true, id: itemId });
   } catch (error) {
-    console.error("[me:progress-logs:delete] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:progress-logs:delete", error);
   }
 });
 
@@ -1992,8 +1960,7 @@ meRouter.get("/messages", requireAuth, async (req: AuthenticatedRequest, res) =>
       messages,
     });
   } catch (error) {
-    console.error("[me:messages:list] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:messages:list", error);
   }
 });
 
@@ -2048,8 +2015,7 @@ meRouter.post("/messages", requireAuth, async (req: AuthenticatedRequest, res) =
 
     return res.status(201).json({ message, notificationCreated });
   } catch (error) {
-    console.error("[me:messages:create] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:messages:create", error);
   }
 });
 
@@ -2081,8 +2047,7 @@ meRouter.post("/messages/read", requireAuth, async (req: AuthenticatedRequest, r
 
     return res.json({ updatedCount: result.count });
   } catch (error) {
-    console.error("[me:messages:read] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:messages:read", error);
   }
 });
 
@@ -2148,8 +2113,7 @@ meRouter.get("/progress-summary", requireAuth, async (req: AuthenticatedRequest,
       },
     });
   } catch (error) {
-    console.error("[me:progress-summary] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+        return unexpectedErrorResponse(res, "me:progress-summary", error);
   }
 });
 
