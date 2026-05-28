@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
-import { ADMIN_AUTH_COOKIE, isAdminEmail, getEmailFromJwt } from '@/lib/admin'
+import { cookies } from 'next/headers'
+
+const BACKEND_TOKEN_COOKIE = 'backend_token'
+const BACKEND_API_URL = process.env.BACKEND_API_URL ?? 'http://localhost:4000'
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -11,49 +14,46 @@ const COOKIE_OPTIONS = {
 const sessionError = (message: string, status: number) =>
   NextResponse.json({ ok: false, message }, { status })
 
-export async function POST(request: Request) {
-  const payload = await request.json().catch(() => null) as {
-    accessToken?: unknown
-    access_token?: unknown
-    expiresAt?: unknown
-    expires_at?: unknown
-    session?: {
-      access_token?: unknown
-      expires_at?: unknown
+export async function POST() {
+  const backendToken = (await cookies()).get(BACKEND_TOKEN_COOKIE)?.value
+  if (!backendToken) {
+    return sessionError('Admin-Sitzung konnte nicht erstellt werden: Zugriffstoken fehlt.', 401)
+  }
+
+  try {
+    const backendResponse = await fetch(`${BACKEND_API_URL}/api/v1/me`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${backendToken}` },
+      cache: 'no-store',
+    })
+
+    const backendPayload = await backendResponse.json().catch(() => null) as {
+      user?: { role?: unknown }
+      message?: unknown
+    } | null
+
+    if (!backendResponse.ok) {
+      const message = typeof backendPayload?.message === 'string'
+        ? backendPayload.message
+        : 'Admin-Sitzung konnte nicht validiert werden.'
+      return sessionError(message, backendResponse.status || 401)
     }
-  } | null
 
-  const accessToken =
-    typeof payload?.accessToken === 'string' ? payload.accessToken :
-      typeof payload?.access_token === 'string' ? payload.access_token :
-        typeof payload?.session?.access_token === 'string' ? payload.session.access_token :
-          ''
+    const role = typeof backendPayload?.user?.role === 'string'
+      ? backendPayload.user.role.toLowerCase()
+      : ''
 
-  const expiresAt =
-    typeof payload?.expiresAt === 'number' ? payload.expiresAt :
-      typeof payload?.expires_at === 'number' ? payload.expires_at :
-        typeof payload?.session?.expires_at === 'number' ? payload.session.expires_at :
-          null
-
-  if (!accessToken) {
-    return sessionError('Admin-Sitzung konnte nicht erstellt werden: Zugriffstoken fehlt.', 400)
-  }
-
-  const email = getEmailFromJwt(accessToken)
-  if (!isAdminEmail(email)) {
-    return sessionError('Admin-Zugriff ist für diese E-Mail-Adresse nicht erlaubt.', 403)
-  }
-
-  const now = Math.floor(Date.now() / 1000)
-  const maxAge = expiresAt ? expiresAt - now : 60 * 60
-  if (maxAge <= 0) {
-    return sessionError('Admin-Sitzung konnte nicht erstellt werden: Zugriffstoken ist abgelaufen.', 401)
+    if (role !== 'trainer') {
+      return sessionError('Admin-Zugriff ist fuer dieses Konto nicht erlaubt.', 403)
+    }
+  } catch {
+    return sessionError('Backend nicht erreichbar.', 502)
   }
 
   const response = NextResponse.json({ ok: true })
-  response.cookies.set(ADMIN_AUTH_COOKIE, accessToken, {
+  response.cookies.set(BACKEND_TOKEN_COOKIE, backendToken, {
     ...COOKIE_OPTIONS,
-    maxAge,
+    maxAge: 7 * 24 * 60 * 60,
   })
 
   return response
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
 export async function DELETE() {
   const response = NextResponse.json({ ok: true })
-  response.cookies.set(ADMIN_AUTH_COOKIE, '', {
+  response.cookies.set(BACKEND_TOKEN_COOKIE, '', {
     ...COOKIE_OPTIONS,
     maxAge: 0,
   })
