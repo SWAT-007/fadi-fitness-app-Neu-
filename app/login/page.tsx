@@ -2,34 +2,20 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-
-const createAdminSession = async (accessToken: string, expiresAt?: number) => {
-  try {
-    const response = await fetch('/api/auth/session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accessToken, expiresAt }),
-    })
-    const payload = await response.json().catch(() => null) as { message?: unknown } | null
-    if (response.ok) return { ok: true, isAdmin: true } as const
-    if (response.status === 403) return { ok: true, isAdmin: false } as const
-    return {
-      ok: false,
-      isAdmin: false,
-      message: typeof payload?.message === 'string'
-        ? payload.message
-        : `Admin-Sitzung konnte nicht erstellt werden (Status ${response.status}).`,
-    } as const
-  } catch {
-    return { ok: false, message: 'Netzwerkfehler beim Erstellen der Admin-Sitzung.' } as const
-  }
-}
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase()
 
-const clearAdminSession = async () => {
-  try { await fetch('/api/auth/session', { method: 'DELETE' }) } catch { /* ignore */ }
+interface LoginResponse {
+  ok?: boolean
+  message?: string
+}
+
+interface MeResponse {
+  ok?: boolean
+  user?: {
+    role?: string
+  } | null
+  message?: string
 }
 
 export default function LoginPage() {
@@ -45,36 +31,48 @@ export default function LoginPage() {
     setError('')
 
     const normalizedEmail = normalizeEmail(email)
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({
-      email: normalizedEmail,
-      password,
-    })
 
-    if (signInError) { setError(signInError.message); setLoading(false); return }
+    try {
+      const loginResponse = await fetch('/api/backend/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, password }),
+      })
 
-    if (!data.session?.access_token) {
-      setError('Sitzung konnte nicht erstellt werden.')
+      const loginPayload = await loginResponse.json().catch(() => null) as LoginResponse | null
+      if (!loginResponse.ok) {
+        setError(loginPayload?.message ?? 'Anmeldung fehlgeschlagen.')
+        setLoading(false)
+        return
+      }
+
+      const meResponse = await fetch('/api/backend/auth/me', {
+        method: 'GET',
+        cache: 'no-store',
+      })
+      const mePayload = await meResponse.json().catch(() => null) as MeResponse | null
+      if (!meResponse.ok || !mePayload?.ok || !mePayload.user?.role) {
+        setError(mePayload?.message ?? 'Sitzung konnte nicht validiert werden.')
+        setLoading(false)
+        return
+      }
+
+      const role = mePayload.user.role.toLowerCase()
+      if (role === 'trainer' || role === 'admin') {
+        router.push('/admin')
+        return
+      }
+      if (role === 'client') {
+        router.push('/client')
+        return
+      }
+
+      setError('Unbekannte Benutzerrolle.')
       setLoading(false)
-      return
+    } catch {
+      setError('Netzwerkfehler bei der Anmeldung.')
+      setLoading(false)
     }
-
-    const result = await createAdminSession(data.session.access_token, data.session.expires_at)
-    if (!result.ok) { setError(result.message); setLoading(false); return }
-
-    if (result.isAdmin) {
-      router.push('/admin')
-      return
-    }
-
-    // Client login — link user_id if not yet linked
-    await supabase
-      .from('clients')
-      .update({ user_id: data.user.id })
-      .eq('email', normalizedEmail)
-      .is('user_id', null)
-
-    await clearAdminSession()
-    router.push('/client')
   }
 
   return (
@@ -86,7 +84,7 @@ export default function LoginPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="MilaCoach" className="w-24 h-24 object-contain mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-gray-900">MilaCoach</h1>
-          <p className="text-gray-500 mt-1 text-sm">Dein persönlicher Fitness-Begleiter</p>
+          <p className="text-gray-500 mt-1 text-sm">Dein persoenlicher Fitness-Begleiter</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
@@ -123,7 +121,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
-                placeholder="••••••••"
+                placeholder="********"
                 minLength={6}
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
               />
@@ -134,7 +132,7 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold py-3.5 rounded-xl transition-colors text-sm mt-2"
             >
-              {loading ? 'Bitte warten…' : 'Anmelden'}
+              {loading ? 'Bitte warten...' : 'Anmelden'}
             </button>
           </form>
         </div>
