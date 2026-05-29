@@ -326,6 +326,352 @@ clientsRouter.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
   }
 });
 
+clientsRouter.get("/messages/clients", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const clients = await prisma.clientProfile.findMany({
+      where: { trainerId: trainerProfile.id },
+      orderBy: { fullName: "asc" },
+      select: {
+        id: true,
+        trainerId: true,
+        userId: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        notes: true,
+        createdAt: true,
+      },
+    });
+
+    const clientUserIds = clients.map((client) => client.userId).filter(Boolean) as string[];
+    const unreadBySenderId = new Map<string, number>();
+
+    if (clientUserIds.length > 0) {
+      const unreadMessages = await prisma.message.findMany({
+        where: {
+          senderId: { in: clientUserIds },
+          receiverId: req.user.userId,
+          readAt: null,
+        },
+        select: { senderId: true },
+      });
+
+      for (const message of unreadMessages) {
+        unreadBySenderId.set(message.senderId, (unreadBySenderId.get(message.senderId) ?? 0) + 1);
+      }
+    }
+
+    return res.json({
+      trainerUserId: req.user.userId,
+      clients: clients.map((client) => ({
+        id: client.id,
+        trainerId: client.trainerId,
+        userId: client.userId,
+        fullName: client.fullName,
+        email: client.email,
+        phone: client.phone,
+        notes: client.notes,
+        createdAt: client.createdAt,
+        unreadCount: client.userId ? unreadBySenderId.get(client.userId) ?? 0 : 0,
+        messagingEnabled: client.userId !== null,
+      })),
+    });
+  } catch (error) {
+        return unexpectedErrorResponse(res, "clients:messages:clients", error);
+  }
+});
+
+clientsRouter.post("/:id/reset-password", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
+
+  const clientId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!clientId) {
+    return res.status(400).json({ ok: false, message: "Invalid request" });
+  }
+
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  if (!password || password.length < 6) {
+    return res.status(400).json({ ok: false, message: "Passwort muss mindestens 6 Zeichen haben." });
+  }
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ ok: false, message: "Internal server error" });
+
+    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    if (!clientProfile) return res.status(404).json({ ok: false, message: "Not found" });
+    if (!clientProfile.userId) {
+      return res.status(400).json({ ok: false, message: "Der Kunde hat noch keinen App-Zugang." });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await prisma.user.update({
+      where: { id: clientProfile.userId },
+      data: { passwordHash, isActive: true },
+      select: { id: true },
+    });
+
+    return res.json({ ok: true, message: "Passwort wurde zurueckgesetzt." });
+  } catch (error) {
+        return unexpectedErrorResponse(res, "clients:reset-password", error);
+  }
+});
+
+clientsRouter.post("/:id/app-access", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!clientId) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  if (!password || password.length < 6) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const normalizedEmail = clientProfile.email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: "Client has no email" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const existingUser = await tx.user.findUnique({
+        where: { email: normalizedEmail },
+        select: {
+          id: true,
+          role: true,
+          clientProfile: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      if (existingUser && existingUser.role !== "CLIENT") {
+        throw new Error("Email belongs to a trainer account");
+      }
+
+      if (
+        existingUser?.clientProfile &&
+        existingUser.clientProfile.id !== clientProfile.id
+      ) {
+        throw new Error("Email already linked to a different client");
+      }
+
+      let userCreated = false;
+      let userLinked = false;
+
+      const user = existingUser
+        ? await tx.user.update({
+            where: { id: existingUser.id },
+            data: {
+              passwordHash,
+              role: "CLIENT",
+              isActive: true,
+            },
+            select: { id: true, email: true },
+          })
+        : await tx.user.create({
+            data: {
+              email: normalizedEmail,
+              passwordHash,
+              role: "CLIENT",
+              fullName: clientProfile.fullName,
+              isActive: true,
+            },
+            select: { id: true, email: true },
+          });
+
+      if (!existingUser) {
+        userCreated = true;
+      }
+
+      if (clientProfile.userId !== user.id) {
+        await tx.clientProfile.update({
+          where: { id: clientProfile.id },
+          data: {
+            userId: user.id,
+            email: normalizedEmail,
+            fullName: clientProfile.fullName,
+            status: "active",
+          },
+          select: { id: true },
+        });
+        userLinked = true;
+      }
+
+      return {
+        user,
+        userCreated,
+        userLinked,
+      };
+    });
+
+    return res.json({
+      client: {
+        id: clientProfile.id,
+        userId: clientProfile.userId ?? result.user.id,
+        email: normalizedEmail,
+      },
+      userCreated: result.userCreated,
+      userLinked: result.userLinked,
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "Email belongs to a trainer account") {
+        return res.status(409).json({ message: "Diese E-Mail gehört zu einem Trainerkonto." });
+      }
+      if (error.message === "Email already linked to a different client") {
+        return res.status(409).json({ message: "Diese E-Mail ist bereits einem anderen Client zugeordnet." });
+      }
+    }
+        return unexpectedErrorResponse(res, "clients:app-access:create", error);
+  }
+});
+
+clientsRouter.get("/:clientId/nutrition-assignments", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientIdParam = req.params.clientId;
+  const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
+  if (!clientId) return res.status(404).json({ message: "Not found" });
+
+  const rawLimit = parseInt(String(req.query.limit ?? "50"), 10);
+  const limit = Number.isFinite(rawLimit) ? Math.min(200, Math.max(1, rawLimit)) : 50;
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const assignments = await prisma.assignedNutritionPlan.findMany({
+      where: { clientId: clientProfile.id },
+      orderBy: { assignedAt: "desc" },
+      take: limit,
+      select: assignedNutritionPlanSelect,
+    });
+
+    return res.json({
+      assignments,
+    });
+  } catch (error) {
+        return unexpectedErrorResponse(res, "clients:nutrition-assignments:list", error);
+  }
+});
+
+clientsRouter.get("/:clientId/workout-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const clientIdParam = req.params.clientId;
+  const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
+  if (!clientId) return res.status(404).json({ message: "Not found" });
+
+  const rawLimit = parseInt(String(req.query.limit ?? "50"), 10);
+  const limit = Number.isFinite(rawLimit) ? Math.min(200, Math.max(1, rawLimit)) : 50;
+  const completedOnly = String(req.query.completed ?? "true").toLowerCase() !== "false";
+  const dateGte = typeof req.query.dateGte === "string" ? req.query.dateGte.trim() : "";
+  const dateLt = typeof req.query.dateLt === "string" ? req.query.dateLt.trim() : "";
+
+  try {
+    const trainerProfile = await resolveTrainerProfile(req.user.userId);
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const where = {
+      clientId: clientProfile.id,
+      ...(completedOnly ? { completedAt: { not: null as Date | null } } : {}),
+      ...(dateGte || dateLt
+        ? {
+            date: {
+              ...(dateGte ? { gte: dateGte } : {}),
+              ...(dateLt ? { lt: dateLt } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [totalCount, workoutLogs] = await Promise.all([
+      prisma.workoutLog.count({ where }),
+      prisma.workoutLog.findMany({
+        where,
+        orderBy: { date: "desc" },
+        take: limit,
+        select: {
+          id: true,
+          clientId: true,
+          dayId: true,
+          date: true,
+          notes: true,
+          completedAt: true,
+          durationSeconds: true,
+          createdAt: true,
+          day: {
+            select: {
+              id: true,
+              name: true,
+              plan: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+          exerciseLogs: {
+            select: {
+              id: true,
+              setsDone: true,
+              actualWeight: true,
+              actualReps: true,
+              completed: true,
+              exercise: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return res.json({ totalCount, workoutLogs });
+  } catch (error) {
+        return unexpectedErrorResponse(res, "clients:workout-logs:list", error);
+  }
+});
+
 clientsRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });
@@ -676,169 +1022,6 @@ clientsRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) 
   }
 });
 
-clientsRouter.post("/:id/reset-password", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
-    return res.status(403).json({ ok: false, message: "Forbidden" });
-  }
-
-  const clientId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  if (!clientId) {
-    return res.status(400).json({ ok: false, message: "Invalid request" });
-  }
-
-  const password = typeof req.body?.password === "string" ? req.body.password : "";
-  if (!password || password.length < 6) {
-    return res.status(400).json({ ok: false, message: "Passwort muss mindestens 6 Zeichen haben." });
-  }
-
-  try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ ok: false, message: "Internal server error" });
-
-    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
-    if (!clientProfile) return res.status(404).json({ ok: false, message: "Not found" });
-    if (!clientProfile.userId) {
-      return res.status(400).json({ ok: false, message: "Der Kunde hat noch keinen App-Zugang." });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-    await prisma.user.update({
-      where: { id: clientProfile.userId },
-      data: { passwordHash, isActive: true },
-      select: { id: true },
-    });
-
-    return res.json({ ok: true, message: "Passwort wurde zurueckgesetzt." });
-  } catch (error) {
-        return unexpectedErrorResponse(res, "clients:reset-password", error);
-  }
-});
-
-clientsRouter.post("/:id/app-access", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
-    return res.status(403).json({ message: "Forbidden" });
-  }
-
-  const clientId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  if (!clientId) {
-    return res.status(400).json({ message: "Invalid request" });
-  }
-
-  const password = typeof req.body?.password === "string" ? req.body.password : "";
-  if (!password || password.length < 6) {
-    return res.status(400).json({ message: "Invalid request" });
-  }
-
-  try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
-
-    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
-    if (!clientProfile) return res.status(404).json({ message: "Not found" });
-
-    const normalizedEmail = clientProfile.email.trim().toLowerCase();
-    if (!normalizedEmail) {
-      return res.status(400).json({ message: "Client has no email" });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    const result = await prisma.$transaction(async (tx) => {
-      const existingUser = await tx.user.findUnique({
-        where: { email: normalizedEmail },
-        select: {
-          id: true,
-          role: true,
-          clientProfile: {
-            select: {
-              id: true,
-            },
-          },
-        },
-      });
-
-      if (existingUser && existingUser.role !== "CLIENT") {
-        throw new Error("Email belongs to a trainer account");
-      }
-
-      if (
-        existingUser?.clientProfile &&
-        existingUser.clientProfile.id !== clientProfile.id
-      ) {
-        throw new Error("Email already linked to a different client");
-      }
-
-      let userCreated = false;
-      let userLinked = false;
-
-      const user = existingUser
-        ? await tx.user.update({
-            where: { id: existingUser.id },
-            data: {
-              passwordHash,
-              role: "CLIENT",
-              isActive: true,
-            },
-            select: { id: true, email: true },
-          })
-        : await tx.user.create({
-            data: {
-              email: normalizedEmail,
-              passwordHash,
-              role: "CLIENT",
-              fullName: clientProfile.fullName,
-              isActive: true,
-            },
-            select: { id: true, email: true },
-          });
-
-      if (!existingUser) {
-        userCreated = true;
-      }
-
-      if (clientProfile.userId !== user.id) {
-        await tx.clientProfile.update({
-          where: { id: clientProfile.id },
-          data: {
-            userId: user.id,
-            email: normalizedEmail,
-            fullName: clientProfile.fullName,
-            status: "active",
-          },
-          select: { id: true },
-        });
-        userLinked = true;
-      }
-
-      return {
-        user,
-        userCreated,
-        userLinked,
-      };
-    });
-
-    return res.json({
-      client: {
-        id: clientProfile.id,
-        userId: clientProfile.userId ?? result.user.id,
-        email: normalizedEmail,
-      },
-      userCreated: result.userCreated,
-      userLinked: result.userLinked,
-    });
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "Email belongs to a trainer account") {
-        return res.status(409).json({ message: "Diese E-Mail gehört zu einem Trainerkonto." });
-      }
-      if (error.message === "Email already linked to a different client") {
-        return res.status(409).json({ message: "Diese E-Mail ist bereits einem anderen Client zugeordnet." });
-      }
-    }
-        return unexpectedErrorResponse(res, "clients:app-access:create", error);
-  }
-});
-
 clientsRouter.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });
@@ -1163,189 +1346,6 @@ clientsRouter.get("/:clientId/progress-logs", requireAuth, async (req: Authentic
     return res.json({ progressLogs });
   } catch (error) {
         return unexpectedErrorResponse(res, "clients:progress-logs:list", error);
-  }
-});
-
-clientsRouter.get("/:clientId/nutrition-assignments", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
-    return res.status(403).json({ message: "Forbidden" });
-  }
-
-  const clientIdParam = req.params.clientId;
-  const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
-  if (!clientId) return res.status(404).json({ message: "Not found" });
-
-  const rawLimit = parseInt(String(req.query.limit ?? "50"), 10);
-  const limit = Number.isFinite(rawLimit) ? Math.min(200, Math.max(1, rawLimit)) : 50;
-
-  try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
-
-    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
-    if (!clientProfile) return res.status(404).json({ message: "Not found" });
-
-    const assignments = await prisma.assignedNutritionPlan.findMany({
-      where: { clientId: clientProfile.id },
-      orderBy: { assignedAt: "desc" },
-      take: limit,
-      select: assignedNutritionPlanSelect,
-    });
-
-    return res.json({
-      assignments,
-    });
-  } catch (error) {
-        return unexpectedErrorResponse(res, "clients:nutrition-assignments:list", error);
-  }
-});
-
-clientsRouter.get("/:clientId/workout-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
-    return res.status(403).json({ message: "Forbidden" });
-  }
-
-  const clientIdParam = req.params.clientId;
-  const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
-  if (!clientId) return res.status(404).json({ message: "Not found" });
-
-  const rawLimit = parseInt(String(req.query.limit ?? "50"), 10);
-  const limit = Number.isFinite(rawLimit) ? Math.min(200, Math.max(1, rawLimit)) : 50;
-  const completedOnly = String(req.query.completed ?? "true").toLowerCase() !== "false";
-  const dateGte = typeof req.query.dateGte === "string" ? req.query.dateGte.trim() : "";
-  const dateLt = typeof req.query.dateLt === "string" ? req.query.dateLt.trim() : "";
-
-  try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
-
-    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
-    if (!clientProfile) return res.status(404).json({ message: "Not found" });
-
-    const where = {
-      clientId: clientProfile.id,
-      ...(completedOnly ? { completedAt: { not: null as Date | null } } : {}),
-      ...(dateGte || dateLt
-        ? {
-            date: {
-              ...(dateGte ? { gte: dateGte } : {}),
-              ...(dateLt ? { lt: dateLt } : {}),
-            },
-          }
-        : {}),
-    };
-
-    const [totalCount, workoutLogs] = await Promise.all([
-      prisma.workoutLog.count({ where }),
-      prisma.workoutLog.findMany({
-        where,
-        orderBy: { date: "desc" },
-        take: limit,
-        select: {
-          id: true,
-          clientId: true,
-          dayId: true,
-          date: true,
-          notes: true,
-          completedAt: true,
-          durationSeconds: true,
-          createdAt: true,
-          day: {
-            select: {
-              id: true,
-              name: true,
-              plan: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
-            },
-          },
-          exerciseLogs: {
-            select: {
-              id: true,
-              setsDone: true,
-              actualWeight: true,
-              actualReps: true,
-              completed: true,
-              exercise: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
-            },
-          },
-        },
-      }),
-    ]);
-
-    return res.json({ totalCount, workoutLogs });
-  } catch (error) {
-        return unexpectedErrorResponse(res, "clients:workout-logs:list", error);
-  }
-});
-
-clientsRouter.get("/messages/clients", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
-    return res.status(403).json({ message: "Forbidden" });
-  }
-
-  try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
-
-    const clients = await prisma.clientProfile.findMany({
-      where: { trainerId: trainerProfile.id },
-      orderBy: { fullName: "asc" },
-      select: {
-        id: true,
-        trainerId: true,
-        userId: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        notes: true,
-        createdAt: true,
-      },
-    });
-
-    const clientUserIds = clients.map((client) => client.userId).filter(Boolean) as string[];
-    const unreadBySenderId = new Map<string, number>();
-
-    if (clientUserIds.length > 0) {
-      const unreadMessages = await prisma.message.findMany({
-        where: {
-          senderId: { in: clientUserIds },
-          receiverId: req.user.userId,
-          readAt: null,
-        },
-        select: { senderId: true },
-      });
-
-      for (const message of unreadMessages) {
-        unreadBySenderId.set(message.senderId, (unreadBySenderId.get(message.senderId) ?? 0) + 1);
-      }
-    }
-
-    return res.json({
-      trainerUserId: req.user.userId,
-      clients: clients.map((client) => ({
-        id: client.id,
-        trainerId: client.trainerId,
-        userId: client.userId,
-        fullName: client.fullName,
-        email: client.email,
-        phone: client.phone,
-        notes: client.notes,
-        createdAt: client.createdAt,
-        unreadCount: client.userId ? unreadBySenderId.get(client.userId) ?? 0 : 0,
-        messagingEnabled: client.userId !== null,
-      })),
-    });
-  } catch (error) {
-        return unexpectedErrorResponse(res, "clients:messages:clients", error);
   }
 });
 

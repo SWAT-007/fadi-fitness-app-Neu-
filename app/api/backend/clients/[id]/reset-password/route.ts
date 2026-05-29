@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createProxyErrorId, parseBackendJsonResponse } from '@/app/api/backend/_lib/proxy'
 
 const BACKEND_TOKEN_COOKIE = 'backend_token'
 const BACKEND_API_URL = process.env.BACKEND_API_URL ?? 'http://localhost:4000'
@@ -29,7 +30,8 @@ export async function POST(
   }
 
   try {
-    const backendResponse = await fetch(`${BACKEND_API_URL}/api/v1/clients/${id}/reset-password`, {
+    const backendPath = `/api/v1/clients/${id}/reset-password`
+    const backendResponse = await fetch(`${BACKEND_API_URL}${backendPath}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -39,12 +41,19 @@ export async function POST(
       cache: 'no-store',
     })
 
-    const payload = await backendResponse.json().catch(() => null)
+    const payload = await parseBackendJsonResponse(backendResponse, { method: 'POST', path: backendPath })
+
     return NextResponse.json(
-      payload ?? { ok: false, message: 'Invalid backend response' },
+      payload,
       { status: backendResponse.status },
     )
-  } catch {
-    return NextResponse.json({ ok: false, message: 'Backend unavailable' }, { status: 502 })
+  } catch (error) {
+    const errorId = createProxyErrorId()
+    console.error('[bridge:clients:reset-password]', {
+      errorId,
+      path: `/api/v1/clients/${id}/reset-password`,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return NextResponse.json({ ok: false, message: 'Backend unavailable', errorId }, { status: 502 })
   }
 }
