@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { FOOD_CATEGORY_LABEL, type Food, type FoodCategory } from '@/lib/types'
+import { FOOD_CATEGORY_LABEL, type FoodCategory } from '@/lib/types'
 
 const CATEGORIES: FoodCategory[] = ['protein', 'carbs', 'fat', 'vegetable', 'fruit', 'dairy', 'other']
 
@@ -16,15 +16,6 @@ const CAT_COLOR: Record<FoodCategory, string> = {
   other: 'bg-gray-100 text-gray-600',
 }
 
-type FoodForm = {
-  name: string
-  category: FoodCategory
-  kcal: string
-  protein: string
-  carbs: string
-  fat: string
-}
-
 type BackendFood = {
   id: string
   name: string
@@ -33,8 +24,26 @@ type BackendFood = {
   carbsPer100g: number | null
   fatPer100g: number | null
   unit: string | null
+  category: string | null
+  brand: string | null
+  barcode: string | null
+  defaultServingG: number | null
+  source: string | null
   createdAt: string
   updatedAt: string
+}
+
+type FoodForm = {
+  name: string
+  category: FoodCategory
+  kcal: string
+  protein: string
+  carbs: string
+  fat: string
+  brand: string
+  barcode: string
+  defaultServingG: string
+  source: string
 }
 
 const emptyForm = (): FoodForm => ({
@@ -44,36 +53,33 @@ const emptyForm = (): FoodForm => ({
   protein: '0',
   carbs: '0',
   fat: '0',
-})
-
-const mapBackendFoodToUiFood = (food: BackendFood): Food => ({
-  id: food.id,
-  name: food.name,
-  category: 'other',
-  kcal_per_100g: Number(food.caloriesPer100g ?? 0),
-  protein_per_100g: Number(food.proteinPer100g ?? 0),
-  carbs_per_100g: Number(food.carbsPer100g ?? 0),
-  fat_per_100g: Number(food.fatPer100g ?? 0),
-  created_by: 'backend',
-  created_at: food.createdAt,
+  brand: '',
+  barcode: '',
+  defaultServingG: '',
+  source: '',
 })
 
 const mapFormToBackendPayload = (form: FoodForm) => ({
   name: form.name.trim(),
+  category: form.category,
   caloriesPer100g: Number(form.kcal) || 0,
   proteinPer100g: Number(form.protein) || 0,
   carbsPer100g: Number(form.carbs) || 0,
   fatPer100g: Number(form.fat) || 0,
   unit: null as string | null,
+  brand: form.brand.trim() || null,
+  barcode: form.barcode.trim() || null,
+  defaultServingG: form.defaultServingG.trim() ? Number(form.defaultServingG) || null : null,
+  source: form.source.trim() || null,
 })
 
 export default function FoodsDatabasePage() {
-  const [foods, setFoods] = useState<Food[]>([])
+  const [foods, setFoods] = useState<BackendFood[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState<FoodCategory | 'all'>('all')
   const [showForm, setShowForm] = useState(false)
-  const [editFood, setEditFood] = useState<Food | null>(null)
+  const [editFood, setEditFood] = useState<BackendFood | null>(null)
   const [form, setForm] = useState<FoodForm>(emptyForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -89,8 +95,7 @@ export default function FoodsDatabasePage() {
         setLoading(false)
         return
       }
-      const backendFoods = Array.isArray(payload?.foods) ? (payload.foods as BackendFood[]) : []
-      setFoods(backendFoods.map(mapBackendFoodToUiFood))
+      setFoods(Array.isArray(payload?.foods) ? (payload.foods as BackendFood[]) : [])
       setError(null)
       setLoading(false)
     } catch {
@@ -117,15 +122,21 @@ export default function FoodsDatabasePage() {
     setShowForm(true)
   }
 
-  const openEdit = (food: Food) => {
+  const openEdit = (food: BackendFood) => {
     setEditFood(food)
     setForm({
       name: food.name,
-      category: food.category,
-      kcal: String(food.kcal_per_100g),
-      protein: String(food.protein_per_100g),
-      carbs: String(food.carbs_per_100g),
-      fat: String(food.fat_per_100g),
+      category: (food.category && CATEGORIES.includes(food.category as FoodCategory)
+        ? food.category
+        : 'other') as FoodCategory,
+      kcal: String(food.caloriesPer100g ?? 0),
+      protein: String(food.proteinPer100g ?? 0),
+      carbs: String(food.carbsPer100g ?? 0),
+      fat: String(food.fatPer100g ?? 0),
+      brand: food.brand ?? '',
+      barcode: food.barcode ?? '',
+      defaultServingG: food.defaultServingG != null ? String(food.defaultServingG) : '',
+      source: food.source ?? '',
     })
     setError(null)
     setShowForm(true)
@@ -178,7 +189,7 @@ export default function FoodsDatabasePage() {
     }
   }
 
-  const handleDelete = async (food: Food) => {
+  const handleDelete = async (food: BackendFood) => {
     if (!confirm(`"${food.name}" wirklich loeschen?`)) return
 
     try {
@@ -228,7 +239,9 @@ export default function FoodsDatabasePage() {
 
       {showForm && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-5">
-          <h2 className="font-semibold text-gray-900 mb-4">{editFood ? `"${editFood.name}" bearbeiten` : 'Neues Lebensmittel'}</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">
+            {editFood ? `"${editFood.name}" bearbeiten` : 'Neues Lebensmittel'}
+          </h2>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
@@ -295,7 +308,52 @@ export default function FoodsDatabasePage() {
               )}
             </div>
 
-            {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">⚠ {error}</p>}
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Marke</label>
+                <input
+                  value={form.brand}
+                  onChange={(e) => setForm((p) => ({ ...p, brand: e.target.value }))}
+                  placeholder="z.B. Rewe, Lidl"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Barcode (EAN)</label>
+                <input
+                  value={form.barcode}
+                  onChange={(e) => setForm((p) => ({ ...p, barcode: e.target.value }))}
+                  placeholder="z.B. 4001234567890"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Portionsgroesse (g)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={form.defaultServingG}
+                  onChange={(e) => setForm((p) => ({ ...p, defaultServingG: e.target.value }))}
+                  placeholder="z.B. 100"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Quelle</label>
+                <input
+                  value={form.source}
+                  onChange={(e) => setForm((p) => ({ ...p, source: e.target.value }))}
+                  placeholder="z.B. USDA, Hersteller"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">&#9888; {error}</p>}
 
             <div className="flex gap-3">
               <button
@@ -353,36 +411,54 @@ export default function FoodsDatabasePage() {
           <div className="py-12 text-center text-gray-400 text-sm">Keine Lebensmittel gefunden.</div>
         ) : (
           <ul className="divide-y divide-gray-50">
-            {filtered.map((food) => (
-              <li key={food.id} className="grid grid-cols-[1fr_auto_5rem_4rem_4rem_4rem_5rem] gap-2 items-center px-5 py-3 hover:bg-gray-50 text-sm">
-                <span className="font-medium text-gray-900">{food.name}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CAT_COLOR[food.category]}`}>
-                  {FOOD_CATEGORY_LABEL[food.category]}
-                </span>
-                <span className="text-right text-orange-600 font-medium">{food.kcal_per_100g}</span>
-                <span className="text-right text-blue-600">{food.protein_per_100g}g</span>
-                <span className="text-right text-green-600">{food.carbs_per_100g}g</span>
-                <span className="text-right text-yellow-600">{food.fat_per_100g}g</span>
-                <div className="flex gap-1 justify-end">
-                  <button
-                    onClick={() => openEdit(food)}
-                    className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    Bearbeiten
-                  </button>
-                  <button
-                    onClick={() => handleDelete(food)}
-                    className="px-2 py-1 text-xs text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    Loeschen
-                  </button>
-                </div>
-              </li>
-            ))}
+            {filtered.map((food) => {
+              const catKey = (food.category && CATEGORIES.includes(food.category as FoodCategory)
+                ? food.category
+                : 'other') as FoodCategory
+              const meta = [
+                food.brand,
+                food.barcode,
+                food.defaultServingG != null ? `${food.defaultServingG}g` : null,
+                food.source,
+              ]
+                .filter(Boolean)
+                .join(' · ')
+              return (
+                <li
+                  key={food.id}
+                  className="grid grid-cols-[1fr_auto_5rem_4rem_4rem_4rem_5rem] gap-2 items-center px-5 py-3 hover:bg-gray-50 text-sm"
+                >
+                  <div>
+                    <p className="font-medium text-gray-900">{food.name}</p>
+                    {meta && <p className="text-xs text-gray-400 mt-0.5">{meta}</p>}
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CAT_COLOR[catKey]}`}>
+                    {FOOD_CATEGORY_LABEL[catKey]}
+                  </span>
+                  <span className="text-right text-orange-600 font-medium">{food.caloriesPer100g ?? '–'}</span>
+                  <span className="text-right text-blue-600">{food.proteinPer100g ?? '–'}g</span>
+                  <span className="text-right text-green-600">{food.carbsPer100g ?? '–'}g</span>
+                  <span className="text-right text-yellow-600">{food.fatPer100g ?? '–'}g</span>
+                  <div className="flex gap-1 justify-end">
+                    <button
+                      onClick={() => openEdit(food)}
+                      className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      Bearbeiten
+                    </button>
+                    <button
+                      onClick={() => handleDelete(food)}
+                      className="px-2 py-1 text-xs text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      Loeschen
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>
     </div>
   )
 }
-

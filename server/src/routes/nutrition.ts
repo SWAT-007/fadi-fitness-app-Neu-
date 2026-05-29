@@ -81,6 +81,11 @@ nutritionRouter.get("/foods", requireAuth, async (req: AuthenticatedRequest, res
         carbsPer100g: true,
         fatPer100g: true,
         unit: true,
+        category: true,
+        brand: true,
+        barcode: true,
+        defaultServingG: true,
+        source: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -108,6 +113,11 @@ nutritionRouter.post("/foods", requireAuth, async (req: AuthenticatedRequest, re
   const carbsPer100g = normalizeOptionalNumber(req.body?.carbsPer100g);
   const fatPer100g = normalizeOptionalNumber(req.body?.fatPer100g);
   const unit = normalizeOptionalString(req.body?.unit);
+  const category = normalizeOptionalString(req.body?.category);
+  const brand = normalizeOptionalString(req.body?.brand);
+  const barcode = normalizeOptionalString(req.body?.barcode);
+  const source = normalizeOptionalString(req.body?.source);
+  const defaultServingG = normalizeOptionalNumber(req.body?.defaultServingG);
 
   const hasInvalidMacro =
     !(
@@ -135,7 +145,14 @@ nutritionRouter.post("/foods", requireAuth, async (req: AuthenticatedRequest, re
       (typeof req.body?.fatPer100g === "number" && Number.isFinite(req.body.fatPer100g))
     );
 
-  if (hasInvalidMacro) {
+  const hasInvalidServing = !(
+    req.body?.defaultServingG === undefined ||
+    req.body?.defaultServingG === null ||
+    req.body?.defaultServingG === "" ||
+    (typeof req.body?.defaultServingG === "number" && Number.isFinite(req.body.defaultServingG))
+  );
+
+  if (hasInvalidMacro || hasInvalidServing) {
     return res.status(400).json({ message: "Invalid request" });
   }
 
@@ -158,6 +175,11 @@ nutritionRouter.post("/foods", requireAuth, async (req: AuthenticatedRequest, re
         carbsPer100g,
         fatPer100g,
         unit,
+        category,
+        brand,
+        barcode,
+        defaultServingG,
+        source,
       },
       select: {
         id: true,
@@ -167,6 +189,11 @@ nutritionRouter.post("/foods", requireAuth, async (req: AuthenticatedRequest, re
         carbsPer100g: true,
         fatPer100g: true,
         unit: true,
+        category: true,
+        brand: true,
+        barcode: true,
+        defaultServingG: true,
+        source: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -174,6 +201,9 @@ nutritionRouter.post("/foods", requireAuth, async (req: AuthenticatedRequest, re
 
     return res.status(201).json({ food });
   } catch (error) {
+    if ((error as { code?: string }).code === "P2002") {
+      return res.status(409).json({ message: "Barcode bereits vergeben" });
+    }
     console.error("[nutrition:foods:create] error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
@@ -197,6 +227,11 @@ nutritionRouter.patch("/foods/:id", requireAuth, async (req: AuthenticatedReques
     carbsPer100g?: number | null;
     fatPer100g?: number | null;
     unit?: string | null;
+    category?: string | null;
+    brand?: string | null;
+    barcode?: string | null;
+    defaultServingG?: number | null;
+    source?: string | null;
   } = {};
 
   if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "name")) {
@@ -233,6 +268,32 @@ nutritionRouter.patch("/foods/:id", requireAuth, async (req: AuthenticatedReques
     data.unit = normalizeOptionalString(unitValue);
   }
 
+  const stringOptFields = ["category", "brand", "barcode", "source"] as const;
+  for (const field of stringOptFields) {
+    if (Object.prototype.hasOwnProperty.call(req.body ?? {}, field)) {
+      const value = req.body?.[field];
+      if (!(value === null || value === undefined || typeof value === "string")) {
+        return res.status(400).json({ message: "Invalid request" });
+      }
+      data[field] = normalizeOptionalString(value);
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "defaultServingG")) {
+    const value = req.body?.defaultServingG;
+    if (
+      !(
+        value === null ||
+        value === undefined ||
+        value === "" ||
+        (typeof value === "number" && Number.isFinite(value))
+      )
+    ) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.defaultServingG = normalizeOptionalNumber(value);
+  }
+
   try {
     const trainerProfile = await prisma.trainerProfile.findUnique({
       where: { userId: req.user.userId },
@@ -266,6 +327,11 @@ nutritionRouter.patch("/foods/:id", requireAuth, async (req: AuthenticatedReques
         carbsPer100g: true,
         fatPer100g: true,
         unit: true,
+        category: true,
+        brand: true,
+        barcode: true,
+        defaultServingG: true,
+        source: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -273,6 +339,9 @@ nutritionRouter.patch("/foods/:id", requireAuth, async (req: AuthenticatedReques
 
     return res.json({ food });
   } catch (error) {
+    if ((error as { code?: string }).code === "P2002") {
+      return res.status(409).json({ message: "Barcode bereits vergeben" });
+    }
     console.error("[nutrition:foods:update] error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
