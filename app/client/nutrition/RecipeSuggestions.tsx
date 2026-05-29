@@ -10,6 +10,15 @@ interface Recipe {
   description: string | null
   instructions: string | null
   imageUrl: string | null
+  ingredients: unknown
+  servings: number | null
+  totalCalories: number | null
+  proteinG: number | null
+  carbsG: number | null
+  fatG: number | null
+  category: string | null
+  prepTimeMinutes: number | null
+  cookTimeMinutes: number | null
   createdAt: string
   updatedAt: string
 }
@@ -17,6 +26,23 @@ interface Recipe {
 interface Props {
   /** Client's daily calorie target from the assigned nutrition plan */
   targetCalories: number | null
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function parseIngredients(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const result: string[] = []
+  for (const item of raw) {
+    if (typeof item === 'string') {
+      const s = item.trim()
+      if (s) result.push(s)
+    } else if (item && typeof item === 'object' && 'name' in item) {
+      const n = (item as { name: unknown }).name
+      if (typeof n === 'string' && n.trim()) result.push(n.trim())
+    }
+  }
+  return result
 }
 
 // ─── Collapsible (local copy — identical to the one in page.tsx) ─────────────
@@ -105,13 +131,13 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
         className="w-full text-left flex items-center justify-between gap-2 px-5 py-4 hover:bg-gray-50/60 transition-colors"
       >
         <div>
-          <h2 className="font-bold text-gray-900">Rezeptvorschläge</h2>
+          <h2 className="font-bold text-gray-900">Rezeptvorschl&#228;ge</h2>
           {targetCalories ? (
             <p className="text-xs text-gray-400 mt-0.5">
-              Tägliches Kalorienziel: {targetCalories} kcal · {recipes.length} Rezepte
+              T&#228;gliches Kalorienziel: {targetCalories} kcal · {recipes.length} Rezepte
             </p>
           ) : (
-            <p className="text-xs text-gray-400 mt-0.5">{recipes.length} Rezepte verfügbar</p>
+            <p className="text-xs text-gray-400 mt-0.5">{recipes.length} Rezepte verf&#252;gbar</p>
           )}
         </div>
         <svg
@@ -130,7 +156,7 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Rezept suchen…"
+            placeholder="Rezept suchen&#8230;"
             className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
           />
 
@@ -141,6 +167,9 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
             <div className="space-y-3">
               {filtered.map(r => {
                 const isOpen = openIds.has(r.id)
+                const ingredients = parseIngredients(r.ingredients)
+                const hasMacros = r.totalCalories != null || r.proteinG != null || r.carbsG != null || r.fatG != null
+                const hasDetails = hasMacros || ingredients.length > 0 || !!r.instructions || r.prepTimeMinutes != null || r.cookTimeMinutes != null
 
                 return (
                   <div
@@ -152,10 +181,27 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
                       onClick={() => toggle(r.id)}
                       className="w-full text-left flex items-start justify-between gap-3 px-5 py-3 hover:bg-gray-50/60 transition-colors"
                     >
-                      <div className="min-w-0">
-                        <p className="font-semibold text-gray-900 text-sm leading-snug">{r.name}</p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm leading-snug truncate">{r.name}</p>
+                          {r.category && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full flex-shrink-0 font-medium">
+                              {r.category}
+                            </span>
+                          )}
+                        </div>
                         {r.description && (
                           <p className="text-xs text-gray-500 mt-0.5 truncate">{r.description}</p>
+                        )}
+                        {hasMacros && (
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            {[
+                              r.totalCalories != null ? `${Math.round(r.totalCalories)} kcal` : null,
+                              r.proteinG != null ? `${Math.round(r.proteinG)}P` : null,
+                              r.carbsG != null ? `${Math.round(r.carbsG)}K` : null,
+                              r.fatG != null ? `${Math.round(r.fatG)}F` : null,
+                            ].filter(Boolean).join(' · ')}
+                          </p>
                         )}
                       </div>
                       <svg
@@ -168,12 +214,77 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
 
                     {/* Collapsible body */}
                     <Collapsible open={isOpen}>
-                      <div className="border-t border-gray-100 px-5 py-4 text-sm">
-                        {r.instructions ? (
-                          <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">{r.instructions}</p>
-                        ) : (
-                          <p className="text-gray-400 text-xs">Keine Zubereitung hinterlegt.</p>
+                      <div className="border-t border-gray-100 px-5 py-4 space-y-3 text-sm">
+
+                        {/* Macro chips */}
+                        {hasMacros && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {r.totalCalories != null && (
+                              <span className="text-[11px] px-2 py-0.5 bg-orange-50 text-orange-700 rounded-full font-medium">
+                                {Math.round(r.totalCalories)} kcal
+                              </span>
+                            )}
+                            {r.proteinG != null && (
+                              <span className="text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full">
+                                P {Math.round(r.proteinG)}g
+                              </span>
+                            )}
+                            {r.carbsG != null && (
+                              <span className="text-[11px] px-2 py-0.5 bg-green-50 text-green-700 rounded-full">
+                                K {Math.round(r.carbsG)}g
+                              </span>
+                            )}
+                            {r.fatG != null && (
+                              <span className="text-[11px] px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full">
+                                F {Math.round(r.fatG)}g
+                              </span>
+                            )}
+                            {r.servings != null && (
+                              <span className="text-[11px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+                                {r.servings} {r.servings === 1 ? 'Portion' : 'Portionen'}
+                              </span>
+                            )}
+                          </div>
                         )}
+
+                        {/* Prep / cook time */}
+                        {(r.prepTimeMinutes != null || r.cookTimeMinutes != null) && (
+                          <p className="text-[11px] text-gray-400">
+                            {[
+                              r.prepTimeMinutes != null ? `${r.prepTimeMinutes} Min. Vorbereitung` : null,
+                              r.cookTimeMinutes != null ? `${r.cookTimeMinutes} Min. Kochen` : null,
+                            ].filter(Boolean).join(' + ')}
+                          </p>
+                        )}
+
+                        {/* Ingredients */}
+                        {ingredients.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-700 mb-1.5">Zutaten</p>
+                            <ul className="space-y-0.5">
+                              {ingredients.map((ing, idx) => (
+                                <li key={idx} className="flex items-start gap-1.5 text-xs text-gray-600">
+                                  <span className="text-green-400 flex-shrink-0 mt-0.5">&#183;</span>
+                                  <span>{ing}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Instructions */}
+                        {r.instructions && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-700 mb-1.5">Zubereitung</p>
+                            <p className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{r.instructions}</p>
+                          </div>
+                        )}
+
+                        {/* Fallback */}
+                        {!hasDetails && (
+                          <p className="text-gray-400 text-xs">Keine Details hinterlegt.</p>
+                        )}
+
                       </div>
                     </Collapsible>
                   </div>
