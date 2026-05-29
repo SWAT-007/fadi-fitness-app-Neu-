@@ -74,6 +74,15 @@ function mapProgressLog(p: BackendProgressLog): ProgressLog {
 import Lightbox from '@/components/Lightbox'
 import { useToast } from '@/components/Motion'
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000'
+
+function resolveCheckinImageUrl(storagePath: string): string | null {
+  if (!storagePath) return null
+  if (storagePath.startsWith('http')) return storagePath
+  if (storagePath.startsWith('/uploads')) return `${BACKEND_URL}${storagePath}`
+  return null
+}
+
 type Tab = 'overview' | 'plans' | 'history' | 'progress' | 'analyse' | 'checkins'
 
 type ExerciseLogDetail = {
@@ -296,7 +305,6 @@ export default function ClientDetailPage() {
   const [historyLogs, setHistoryLogs] = useState<WorkoutLogDetail[]>([])
   const [progressLogs, setProgressLogs] = useState<ProgressLog[]>([])
   const [checkins, setCheckins] = useState<WeeklyCheckin[]>([])
-  const [adminSignedUrlMap, setAdminSignedUrlMap] = useState<Record<string, string>>({})
   const [adminLightboxUrls, setAdminLightboxUrls] = useState<string[]>([])
   const [adminLightboxIdx, setAdminLightboxIdx] = useState(0)
   const [expandedLogIds, setExpandedLogIds] = useState<Set<string>>(new Set())
@@ -928,7 +936,7 @@ export default function ClientDetailPage() {
   ]
 
   const openAdminLightbox = (images: CheckinImage[], startIndex: number) => {
-    const urls = images.map(img => adminSignedUrlMap[img.storage_path]).filter(Boolean)
+    const urls = images.map(img => resolveCheckinImageUrl(img.storage_path)).filter((u): u is string => u !== null)
     if (!urls.length) return
     setAdminLightboxUrls(urls)
     setAdminLightboxIdx(startIndex)
@@ -1877,7 +1885,7 @@ export default function ClientDetailPage() {
                         </p>
                         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                           {ci.checkin_images!.map((img, imgIdx) => {
-                            const url = adminSignedUrlMap[img.storage_path]
+                            const url = resolveCheckinImageUrl(img.storage_path)
                             return url ? (
                               <button
                                 key={img.id}

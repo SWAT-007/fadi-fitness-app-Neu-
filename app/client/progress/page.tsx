@@ -138,6 +138,17 @@ function mapWorkoutLog(w: BackendWorkoutLog): WorkoutLogItem {
   }
 }
 
+// ─── Image URL resolution ─────────────────────────────────────────────────────
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000'
+
+function resolveCheckinImageUrl(storagePath: string): string | null {
+  if (!storagePath) return null
+  if (storagePath.startsWith('http')) return storagePath
+  if (storagePath.startsWith('/uploads')) return `${BACKEND_URL}${storagePath}`
+  return null
+}
+
 // ─── Pure helpers ────────────────────────────────────────────────────────────
 
 function getMonday(date: Date): string {
@@ -352,36 +363,33 @@ export default function ProgressPage() {
   const [ciPreviews, setCiPreviews] = useState<string[]>([])
   const [isDragging, setIsDragging] = useState(false)
 
-  // Signed URL cache: storage_path → signed URL
-  const [signedUrlMap, setSignedUrlMap] = useState<Record<string, string>>({})
-
   // Lightbox
   const [lightboxUrls, setLightboxUrls] = useState<string[]>([])
   const [lightboxIdx, setLightboxIdx] = useState(0)
 
   const load = useCallback(async () => {
     try {
-    const [summaryFetch, progressFetch, checkinsFetch] = await Promise.all([
-      fetch('/api/backend/me/progress-summary'),
-      fetch('/api/backend/me/progress-logs?limit=30'),
-      fetch('/api/backend/me/checkins'),
-    ])
+      const [summaryFetch, progressFetch, checkinsFetch] = await Promise.all([
+        fetch('/api/backend/me/progress-summary'),
+        fetch('/api/backend/me/progress-logs?limit=30'),
+        fetch('/api/backend/me/checkins'),
+      ])
 
-    const summaryData = summaryFetch.ok ? await summaryFetch.json().catch(() => null) : null
-    if (!summaryData?.client) { setLoading(false); return }
-    setClientId(summaryData.client.id)
-    setClientTrainerId(summaryData.client.trainerId ?? null)
-    setClientName(summaryData.client.fullName ?? '')
-    setTotalWorkouts(summaryData.workoutSummary?.completedWorkoutCount ?? 0)
-    setWorkoutLogs(((summaryData.workoutSummary?.recentWorkouts ?? []) as BackendWorkoutLog[]).map(mapWorkoutLog))
+      const summaryData = summaryFetch.ok ? await summaryFetch.json().catch(() => null) : null
+      if (!summaryData?.client) { setLoading(false); return }
+      setClientId(summaryData.client.id)
+      setClientTrainerId(summaryData.client.trainerId ?? null)
+      setClientName(summaryData.client.fullName ?? '')
+      setTotalWorkouts(summaryData.workoutSummary?.completedWorkoutCount ?? 0)
+      setWorkoutLogs(((summaryData.workoutSummary?.recentWorkouts ?? []) as BackendWorkoutLog[]).map(mapWorkoutLog))
 
-    const progressData = progressFetch.ok ? await progressFetch.json().catch(() => null) : null
-    setProgressLogs(((progressData?.progressLogs ?? []) as BackendProgressLog[]).map(mapProgressLog))
+      const progressData = progressFetch.ok ? await progressFetch.json().catch(() => null) : null
+      setProgressLogs(((progressData?.progressLogs ?? []) as BackendProgressLog[]).map(mapProgressLog))
 
-    const checkinsData = checkinsFetch.ok ? await checkinsFetch.json().catch(() => null) : null
-    setCheckins(((checkinsData?.checkins ?? []) as BackendCheckin[]).map(mapCheckin))
+      const checkinsData = checkinsFetch.ok ? await checkinsFetch.json().catch(() => null) : null
+      setCheckins(((checkinsData?.checkins ?? []) as BackendCheckin[]).map(mapCheckin))
 
-    setLoading(false)
+      setLoading(false)
     } catch (err) {
       console.error('[Progress] load failed:', err)
       setLoading(false)
@@ -486,8 +494,25 @@ export default function ProgressPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null)
-        setCheckinError(data?.message ?? 'Speichern fehlgeschlagen.')
+        setCheckinError((data as { message?: string } | null)?.message ?? 'Speichern fehlgeschlagen.')
         return
+      }
+
+      const responseData = await res.json().catch(() => null)
+      const savedCheckinId = (responseData as { checkin?: { id?: string } } | null)?.checkin?.id ?? null
+
+      if (savedCheckinId && ciFiles.length > 0) {
+        setUploadProgress('Bilder werden hochgeladen…')
+        const fd = new FormData()
+        ciFiles.forEach(f => fd.append('images', f))
+        const imgRes = await fetch(`/api/backend/me/checkins/${savedCheckinId}/images`, {
+          method: 'POST',
+          body: fd,
+        })
+        if (!imgRes.ok) {
+          const imgData = await imgRes.json().catch(() => null)
+          setCheckinError((imgData as { message?: string } | null)?.message ?? 'Bild-Upload fehlgeschlagen.')
+        }
       }
 
       setCiMood(0); setCiEnergy(0); setCiSleep(0)
@@ -511,7 +536,7 @@ export default function ProgressPage() {
   }
 
   const openLightbox = (images: CheckinImage[], startIndex: number) => {
-    const urls = images.map(img => signedUrlMap[img.storage_path]).filter(Boolean)
+    const urls = images.map(img => resolveCheckinImageUrl(img.storage_path)).filter((u): u is string => u !== null)
     if (!urls.length) return
     setLightboxUrls(urls)
     setLightboxIdx(startIndex)
@@ -827,11 +852,46 @@ export default function ProgressPage() {
                 />
               </div>
 
-              {/* ── Image Upload – deferred ── */}
-              <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-4 py-3">
-                <p className="text-xs text-gray-400">
-                  📷 Bild-Upload wird in einem späteren Migrationsschritt umgestellt.
-                </p>
+              {/* Image Upload */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Fotos (optional, max. 5)</label>
+                <div
+                  onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={e => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files) }}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl px-4 py-5 text-center cursor-pointer transition-colors ${
+                    isDragging ? 'border-emerald-400 bg-emerald-50' : 'border-gray-200 hover:border-emerald-300 bg-gray-50'
+                  }`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                    multiple
+                    className="hidden"
+                    onChange={e => handleFiles(e.target.files)}
+                  />
+                  <p className="text-sm text-gray-400">📷 Tippen oder ablegen</p>
+                  <p className="text-xs text-gray-300 mt-0.5">JPEG, PNG, WebP, HEIC · max. 10 MB</p>
+                </div>
+                {ciPreviews.length > 0 && (
+                  <div className="grid grid-cols-4 gap-2 mt-2">
+                    {ciPreviews.map((preview, idx) => (
+                      <div key={idx} className="relative aspect-square rounded-xl overflow-hidden ring-1 ring-gray-200">
+                        <img src={preview} alt="" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeNewFile(idx)}
+                          className="absolute top-1 right-1 bg-black/50 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs leading-none"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {uploadProgress && <p className="text-xs text-gray-400 mt-1">{uploadProgress}</p>}
               </div>
 
               {/* Inline error inside form */}
@@ -893,7 +953,7 @@ export default function ProgressPage() {
                     {(ci.checkin_images?.length ?? 0) > 0 && (
                       <div className="grid grid-cols-4 gap-1.5 mt-3">
                         {ci.checkin_images!.map((img, imgIdx) => {
-                          const url = signedUrlMap[img.storage_path]
+                          const url = resolveCheckinImageUrl(img.storage_path)
                           return url ? (
                             <button
                               key={img.id}
@@ -904,7 +964,7 @@ export default function ProgressPage() {
                               <Image src={url} alt="" fill className="object-cover" />
                             </button>
                           ) : (
-                            <div key={img.id} className="aspect-square rounded-xl bg-gray-100 animate-pulse" />
+                            <div key={img.id} className="aspect-square rounded-xl bg-gray-100" />
                           )
                         })}
                       </div>

@@ -1,5 +1,8 @@
-import { Router } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import { NotificationType } from "@prisma/client";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { prisma } from "../db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { unexpectedErrorResponse } from "../utils/errors";
@@ -2116,5 +2119,101 @@ meRouter.get("/progress-summary", requireAuth, async (req: AuthenticatedRequest,
         return unexpectedErrorResponse(res, "me:progress-summary", error);
   }
 });
+
+// ─── Check-in image upload ────────────────────────────────────────────────────
+
+const CHECKIN_UPLOADS_DIR = path.join(process.cwd(), "uploads", "checkins");
+const ALLOWED_IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
+
+const checkinImageStorage = multer.diskStorage({
+  destination: (req, _file, cb) => {
+    const checkinId = (req as unknown as { params: Record<string, string> }).params?.checkinId ?? "unknown";
+    const dir = path.join(CHECKIN_UPLOADS_DIR, checkinId);
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+  },
+});
+
+const checkinUpload = multer({
+  storage: checkinImageStorage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 5 },
+  fileFilter: (_req, file, cb) => {
+    ALLOWED_IMAGE_MIME.has(file.mimetype)
+      ? cb(null, true)
+      : cb(new Error("Ungültiger Dateityp"));
+  },
+});
+
+const checkinUploadMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  checkinUpload.array("images", 5)(req, res, (err: unknown) => {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ message: `Upload-Fehler: ${err.message}` });
+    }
+    if (err instanceof Error) {
+      return res.status(400).json({ message: err.message });
+    }
+    next();
+  });
+};
+
+meRouter.post(
+  "/checkins/:checkinId/images",
+  requireAuth,
+  checkinUploadMiddleware,
+  async (req: AuthenticatedRequest, res) => {
+    if (req.user?.role !== "client") {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const checkinId = String(req.params.checkinId ?? '');
+    const files = req.files as Express.Multer.File[] | undefined;
+
+    if (!checkinId) {
+      return res.status(400).json({ message: "Invalid checkinId" });
+    }
+    if (!files || files.length === 0) {
+      return res.status(400).json({ message: "Keine Dateien hochgeladen" });
+    }
+
+    const cleanup = () => {
+      for (const f of files) {
+        try { fs.unlinkSync(f.path); } catch { /* ignore */ }
+      }
+    };
+
+    try {
+      const clientProfile = await prisma.clientProfile.findUnique({
+        where: { userId: req.user!.userId },
+        select: { id: true },
+      });
+      if (!clientProfile) { cleanup(); return res.status(404).json({ message: "Not found" }); }
+
+      const checkin = await prisma.weeklyCheckin.findFirst({
+        where: { id: checkinId, clientId: clientProfile.id },
+        select: { id: true },
+      });
+      if (!checkin) { cleanup(); return res.status(404).json({ message: "Check-in nicht gefunden" }); }
+
+      const images = await Promise.all(
+        files.map(f => {
+          const storagePath = `/uploads/checkins/${checkinId}/${f.filename}`;
+          return prisma.checkinImage.create({
+            data: { checkinId: checkin.id, storagePath },
+            select: { id: true, checkinId: true, storagePath: true, createdAt: true },
+          });
+        })
+      );
+
+      return res.status(201).json({ images });
+    } catch (error) {
+      cleanup();
+      return unexpectedErrorResponse(res, "me:checkins:images:create", error);
+    }
+  }
+);
 
 export { meRouter };
