@@ -985,6 +985,16 @@ const recipeSelect = {
   description: true,
   instructions: true,
   imageUrl: true,
+  ingredients: true,
+  servings: true,
+  totalCalories: true,
+  proteinG: true,
+  carbsG: true,
+  fatG: true,
+  sourcePdf: true,
+  category: true,
+  prepTimeMinutes: true,
+  cookTimeMinutes: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -1028,6 +1038,142 @@ nutritionRouter.get("/recipes", requireAuth, async (req: AuthenticatedRequest, r
     return res.json({ recipes });
   } catch (error) {
     console.error("[nutrition:recipes:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+nutritionRouter.post("/recipes", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const {
+      name,
+      description,
+      instructions,
+      imageUrl,
+      ingredients,
+      servings,
+      totalCalories,
+      proteinG,
+      carbsG,
+      fatG,
+      sourcePdf,
+      category,
+      prepTimeMinutes,
+      cookTimeMinutes,
+    } = req.body as Record<string, unknown>;
+
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ message: "name is required" });
+    }
+
+    const recipe = await prisma.recipe.create({
+      data: {
+        trainerId: trainerProfile.id,
+        name: name.trim(),
+        description: typeof description === "string" ? description : null,
+        instructions: typeof instructions === "string" ? instructions : null,
+        imageUrl: typeof imageUrl === "string" ? imageUrl : null,
+        ingredients: ingredients !== undefined ? (ingredients as object) : undefined,
+        servings: typeof servings === "number" && Number.isFinite(servings) ? Math.round(servings) : null,
+        totalCalories: typeof totalCalories === "number" && Number.isFinite(totalCalories) ? totalCalories : null,
+        proteinG: typeof proteinG === "number" && Number.isFinite(proteinG) ? proteinG : null,
+        carbsG: typeof carbsG === "number" && Number.isFinite(carbsG) ? carbsG : null,
+        fatG: typeof fatG === "number" && Number.isFinite(fatG) ? fatG : null,
+        sourcePdf: typeof sourcePdf === "string" ? sourcePdf : null,
+        category: typeof category === "string" ? category.trim() : null,
+        prepTimeMinutes: typeof prepTimeMinutes === "number" && Number.isFinite(prepTimeMinutes) ? Math.round(prepTimeMinutes) : null,
+        cookTimeMinutes: typeof cookTimeMinutes === "number" && Number.isFinite(cookTimeMinutes) ? Math.round(cookTimeMinutes) : null,
+      },
+      select: recipeSelect,
+    });
+
+    return res.status(201).json({ recipe });
+  } catch (error) {
+    console.error("[nutrition:recipes:create] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+nutritionRouter.patch("/recipes/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const idParam = req.params.id;
+  const recipeId = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!recipeId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const existing = await prisma.recipe.findFirst({
+      where: { id: recipeId, trainerId: trainerProfile.id },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ message: "Not found" });
+
+    const {
+      name,
+      description,
+      instructions,
+      imageUrl,
+      ingredients,
+      servings,
+      totalCalories,
+      proteinG,
+      carbsG,
+      fatG,
+      sourcePdf,
+      category,
+      prepTimeMinutes,
+      cookTimeMinutes,
+    } = req.body as Record<string, unknown>;
+
+    const data: Record<string, unknown> = {};
+    if (name !== undefined) {
+      if (typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ message: "name must be a non-empty string" });
+      }
+      data.name = name.trim();
+    }
+    if (description !== undefined) data.description = typeof description === "string" ? description : null;
+    if (instructions !== undefined) data.instructions = typeof instructions === "string" ? instructions : null;
+    if (imageUrl !== undefined) data.imageUrl = typeof imageUrl === "string" ? imageUrl : null;
+    if (ingredients !== undefined) data.ingredients = ingredients as object;
+    if (servings !== undefined) data.servings = typeof servings === "number" && Number.isFinite(servings) ? Math.round(servings) : null;
+    if (totalCalories !== undefined) data.totalCalories = typeof totalCalories === "number" && Number.isFinite(totalCalories) ? totalCalories : null;
+    if (proteinG !== undefined) data.proteinG = typeof proteinG === "number" && Number.isFinite(proteinG) ? proteinG : null;
+    if (carbsG !== undefined) data.carbsG = typeof carbsG === "number" && Number.isFinite(carbsG) ? carbsG : null;
+    if (fatG !== undefined) data.fatG = typeof fatG === "number" && Number.isFinite(fatG) ? fatG : null;
+    if (sourcePdf !== undefined) data.sourcePdf = typeof sourcePdf === "string" ? sourcePdf : null;
+    if (category !== undefined) data.category = typeof category === "string" ? category.trim() : null;
+    if (prepTimeMinutes !== undefined) data.prepTimeMinutes = typeof prepTimeMinutes === "number" && Number.isFinite(prepTimeMinutes) ? Math.round(prepTimeMinutes) : null;
+    if (cookTimeMinutes !== undefined) data.cookTimeMinutes = typeof cookTimeMinutes === "number" && Number.isFinite(cookTimeMinutes) ? Math.round(cookTimeMinutes) : null;
+
+    const recipe = await prisma.recipe.update({
+      where: { id: existing.id },
+      data,
+      select: recipeSelect,
+    });
+
+    return res.json({ recipe });
+  } catch (error) {
+    console.error("[nutrition:recipes:update] error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 });
