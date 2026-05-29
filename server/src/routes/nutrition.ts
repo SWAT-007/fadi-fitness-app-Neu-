@@ -1,6 +1,8 @@
+import path from "path";
 import { Router } from "express";
 import { prisma } from "../db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
+import { parseAllPdfsInDir, type ParsedRecipe } from "../../../lib/recipeParser";
 
 const nutritionRouter = Router();
 
@@ -998,6 +1000,76 @@ const recipeSelect = {
   createdAt: true,
   updatedAt: true,
 } as const;
+
+nutritionRouter.post("/recipes/import-pdfs", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+
+    const pdfsDir = path.join(process.cwd(), "public", "pdfs");
+
+    let parsedRecipes: ParsedRecipe[];
+    try {
+      parsedRecipes = await parseAllPdfsInDir(pdfsDir);
+    } catch (parseErr) {
+      console.error("[nutrition:recipes:import-pdfs] parse error:", parseErr);
+      return res.status(500).json({ message: "PDF-Parsing fehlgeschlagen" });
+    }
+
+    let imported = 0;
+    let updated = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const r of parsedRecipes) {
+      if (!r.name || r.name.trim().length < 2) { skipped++; continue; }
+
+      try {
+        const existing = await prisma.recipe.findFirst({
+          where: { trainerId: trainerProfile.id, sourcePdf: r.source_pdf, name: r.name },
+          select: { id: true },
+        });
+
+        // JSON.parse(JSON.stringify()) strips the typed array shape → assignable to Prisma Json
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const ingredientsJson = r.ingredients.length > 0 ? JSON.parse(JSON.stringify(r.ingredients)) : undefined;
+        const data = {
+          name: r.name,
+          instructions: r.instructions || null,
+          ingredients: ingredientsJson,
+          servings: r.servings,
+          totalCalories: r.total_calories,
+          proteinG: r.protein_g,
+          carbsG: r.carbs_g,
+          fatG: r.fat_g,
+          sourcePdf: r.source_pdf,
+        };
+
+        if (existing) {
+          await prisma.recipe.update({ where: { id: existing.id }, data });
+          updated++;
+        } else {
+          await prisma.recipe.create({ data: { ...data, trainerId: trainerProfile.id } });
+          imported++;
+        }
+      } catch (recipeErr) {
+        errors.push(`${r.name}: ${recipeErr instanceof Error ? recipeErr.message : String(recipeErr)}`);
+      }
+    }
+
+    return res.json({ imported, updated, skipped, totalParsed: parsedRecipes.length, errors });
+  } catch (error) {
+    console.error("[nutrition:recipes:import-pdfs] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
 
 nutritionRouter.get("/recipes", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (!req.user) return res.status(401).json({ message: "Unauthorized" });

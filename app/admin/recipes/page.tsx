@@ -2,6 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react'
 
+interface ImportResult {
+  imported: number
+  updated: number
+  skipped: number
+  totalParsed: number
+  errors: string[]
+}
+
 interface RecipeRow {
   id: string
   name: string
@@ -111,6 +119,9 @@ export default function RecipesPage() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
 
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<RecipeForm>(emptyForm)
@@ -202,6 +213,26 @@ export default function RecipesPage() {
     setSaving(false)
   }
 
+  const handleImport = async () => {
+    setImporting(true)
+    setImportResult(null)
+    const res = await fetch('/api/backend/nutrition/recipes/import-pdfs', { method: 'POST' })
+    const data = await res.json().catch(() => null)
+    if (res.ok && data) {
+      setImportResult(data as ImportResult)
+      await load()
+    } else {
+      setImportResult({
+        imported: 0,
+        updated: 0,
+        skipped: 0,
+        totalParsed: 0,
+        errors: [(data as { message?: string } | null)?.message ?? 'Importfehler'],
+      })
+    }
+    setImporting(false)
+  }
+
   const handleDelete = async (id: string) => {
     setDeleting(id)
     const res = await fetch(`/api/backend/nutrition/recipes/${id}`, { method: 'DELETE' })
@@ -229,19 +260,41 @@ export default function RecipesPage() {
             + Neues Rezept
           </button>
           <button
-            disabled
-            className="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-semibold rounded-xl cursor-not-allowed"
-            title="PDF-Import wird nach der Rezept-Schema-Migration wieder aktiviert."
+            onClick={handleImport}
+            disabled={importing}
+            className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition disabled:opacity-50"
           >
-            PDF-Import vorübergehend deaktiviert
+            {importing ? 'Importiere...' : 'PDF-Import'}
           </button>
         </div>
       </div>
 
-      {/* PDF import banner */}
-      <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-3 rounded-xl">
-        PDF-Import wird nach der Rezept-Schema-Migration wieder aktiviert.
-      </div>
+      {/* Import result */}
+      {importResult && (
+        <div
+          className={`border text-sm px-4 py-3 rounded-xl ${
+            importResult.errors.length > 0
+              ? 'bg-orange-50 border-orange-200 text-orange-800'
+              : 'bg-green-50 border-green-200 text-green-800'
+          }`}
+        >
+          <p className="font-semibold mb-0.5">Import abgeschlossen</p>
+          <p>
+            {importResult.totalParsed} geparst &middot; {importResult.imported} neu &middot;{' '}
+            {importResult.updated} aktualisiert &middot; {importResult.skipped} übersprungen
+          </p>
+          {importResult.errors.length > 0 && (
+            <ul className="mt-2 text-xs space-y-0.5 list-disc list-inside">
+              {importResult.errors.slice(0, 5).map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+              {importResult.errors.length > 5 && (
+                <li>…und {importResult.errors.length - 5} weitere Fehler</li>
+              )}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Search */}
       <input
