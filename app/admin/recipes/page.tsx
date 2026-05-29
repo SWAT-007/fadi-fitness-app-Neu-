@@ -130,7 +130,7 @@ export default function RecipesPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const res = await fetch('/api/backend/nutrition/recipes')
+    const res = await fetch('/api/backend/nutrition/recipes?limit=500')
     const data = res.ok ? await res.json().catch(() => null) : null
     setRecipes((data?.recipes ?? []) as RecipeRow[])
     setLoading(false)

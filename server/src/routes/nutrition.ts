@@ -1144,7 +1144,7 @@ nutritionRouter.get("/recipes", requireAuth, async (req: AuthenticatedRequest, r
   if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
   const limitRaw = parseInt(String(req.query.limit ?? "100"), 10);
-  const limit = Number.isFinite(limitRaw) ? Math.min(300, Math.max(1, limitRaw)) : 100;
+  const limit = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, limitRaw)) : 100;
   const search = typeof req.query.search === "string" ? req.query.search.trim() : null;
 
   try {

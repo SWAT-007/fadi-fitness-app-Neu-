@@ -94,7 +94,7 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
 
   useEffect(() => {
     const load = async () => {
-      const res = await fetch('/api/backend/nutrition/recipes')
+      const res = await fetch('/api/backend/nutrition/recipes?limit=500')
       const data = res.ok ? await res.json().catch(() => null) : null
       setRecipes((data?.recipes ?? []) as Recipe[])
       setLoading(false)
