@@ -194,6 +194,11 @@ model Food {
   carbsPer100g         Float?
   fatPer100g           Float?
   unit                 String?
+  category             String?
+  brand                String?
+  barcode              String?           @unique
+  defaultServingG      Float?
+  source               String?
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   legacySupabaseFoodId String?           @unique
@@ -201,6 +206,8 @@ model Food {
 
   @@index([trainerId])
   @@index([name])
+  @@index([category])
+  @@index([brand])
 }
 
 model Recipe {
@@ -211,12 +218,24 @@ model Recipe {
   description            String?
   instructions           String?
   imageUrl               String?
+  ingredients            Json?
+  servings               Int?
+  totalCalories          Float?
+  proteinG               Float?
+  carbsG                 Float?
+  fatG                   Float?
+  sourcePdf              String?
+  category               String?
+  prepTimeMinutes        Int?
+  cookTimeMinutes        Int?
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
   legacySupabaseRecipeId String?         @unique
 
   @@index([trainerId])
   @@index([name])
+  @@index([category])
+  @@index([sourcePdf])
 }
 
 model NutritionPlan {
