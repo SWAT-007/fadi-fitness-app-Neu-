@@ -28,13 +28,13 @@ const CAT_LABEL: Record<FoodCategory, string> = {
   vegetable: 'Gemüse', fruit: 'Obst', dairy: 'Milchprodukt', other: 'Sonstiges',
 }
 const CAT_BADGE: Record<FoodCategory, string> = {
-  protein:   'bg-blue-100 text-blue-700',
-  carbs:     'bg-orange-100 text-orange-700',
-  fat:       'bg-yellow-100 text-yellow-700',
-  vegetable: 'bg-green-100 text-green-700',
-  fruit:     'bg-pink-100 text-pink-700',
-  dairy:     'bg-purple-100 text-purple-700',
-  other:     'bg-gray-100 text-gray-600',
+  protein:   'bg-blue-500/10 text-blue-400',
+  carbs:     'bg-orange-500/10 text-orange-400',
+  fat:       'bg-yellow-500/10 text-yellow-400',
+  vegetable: 'bg-green-500/10 text-green-400',
+  fruit:     'bg-pink-500/10 text-pink-400',
+  dairy:     'bg-[#A78BFA]/10 text-[#A78BFA]',
+  other:     'bg-white/[0.04] text-[#797D83]',
 }
 
 function macroSum(meals: NutritionMeal[]) {
@@ -49,7 +49,7 @@ function macroSum(meals: NutritionMeal[]) {
 function MacroBar({ value, max, color }: { value: number; max: number; color: string }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0
   return (
-    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+    <div className="h-2 bg-white/[0.06] rounded-full overflow-hidden">
       <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
     </div>
   )
@@ -73,14 +73,14 @@ function MealEditor({
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+    <div className="bg-[#111318] rounded-2xl border border-white/[0.06] overflow-hidden">
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.06]">
         <input
           defaultValue={meal.name}
           onBlur={e => onChange({ name: e.target.value.trim() || meal.name })}
-          className="flex-1 font-semibold text-gray-900 bg-transparent border-0 focus:outline-none focus:ring-2 focus:ring-green-500 rounded-lg px-2 py-0.5 -ml-2"
+          className="flex-1 font-semibold text-white bg-transparent border-0 focus:outline-none focus:ring-2 focus:ring-[#A78BFA]/50 rounded-lg px-2 py-0.5 -ml-2"
         />
-        <button onClick={onDelete} className="text-red-400 hover:text-red-600 p-1 rounded-lg hover:bg-red-50">
+        <button onClick={onDelete} className="text-red-400 hover:text-red-300 p-1 rounded-lg hover:bg-red-500/10 transition-colors">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
@@ -91,14 +91,14 @@ function MealEditor({
         {/* Ziel-Makros — Trainer gibt P/K/F ein, kcal wird automatisch berechnet */}
         <div>
           <div className="flex items-baseline justify-between mb-2">
-            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Ziel-Makros für diese Mahlzeit</p>
-            <p className="text-[10px] text-gray-400">kcal = P×4 + K×4 + F×9 (automatisch)</p>
+            <p className="text-xs font-semibold text-[#797D83] uppercase tracking-wide">Ziel-Makros für diese Mahlzeit</p>
+            <p className="text-[10px] text-[#555A61]">kcal = P×4 + K×4 + F×9 (automatisch)</p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {/* Kcal — readonly, ergibt sich aus Makros */}
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Kalorien (kcal)</label>
-              <div className="w-full px-3 py-2 border border-gray-100 bg-gray-50 rounded-lg text-sm text-gray-700 font-semibold">
+              <label className="block text-xs text-[#797D83] mb-1">Kalorien (kcal)</label>
+              <div className="w-full px-3 py-2 border border-white/[0.06] bg-white/[0.02] rounded-lg text-sm text-[#EDECEA] font-semibold">
                 {Math.round(
                   (meal.target_protein ?? 0) * 4 +
                   (meal.target_carbs   ?? 0) * 4 +
@@ -114,7 +114,7 @@ function MealEditor({
               const grams = meal[f.key] ?? 0
               return (
                 <div key={f.key}>
-                  <label className="block text-xs text-gray-500 mb-1">{f.label}</label>
+                  <label className="block text-xs text-[#797D83] mb-1">{f.label}</label>
                   <input
                     type="number" min={0}
                     value={grams}
@@ -128,9 +128,9 @@ function MealEditor({
                       )
                       onChange({ [f.key]: v, target_kcal: kcal })
                     }}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-3 py-2 bg-[#0b0c0f] border border-white/[0.08] text-white rounded-lg text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent"
                   />
-                  <p className="text-[10px] text-gray-400 mt-1">{Math.round(grams * f.kcalPerG)} kcal</p>
+                  <p className="text-[10px] text-[#555A61] mt-1">{Math.round(grams * f.kcalPerG)} kcal</p>
                 </div>
               )
             })}
@@ -139,8 +139,8 @@ function MealEditor({
 
         {/* Erlaubte Kategorien */}
         <div>
-          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Erlaubte Lebensmittel-Kategorien</p>
-          <p className="text-xs text-gray-400 mb-2">Aus welchen Kategorien darf der Kunde für diese Mahlzeit Lebensmittel wählen?</p>
+          <p className="text-xs font-semibold text-[#797D83] uppercase tracking-wide mb-2">Erlaubte Lebensmittel-Kategorien</p>
+          <p className="text-xs text-[#555A61] mb-2">Aus welchen Kategorien darf der Kunde für diese Mahlzeit Lebensmittel wählen?</p>
           <div className="flex flex-wrap gap-2">
             {ALLOWED_CATEGORIES.map(cat => {
               const on = allowed.has(cat)
@@ -152,7 +152,7 @@ function MealEditor({
                   className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                     on
                       ? `${CAT_BADGE[cat]} border-transparent`
-                      : 'bg-white border-gray-200 text-gray-400 hover:text-gray-700'
+                      : 'bg-white/[0.03] border-white/[0.08] text-[#555A61] hover:text-[#797D83]'
                   }`}
                 >
                   {on ? '✓ ' : ''}{CAT_LABEL[cat]}
@@ -163,15 +163,15 @@ function MealEditor({
 
           {/* Gemüse-Gramm — nur wenn aktiviert */}
           {allowed.has('vegetable') && (
-            <div className="mt-3 flex items-center gap-3 bg-green-50/60 border border-green-100 rounded-lg px-3 py-2">
-              <label className="text-xs font-medium text-gray-700 flex-1">Gemüse-Menge für diese Mahlzeit (g)</label>
+            <div className="mt-3 flex items-center gap-3 bg-green-500/[0.06] border border-green-500/20 rounded-lg px-3 py-2">
+              <label className="text-xs font-medium text-[#797D83] flex-1">Gemüse-Menge für diese Mahlzeit (g)</label>
               <input
                 type="number" min={0}
                 value={meal.target_vegetable_g ?? 0}
                 onChange={e => onChange({ target_vegetable_g: Number(e.target.value) || 0 })}
-                className="w-24 px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-24 px-3 py-1.5 bg-[#0b0c0f] border border-white/[0.08] text-white rounded-lg text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent"
               />
-              <span className="text-xs text-gray-400">g</span>
+              <span className="text-xs text-[#555A61]">g</span>
             </div>
           )}
         </div>
@@ -435,10 +435,6 @@ export default function NutritionEditorPage() {
     }
   }
 
-  // Verteilt die noch offenen (oder über-verteilten) Makros gleichmäßig auf
-  // alle Mahlzeiten. „Rest" = Tages-Ziel − Summe der Mahlzeit-Ziele.
-  // mode = 'all' rührt P/K/F gemeinsam an. Per-Makro-Buttons rufen mit der
-  // jeweiligen Auswahl auf.
   // distributeRest writes to macro target fields not stored in backend — deferred.
   const distributeRest = async (
     targets: Array<'protein' | 'carbs' | 'fat'>,
@@ -565,47 +561,55 @@ export default function NutritionEditorPage() {
   const numTCal = Number(tCal) || 1, numTP = Number(tP) || 1
   const numTK = Number(tK) || 1, numTF = Number(tF) || 1
 
-  if (loading) return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin" /></div>
-  if (loadError) return <div className="p-8 text-sm text-red-600">{loadError}</div>
+  if (loading) return (
+    <div className="p-8 flex justify-center">
+      <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+  if (loadError) return <div className="p-8 text-sm text-red-400">{loadError}</div>
   if (!plan) return null
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-5">
       {/* Back + DB link */}
       <div className="flex items-center justify-between">
-        <Link href="/admin/nutrition" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+        <Link href="/admin/nutrition" className="flex items-center gap-1.5 text-sm text-[#797D83] hover:text-[#EDECEA] transition-colors">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
           Alle Pläne
         </Link>
-        <Link href="/admin/nutrition/foods" className="text-sm text-green-600 hover:text-green-700 font-medium">
+        <Link href="/admin/nutrition/foods" className="text-sm text-[#A78BFA] hover:text-[#B79FFB] font-medium transition-colors">
           🥦 Lebensmittel-DB verwalten
         </Link>
       </div>
 
       {/* ── PLAN SETTINGS ──────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+      <div className="bg-[#111318] rounded-2xl border border-white/[0.06] p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900">Plan-Einstellungen</h2>
+          <h2 className="font-semibold text-white">Plan-Einstellungen</h2>
           <div className="flex items-center gap-3">
-            {settingsMsg && <span className={`text-xs font-medium ${settingsMsg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{settingsMsg}</span>}
+            {settingsMsg && (
+              <span className={`text-xs font-medium ${settingsMsg.startsWith('✓') ? 'text-[#A78BFA]' : 'text-red-400'}`}>
+                {settingsMsg}
+              </span>
+            )}
             <button onClick={saveSettings} disabled={savingSettings}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl disabled:opacity-60 transition-colors">
+              className="px-4 py-2 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl disabled:opacity-60 transition-colors">
               {savingSettings ? '…' : 'Speichern'}
             </button>
           </div>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Name</label>
+            <label className="block text-xs font-medium text-[#797D83] mb-1.5">Name</label>
             <input value={name} onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent" />
+              className="w-full px-3 py-2.5 bg-[#0b0c0f] border border-white/[0.08] text-white rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Ziel</label>
+            <label className="block text-xs font-medium text-[#797D83] mb-1.5">Ziel</label>
             <select value={goal} onChange={e => setGoal(e.target.value as NutritionGoal)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent">
+              className="w-full px-3 py-2.5 bg-[#0b0c0f] border border-white/[0.08] text-white rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent">
               {(['cut', 'bulk', 'maintain'] as NutritionGoal[]).map(g =>
                 <option key={g} value={g}>{GOAL_LABEL[g]}</option>)}
             </select>
@@ -619,18 +623,18 @@ export default function NutritionEditorPage() {
             { label: 'Fett (g)',        val: tF,   set: setTF },
           ].map(f => (
             <div key={f.label}>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">{f.label}</label>
+              <label className="block text-xs font-medium text-[#797D83] mb-1.5">{f.label}</label>
               <input type="number" min={0} value={f.val} onChange={e => f.set(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent" />
+                className="w-full px-3 py-2.5 bg-[#0b0c0f] border border-white/[0.08] text-white rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent" />
             </div>
           ))}
         </div>
       </div>
 
       {/* ── MAHLZEITEN-MAKRO-SUMME vs PLAN-TARGET ──────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+      <div className="bg-[#111318] rounded-2xl border border-white/[0.06] p-6">
         <div className="flex items-center justify-between mb-1">
-          <h2 className="font-semibold text-gray-900">Verteilung der Mahlzeiten</h2>
+          <h2 className="font-semibold text-white">Verteilung der Mahlzeiten</h2>
           {meals.length > 0 && (() => {
             const dP = (Number(tP) || 0) - ms.p
             const dK = (Number(tK) || 0) - ms.k
@@ -640,7 +644,7 @@ export default function NutritionEditorPage() {
             return (
               <button
                 onClick={() => distributeRest(['protein', 'carbs', 'fat'])}
-                className="text-xs px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
+                className="text-xs px-3 py-1.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] font-semibold rounded-lg transition-colors"
                 title="Verteilt offene/überzählige Makros gleichmäßig auf alle Mahlzeiten"
               >
                 Rest auf Mahlzeiten verteilen
@@ -648,7 +652,7 @@ export default function NutritionEditorPage() {
             )
           })()}
         </div>
-        <p className="text-xs text-gray-400 mb-4">Summe der Mahlzeit-Ziele vs. Tages-Ziel. Pro Makro &bdquo;verteilen&ldquo; klicken oder oben Rest komplett auf alle Mahlzeiten gleichmäßig verteilen lassen.</p>
+        <p className="text-xs text-[#555A61] mb-4">Summe der Mahlzeit-Ziele vs. Tages-Ziel. Pro Makro &bdquo;verteilen&ldquo; klicken oder oben Rest komplett auf alle Mahlzeiten gleichmäßig verteilen lassen.</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
             { key: 'kcal'    as const, label: 'Kalorien', cur: ms.cal, max: numTCal, unit: 'kcal', color: '#f97316' },
@@ -661,20 +665,20 @@ export default function NutritionEditorPage() {
             return (
               <div key={m.label} className="space-y-2">
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">{m.label}</span>
-                  <span className="text-gray-400">{m.max}{m.unit}</span>
+                  <span className="text-[#797D83]">{m.label}</span>
+                  <span className="text-[#555A61]">{m.max}{m.unit}</span>
                 </div>
                 <MacroBar value={m.cur} max={m.max} color={m.color} />
                 <div className="flex justify-between">
-                  <span className="text-sm font-bold text-gray-900">{Math.round(m.cur)}{m.unit}</span>
-                  <span className={`text-xs font-medium ${diff < 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                  <span className="text-sm font-bold text-white">{Math.round(m.cur)}{m.unit}</span>
+                  <span className={`text-xs font-medium ${diff < 0 ? 'text-red-400' : 'text-[#555A61]'}`}>
                     {diff < 0 ? `+${Math.abs(Math.round(diff))} über` : diff === 0 ? '✓' : `${Math.round(diff)} offen`}
                   </span>
                 </div>
                 {canDistribute && (
                   <button
                     onClick={() => distributeRest([m.key as 'protein' | 'carbs' | 'fat'])}
-                    className="w-full text-[10px] px-2 py-1 bg-gray-50 hover:bg-green-50 text-gray-600 hover:text-green-700 border border-gray-200 hover:border-green-300 rounded-md transition-colors"
+                    className="w-full text-[10px] px-2 py-1 bg-white/[0.04] hover:bg-[#A78BFA]/10 text-[#797D83] hover:text-[#A78BFA] border border-white/[0.06] hover:border-[#A78BFA]/30 rounded-md transition-colors"
                     title={`${diff > 0 ? '+' : ''}${(diff / meals.length).toFixed(1)}${m.unit} pro Mahlzeit`}
                   >
                     {diff > 0 ? '↓ verteilen' : '↑ reduzieren'} ({(diff / meals.length).toFixed(1)}{m.unit}/Mahlzeit)
@@ -688,7 +692,7 @@ export default function NutritionEditorPage() {
 
       {/* ── MEALS ──────────────────────────────────────────────────────────── */}
       <div className="space-y-3">
-        <h2 className="font-semibold text-gray-900">Mahlzeiten ({meals.length})</h2>
+        <h2 className="font-semibold text-white">Mahlzeiten ({meals.length})</h2>
 
         {meals.map(meal => (
           <MealEditor
@@ -700,7 +704,7 @@ export default function NutritionEditorPage() {
         ))}
 
         {addingMeal ? (
-          <div className="bg-white rounded-2xl border border-gray-200 p-4 flex gap-2 shadow-sm">
+          <div className="bg-[#111318] rounded-2xl border border-white/[0.06] p-4 flex gap-2">
             <input
               ref={newMealRef}
               autoFocus
@@ -708,57 +712,61 @@ export default function NutritionEditorPage() {
               onChange={e => setNewMealName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') addMeal(); if (e.key === 'Escape') { setAddingMeal(false); setNewMealName('') } }}
               placeholder="z.B. Frühstück, Mittagessen…"
-              className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent" />
-            <button onClick={() => { setAddingMeal(false); setNewMealName('') }} className="px-3 py-2 border border-gray-200 text-gray-600 text-sm rounded-xl hover:bg-gray-50">Abbrechen</button>
-            <button onClick={addMeal} disabled={!newMealName.trim()} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl disabled:opacity-60 transition-colors">Hinzufügen</button>
+              className="flex-1 px-3 py-2 bg-[#0b0c0f] border border-white/[0.08] text-white rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent" />
+            <button onClick={() => { setAddingMeal(false); setNewMealName('') }} className="px-3 py-2 border border-white/[0.08] text-[#797D83] text-sm rounded-xl hover:bg-white/[0.04] transition-colors">Abbrechen</button>
+            <button onClick={addMeal} disabled={!newMealName.trim()} className="px-4 py-2 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl disabled:opacity-60 transition-colors">Hinzufügen</button>
           </div>
         ) : (
-          <button onClick={() => setAddingMeal(true)} className="w-full py-3 border-2 border-dashed border-gray-200 hover:border-green-400 hover:bg-green-50 text-gray-500 hover:text-green-600 text-sm font-medium rounded-2xl transition-colors">
+          <button onClick={() => setAddingMeal(true)} className="w-full py-3 border-2 border-dashed border-white/[0.08] hover:border-[#A78BFA]/40 text-[#555A61] hover:text-[#A78BFA] text-sm font-medium rounded-2xl transition-colors">
             + Mahlzeit hinzufügen
           </button>
         )}
       </div>
 
       {/* ── ASSIGNMENT ─────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-        <h2 className="font-semibold text-gray-900 mb-4">Kunden zuweisen</h2>
+      <div className="bg-[#111318] rounded-2xl border border-white/[0.06] p-6">
+        <h2 className="font-semibold text-white mb-4">Kunden zuweisen</h2>
         {assignMsg && (
-          <div className={`mb-3 px-3 py-2 rounded-lg text-xs ${
+          <div className={`mb-3 px-3 py-2 rounded-lg text-xs border ${
             assignMsg.startsWith('✓')
-              ? 'bg-green-50 text-green-700 border border-green-200'
-              : 'bg-red-50 text-red-700 border border-red-200'
+              ? 'bg-[#A78BFA]/10 text-[#A78BFA] border-[#A78BFA]/20'
+              : 'bg-red-500/10 text-red-400 border-red-500/20'
           }`}>
             {assignMsg}
           </div>
         )}
         <div className="flex gap-3 mb-4">
           <select value={assignClientId} onChange={e => setAssignClientId(e.target.value)}
-            className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent">
+            className="flex-1 px-3 py-2.5 bg-[#0b0c0f] border border-white/[0.08] text-white rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent">
             <option value="">Kunden auswählen…</option>
             {clients.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
           </select>
           <button onClick={assignPlan} disabled={!assignClientId || assigning}
-            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl disabled:opacity-50 transition-colors">
+            className="px-4 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl disabled:opacity-50 transition-colors">
             {assigning ? '…' : 'Zuweisen'}
           </button>
         </div>
         {assigned.length === 0 ? (
-          <p className="text-sm text-gray-400">Noch keinem Kunden zugewiesen.</p>
+          <p className="text-sm text-[#555A61]">Noch keinem Kunden zugewiesen.</p>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-white/[0.04]">
             {assigned.map(a => (
               <li key={a.id} className="flex items-center gap-4 py-3">
-                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-sm font-bold flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-[#A78BFA]/20 flex items-center justify-center text-[#A78BFA] text-sm font-bold flex-shrink-0">
                   {a.client?.full_name?.charAt(0) ?? '?'}
                 </div>
-                <div className="flex-1 text-sm font-medium text-gray-900">{a.client?.full_name ?? '–'}</div>
-                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${a.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                <div className="flex-1 text-sm font-medium text-white">{a.client?.full_name ?? '–'}</div>
+                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                  a.is_active
+                    ? 'bg-[#A78BFA]/10 text-[#A78BFA]'
+                    : 'bg-white/[0.04] text-[#555A61]'
+                }`}>
                   {a.is_active ? 'Aktiv' : 'Inaktiv'}
                 </span>
-                <button onClick={() => toggleAssignment(a.id, a.is_active)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100">
+                <button onClick={() => toggleAssignment(a.id, a.is_active)} className="text-xs text-[#797D83] hover:text-white px-2 py-1 rounded-lg hover:bg-white/[0.06] transition-colors">
                   {a.is_active ? 'Deaktivieren' : 'Aktivieren'}
                 </button>
-                <button onClick={() => removeAssignment(a.id)} className="text-xs text-red-500 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">
+                <button onClick={() => removeAssignment(a.id)} className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded-lg hover:bg-red-500/10 transition-colors">
                   Entfernen
                 </button>
               </li>

@@ -119,7 +119,17 @@ function timeAgo(value: string) {
   return new Date(value).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })
 }
 
-export default function TrainerNotificationBell({ trainerId: _trainerId, theme = 'dark' }: { trainerId: string; theme?: 'dark' | 'light' }) {
+export default function TrainerNotificationBell({
+  trainerId: _trainerId,
+  theme = 'dark',
+  placement = 'below-right',
+}: {
+  trainerId: string
+  theme?: 'dark' | 'light'
+  /** 'above-left' → opens above the button, aligned left (sidebar use).
+   *  'below-right' → opens below the button, aligned right (header use). */
+  placement?: 'above-left' | 'below-right'
+}) {
   void _trainerId
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -228,8 +238,12 @@ export default function TrainerNotificationBell({ trainerId: _trainerId, theme =
       {/* Dropdown */}
       {open && (
         <div
-          className="bubble-in absolute bottom-full mb-2 right-0 z-50 w-[min(22rem,calc(100vw-1.5rem))] rounded-2xl border border-white/[0.08] bg-[#111318] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.7)] overflow-hidden"
-          style={{ transformOrigin: 'bottom right' }}
+          className={`bubble-in absolute z-50 w-[min(22rem,calc(100vw-1.5rem))] rounded-2xl border border-white/[0.08] bg-[#111318] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.7)] overflow-hidden ${
+            placement === 'above-left'
+              ? 'bottom-full mb-2 left-0'
+              : 'top-full mt-2 right-0'
+          }`}
+          style={{ transformOrigin: placement === 'above-left' ? 'bottom left' : 'top right' }}
         >
           {/* Header */}
           <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/[0.06]">

@@ -367,19 +367,27 @@ export default function PlanBuilderPage() {
     setExpandedDayId(prev => (prev === dayId ? null : dayId))
   }
 
+  // ── Input class helpers ────────────────────────────────────────────────────
+  const inputCls = 'w-full px-4 py-2.5 bg-[#0b0c0f] border border-white/[0.08] text-white rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent transition placeholder:text-[#555A61]'
+  const labelCls = 'block text-sm font-medium text-[#797D83] mb-1.5'
+
   if (loading) {
-    return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
+    return (
+      <div className="p-8 flex justify-center">
+        <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
   }
 
   if (loadError) {
     return (
       <div className="p-6 max-w-3xl mx-auto">
-        <Link href="/admin/plans" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-4">
+        <Link href="/admin/plans" className="text-sm text-[#797D83] hover:text-[#EDECEA] flex items-center gap-1 mb-4 transition-colors">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
           Zurück zu Pläne
         </Link>
-        <div className="bg-white rounded-2xl border border-red-100 py-10 text-center">
-          <p className="text-red-600 text-sm">{loadError}</p>
+        <div className="bg-[#111318] rounded-2xl border border-white/[0.06] py-10 text-center">
+          <p className="text-red-400 text-sm">{loadError}</p>
         </div>
       </div>
     )
@@ -388,40 +396,40 @@ export default function PlanBuilderPage() {
   return (
     <div className="p-6 max-w-3xl mx-auto">
       {/* Back */}
-      <Link href="/admin/plans" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-4">
+      <Link href="/admin/plans" className="text-sm text-[#797D83] hover:text-[#EDECEA] flex items-center gap-1 mb-4 transition-colors">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
         Zurück zu Pläne
       </Link>
 
       {/* Plan Header */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
+      <div className="bg-[#111318] rounded-2xl border border-white/[0.06] p-5 mb-6">
         {editingPlan ? (
           <div className="space-y-3">
             <input
               value={planName}
               onChange={e => setPlanName(e.target.value)}
-              className="w-full text-xl font-bold border-b border-gray-200 pb-1 focus:outline-none focus:border-indigo-500"
+              className="w-full text-xl font-bold bg-transparent border-b border-white/[0.08] pb-1 text-white focus:outline-none focus:border-[#A78BFA]/50"
             />
             <textarea
               value={planDesc}
               onChange={e => setPlanDesc(e.target.value)}
               placeholder="Beschreibung…"
               rows={2}
-              className="w-full text-sm text-gray-500 border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+              className="w-full text-sm text-[#797D83] bg-[#0b0c0f] border border-white/[0.08] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent resize-none placeholder:text-[#555A61]"
             />
             <div className="flex gap-2">
-              <button onClick={savePlan} className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">Speichern</button>
-              <button onClick={() => setEditingPlan(false)} className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50">Abbrechen</button>
+              <button onClick={savePlan} className="px-4 py-2 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-lg transition-colors">Speichern</button>
+              <button onClick={() => setEditingPlan(false)} className="px-4 py-2 border border-white/[0.08] text-[#797D83] text-sm font-medium rounded-lg hover:bg-white/[0.04] transition-colors">Abbrechen</button>
             </div>
           </div>
         ) : (
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-xl font-bold text-gray-900">{plan?.name}</h1>
-              {plan?.description && <p className="text-sm text-gray-500 mt-1">{plan.description}</p>}
-              <p className="text-xs text-gray-400 mt-2">{days.length} Trainingstag{days.length !== 1 ? 'e' : ''}</p>
+              <h1 className="text-xl font-bold text-white">{plan?.name}</h1>
+              {plan?.description && <p className="text-sm text-[#797D83] mt-1">{plan.description}</p>}
+              <p className="text-xs text-[#555A61] mt-2">{days.length} Trainingstag{days.length !== 1 ? 'e' : ''}</p>
             </div>
-            <button onClick={() => setEditingPlan(true)} className="text-sm text-indigo-600 hover:text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-50 flex-shrink-0">Bearbeiten</button>
+            <button onClick={() => setEditingPlan(true)} className="text-sm text-[#A78BFA] hover:text-[#B79FFB] px-3 py-1.5 rounded-lg hover:bg-[#A78BFA]/10 flex-shrink-0 transition-colors">Bearbeiten</button>
           </div>
         )}
       </div>
@@ -429,66 +437,66 @@ export default function PlanBuilderPage() {
       {/* Days */}
       <div className="space-y-3 mb-4">
         {days.map((day, di) => (
-          <div key={day.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div key={day.id} className="bg-[#111318] rounded-2xl border border-white/[0.06] overflow-hidden">
             {/* Day header */}
             <div
-              className="flex items-center gap-3 px-5 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-3 px-5 py-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
               onClick={() => toggleDay(day.id)}
             >
-              <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm font-bold flex-shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-[#A78BFA]/20 text-[#A78BFA] flex items-center justify-center text-sm font-bold flex-shrink-0">
                 {di + 1}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-semibold text-gray-900 text-sm">{day.name}</div>
-                {day.description && <div className="text-xs text-gray-500 truncate">{day.description}</div>}
+                <div className="font-semibold text-white text-sm">{day.name}</div>
+                {day.description && <div className="text-xs text-[#797D83] truncate">{day.description}</div>}
               </div>
-              <div className="flex items-center gap-1 text-xs text-gray-400">
+              <div className="flex items-center gap-1 text-xs text-[#555A61]">
                 <span>{exercises[day.id]?.length ?? 0} Übungen</span>
               </div>
               <div className="flex items-center gap-1 ml-2">
-                <button onClick={e => { e.stopPropagation(); openEditDay(day) }} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">✏️</button>
-                <button onClick={e => { e.stopPropagation(); deleteDay(day.id) }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">🗑️</button>
+                <button onClick={e => { e.stopPropagation(); openEditDay(day) }} className="p-1.5 text-[#797D83] hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors">✏️</button>
+                <button onClick={e => { e.stopPropagation(); deleteDay(day.id) }} className="p-1.5 text-[#797D83] hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">🗑️</button>
               </div>
-              <svg className={`w-4 h-4 text-gray-400 transition-transform ${expandedDayId === day.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-4 h-4 text-[#555A61] transition-transform ${expandedDayId === day.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </div>
 
             {/* Exercises */}
             <Collapsible open={expandedDayId === day.id}>
-              <div className="border-t border-gray-100">
+              <div className="border-t border-white/[0.06]">
                 {(exercises[day.id] ?? []).length === 0 ? (
-                  <p className="text-sm text-gray-400 px-5 py-4">Noch keine Übungen.</p>
+                  <p className="text-sm text-[#555A61] px-5 py-4">Noch keine Übungen.</p>
                 ) : (
-                  <ul className="divide-y divide-gray-100">
+                  <ul className="divide-y divide-white/[0.04]">
                     {(exercises[day.id] ?? []).map((ex, ei) => (
                       <li key={ex.id}>
                         <StaggerItem index={ei} className="px-5 py-3 flex items-start gap-3">
-                        <div className="w-6 h-6 rounded-md bg-gray-100 text-gray-500 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                        <div className="w-6 h-6 rounded-md bg-white/[0.04] text-[#797D83] flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
                           {ei + 1}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm text-gray-900">{ex.name}</div>
-                          <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
+                          <div className="font-medium text-sm text-white">{ex.name}</div>
+                          <div className="text-xs text-[#797D83] mt-0.5 flex flex-wrap gap-x-3">
                             <span>{ex.sets} Sätze × {ex.reps} Wdh.</span>
                             {ex.target_weight && <span>Zielgewicht: {ex.target_weight} kg</span>}
                             {ex.rest_seconds && <span>Pause: {ex.rest_seconds}s</span>}
                           </div>
-                          {ex.note && <div className="text-xs text-indigo-600 mt-0.5">{ex.note}</div>}
+                          {ex.note && <div className="text-xs text-[#A78BFA] mt-0.5">{ex.note}</div>}
                         </div>
                         <div className="flex gap-1 flex-shrink-0">
-                          <button onClick={() => openEditEx(ex)} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg text-xs">✏️</button>
-                          <button onClick={() => deleteEx(ex.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg text-xs">🗑️</button>
+                          <button onClick={() => openEditEx(ex)} className="p-1.5 text-[#797D83] hover:text-white hover:bg-white/[0.06] rounded-lg text-xs transition-colors">✏️</button>
+                          <button onClick={() => deleteEx(ex.id)} className="p-1.5 text-[#797D83] hover:text-red-400 hover:bg-red-500/10 rounded-lg text-xs transition-colors">🗑️</button>
                         </div>
                         </StaggerItem>
                       </li>
                     ))}
                   </ul>
                 )}
-                <div className="px-5 py-3 border-t border-gray-100">
+                <div className="px-5 py-3 border-t border-white/[0.04]">
                   <button
                     onClick={() => openAddEx(day.id)}
-                    className="text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
+                    className="text-sm text-[#A78BFA] hover:text-[#B79FFB] font-medium flex items-center gap-1 hover:bg-[#A78BFA]/10 px-3 py-1.5 rounded-lg transition-colors"
                   >
                     <span>+</span> Übung hinzufügen
                   </button>
@@ -501,30 +509,30 @@ export default function PlanBuilderPage() {
 
       <button
         onClick={openAddDay}
-        className="w-full py-3 border-2 border-dashed border-gray-200 rounded-2xl text-sm font-medium text-gray-400 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
+        className="w-full py-3 border-2 border-dashed border-white/[0.08] rounded-2xl text-sm font-medium text-[#555A61] hover:text-[#A78BFA] hover:border-[#A78BFA]/40 transition-colors"
       >
         + Trainingstag hinzufügen
       </button>
 
       {/* Day Modal */}
       {dayModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
-            <div className="px-6 py-5 border-b border-gray-100">
-              <h2 className="font-semibold text-gray-900">{dayModal.editing ? 'Tag bearbeiten' : 'Neuer Trainingstag'}</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#111318] border border-white/[0.08] rounded-2xl w-full max-w-sm shadow-2xl">
+            <div className="px-6 py-5 border-b border-white/[0.06]">
+              <h2 className="font-semibold text-white">{dayModal.editing ? 'Tag bearbeiten' : 'Neuer Trainingstag'}</h2>
             </div>
             <form onSubmit={saveDay} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Name *</label>
-                <input required autoFocus value={dayName} onChange={e => setDayName(e.target.value)} placeholder="z.B. Push, Pull, Legs" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition" />
+                <label className={labelCls}>Name *</label>
+                <input required autoFocus value={dayName} onChange={e => setDayName(e.target.value)} placeholder="z.B. Push, Pull, Legs" className={inputCls} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Beschreibung</label>
-                <input value={dayDesc} onChange={e => setDayDesc(e.target.value)} placeholder="Optional" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition" />
+                <label className={labelCls}>Beschreibung</label>
+                <input value={dayDesc} onChange={e => setDayDesc(e.target.value)} placeholder="Optional" className={inputCls} />
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setDayModal({ open: false, editing: null })} className="flex-1 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50">Abbrechen</button>
-                <button type="submit" className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl">Speichern</button>
+                <button type="button" onClick={() => setDayModal({ open: false, editing: null })} className="flex-1 py-2.5 border border-white/[0.08] text-[#797D83] text-sm font-medium rounded-xl hover:bg-white/[0.04] transition-colors">Abbrechen</button>
+                <button type="submit" className="flex-1 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl transition-colors">Speichern</button>
               </div>
             </form>
           </div>
@@ -533,47 +541,47 @@ export default function PlanBuilderPage() {
 
       {/* Exercise Modal */}
       {exModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl my-4">
-            <div className="px-6 py-5 border-b border-gray-100">
-              <h2 className="font-semibold text-gray-900">{exModal.editing ? 'Übung bearbeiten' : 'Neue Übung'}</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-[#111318] border border-white/[0.08] rounded-2xl w-full max-w-md shadow-2xl my-4">
+            <div className="px-6 py-5 border-b border-white/[0.06]">
+              <h2 className="font-semibold text-white">{exModal.editing ? 'Übung bearbeiten' : 'Neue Übung'}</h2>
             </div>
             <form onSubmit={saveEx} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Name *</label>
-                <input required autoFocus value={exForm.name} onChange={e => setExForm(f => ({ ...f, name: e.target.value }))} placeholder="z.B. Bankdrücken" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+                <label className={labelCls}>Name *</label>
+                <input required autoFocus value={exForm.name} onChange={e => setExForm(f => ({ ...f, name: e.target.value }))} placeholder="z.B. Bankdrücken" className={inputCls} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Beschreibung</label>
-                <textarea value={exForm.description} onChange={e => setExForm(f => ({ ...f, description: e.target.value }))} placeholder="Ausführung, Hinweise…" rows={2} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none" />
+                <label className={labelCls}>Beschreibung</label>
+                <textarea value={exForm.description} onChange={e => setExForm(f => ({ ...f, description: e.target.value }))} placeholder="Ausführung, Hinweise…" rows={2} className={`${inputCls} resize-none`} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Sätze</label>
-                  <input type="number" min={1} max={20} value={exForm.sets} onChange={e => setExForm(f => ({ ...f, sets: parseInt(e.target.value) || 1 }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+                  <label className={labelCls}>Sätze</label>
+                  <input type="number" min={1} max={20} value={exForm.sets} onChange={e => setExForm(f => ({ ...f, sets: parseInt(e.target.value) || 1 }))} className={inputCls} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Wiederholungen</label>
-                  <input value={exForm.reps} onChange={e => setExForm(f => ({ ...f, reps: e.target.value }))} placeholder="10 oder 8-12" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+                  <label className={labelCls}>Wiederholungen</label>
+                  <input value={exForm.reps} onChange={e => setExForm(f => ({ ...f, reps: e.target.value }))} placeholder="10 oder 8-12" className={inputCls} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Zielgewicht (kg)</label>
-                  <input type="number" step="0.5" value={exForm.target_weight} onChange={e => setExForm(f => ({ ...f, target_weight: e.target.value }))} placeholder="0" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+                  <label className={labelCls}>Zielgewicht (kg)</label>
+                  <input type="number" step="0.5" value={exForm.target_weight} onChange={e => setExForm(f => ({ ...f, target_weight: e.target.value }))} placeholder="0" className={inputCls} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Pause (Sekunden)</label>
-                  <input type="number" value={exForm.rest_seconds} onChange={e => setExForm(f => ({ ...f, rest_seconds: e.target.value }))} placeholder="90" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+                  <label className={labelCls}>Pause (Sekunden)</label>
+                  <input type="number" value={exForm.rest_seconds} onChange={e => setExForm(f => ({ ...f, rest_seconds: e.target.value }))} placeholder="90" className={inputCls} />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Notiz für Kunden</label>
-                <input value={exForm.note} onChange={e => setExForm(f => ({ ...f, note: e.target.value }))} placeholder="Hinweis, Technik-Tipp…" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+                <label className={labelCls}>Notiz für Kunden</label>
+                <input value={exForm.note} onChange={e => setExForm(f => ({ ...f, note: e.target.value }))} placeholder="Hinweis, Technik-Tipp…" className={inputCls} />
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setExModal({ open: false, dayId: '', editing: null })} className="flex-1 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50">Abbrechen</button>
-                <button type="submit" className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl">Speichern</button>
+                <button type="button" onClick={() => setExModal({ open: false, dayId: '', editing: null })} className="flex-1 py-2.5 border border-white/[0.08] text-[#797D83] text-sm font-medium rounded-xl hover:bg-white/[0.04] transition-colors">Abbrechen</button>
+                <button type="submit" className="flex-1 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl transition-colors">Speichern</button>
               </div>
             </form>
           </div>
