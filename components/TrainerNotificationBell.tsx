@@ -1,7 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
+
 const trainerBellTypes = ['message', 'workout', 'checkin', 'training_plan', 'workout_plan', 'nutrition_plan', 'request', 'system'] as const
 type TrainerBellType = typeof trainerBellTypes[number]
 
@@ -86,25 +88,25 @@ const TypeIcon: Record<TrainerBellType, ReactNode> = {
 }
 
 const TypeColor: Record<TrainerBellType, string> = {
-  message:       'bg-indigo-50 text-indigo-600 ring-indigo-100',
-  workout:       'bg-emerald-50 text-emerald-600 ring-emerald-100',
-  checkin:       'bg-violet-50 text-violet-600 ring-violet-100',
-  training_plan: 'bg-blue-50 text-blue-600 ring-blue-100',
-  workout_plan:  'bg-blue-50 text-blue-600 ring-blue-100',
-  nutrition_plan:'bg-orange-50 text-orange-600 ring-orange-100',
-  request:       'bg-indigo-50 text-indigo-600 ring-indigo-100',
-  system:        'bg-gray-100 text-gray-600 ring-gray-200',
+  message:        'bg-indigo-500/10 text-indigo-400 ring-indigo-500/20',
+  workout:        'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20',
+  checkin:        'bg-violet-500/10 text-violet-400 ring-violet-500/20',
+  training_plan:  'bg-blue-500/10 text-blue-400 ring-blue-500/20',
+  workout_plan:   'bg-blue-500/10 text-blue-400 ring-blue-500/20',
+  nutrition_plan: 'bg-orange-500/10 text-orange-400 ring-orange-500/20',
+  request:        'bg-[#A78BFA]/10 text-[#A78BFA] ring-[#A78BFA]/20',
+  system:         'bg-white/[0.05] text-gray-400 ring-white/[0.08]',
 }
 
 const TypeHref: Record<TrainerBellType, string> = {
-  message:       '/admin/messages',
-  workout:       '/admin/clients',
-  checkin:       '/admin/clients',
-  training_plan: '/admin/plans',
-  workout_plan:  '/admin/plans',
-  nutrition_plan:'/admin/nutrition',
-  request:       '/admin/requests',
-  system:        '/admin',
+  message:        '/admin/messages',
+  workout:        '/admin/clients',
+  checkin:        '/admin/clients',
+  training_plan:  '/admin/plans',
+  workout_plan:   '/admin/plans',
+  nutrition_plan: '/admin/nutrition',
+  request:        '/admin/requests',
+  system:         '/admin',
 }
 
 function timeAgo(value: string) {
@@ -122,46 +124,61 @@ function timeAgo(value: string) {
 export default function TrainerNotificationBell({
   trainerId: _trainerId,
   theme = 'dark',
-  placement = 'below-right',
 }: {
   trainerId: string
   theme?: 'dark' | 'light'
-  /** 'above-left' → opens above the button, aligned left (sidebar use).
-   *  'below-right' → opens below the button, aligned right (header use). */
-  placement?: 'above-left' | 'below-right'
 }) {
   void _trainerId
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState<BellNotification[]>([])
+  const [mounted, setMounted] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { setMounted(true) }, [])
+
+  const loadNotifications = useCallback(async () => {
+    try {
+      const response = await fetch('/api/backend/notifications?limit=30', {
+        method: 'GET',
+        cache: 'no-store',
+      })
+      if (!response.ok) return
+
+      const payload = await response.json().catch(() => null) as {
+        notifications?: BellNotification[]
+      } | null
+
+      setNotifications((payload?.notifications ?? []).filter(isTrainerBellNotification))
+    } catch {
+      // network error — keep existing list
+    }
+  }, [])
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const response = await fetch('/api/backend/notifications?limit=30', {
-          method: 'GET',
-          cache: 'no-store',
-        })
-        if (!response.ok) return
+    void loadNotifications()
 
-        const payload = await response.json().catch(() => null) as {
-          notifications?: BellNotification[]
-        } | null
+    const interval = setInterval(() => void loadNotifications(), 30_000)
+    const onFocus = () => void loadNotifications()
+    const onVisibility = () => { if (document.visibilityState === 'visible') void loadNotifications() }
 
-        setNotifications((payload?.notifications ?? []).filter(isTrainerBellNotification))
-      } catch {
-        setNotifications([])
-      }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
-
-    load()
-  }, [])
+  }, [loadNotifications])
 
   useEffect(() => {
     if (!open) return
     const onPointer = (e: PointerEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+      const inButton = wrapRef.current?.contains(e.target as Node)
+      const inPopup = popupRef.current?.contains(e.target as Node)
+      if (!inButton && !inPopup) setOpen(false)
     }
     window.addEventListener('pointerdown', onPointer)
     return () => window.removeEventListener('pointerdown', onPointer)
@@ -175,10 +192,7 @@ export default function TrainerNotificationBell({
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
 
     try {
-      const response = await fetch('/api/backend/notifications/read-all', {
-        method: 'PATCH',
-      })
-
+      const response = await fetch('/api/backend/notifications/read-all', { method: 'PATCH' })
       if (response.ok) return
     } catch {
       // Fall through to rollback.
@@ -193,10 +207,7 @@ export default function TrainerNotificationBell({
       setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x))
 
       try {
-        const response = await fetch(`/api/backend/notifications/${n.id}/read`, {
-          method: 'PATCH',
-        })
-
+        const response = await fetch(`/api/backend/notifications/${n.id}/read`, { method: 'PATCH' })
         if (!response.ok) {
           setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: false } : x))
         }
@@ -206,6 +217,100 @@ export default function TrainerNotificationBell({
     }
     router.push(TypeHref[n.type])
   }
+
+  // Popup rendered via portal — fixed below the top header, never clipped by sidebar
+  const popup = open && mounted
+    ? createPortal(
+        <div
+          ref={popupRef}
+          className={[
+            'bubble-in',
+            'rounded-2xl border border-white/[0.08] bg-[#111318]',
+            'shadow-[0_24px_48px_-12px_rgba(0,0,0,0.7)]',
+            'overflow-hidden flex flex-col',
+            // Always fixed below the 56px header
+            'fixed z-[9999]',
+            // Mobile: full-width with 16px gutters
+            'top-[64px] left-4 right-4',
+            // Desktop (sm+): pinned to right, fixed width
+            'sm:left-auto sm:right-6 sm:w-[380px]',
+          ].join(' ')}
+          style={{ maxHeight: '70vh', transformOrigin: 'top right' }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/[0.06] shrink-0">
+            <div>
+              <p className="text-[13.5px] font-semibold text-white tracking-tight">Benachrichtigungen</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                {unread > 0 ? `${unread} ungelesen` : 'Alles gelesen'}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={markAllRead}
+                disabled={unread === 0}
+                className="press text-[11.5px] font-medium text-indigo-400 hover:text-indigo-300 disabled:text-gray-600 disabled:cursor-default transition-colors px-2 py-1 rounded-lg hover:bg-white/[0.05]"
+              >
+                Alle lesen
+              </button>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="press p-1.5 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-white/[0.06] transition-colors"
+                aria-label="Schließen"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                  <path d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* List */}
+          <div className="overflow-y-auto flex-1">
+            {notifications.length === 0 ? (
+              <div className="px-4 py-10 text-center">
+                <div className="mx-auto w-10 h-10 rounded-xl bg-white/[0.04] ring-1 ring-white/[0.08] flex items-center justify-center text-gray-500 mb-3">
+                  <span className="w-5 h-5 block">{BellIcon}</span>
+                </div>
+                <p className="text-[13px] text-gray-500">Keine Benachrichtigungen</p>
+              </div>
+            ) : (
+              notifications.filter(isTrainerBellNotification).map((n, i) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => handleClick(n)}
+                  className={`press w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.04] ${
+                    i !== 0 ? 'border-t border-white/[0.04]' : ''
+                  } ${!n.is_read ? 'bg-indigo-500/[0.06]' : ''}`}
+                >
+                  <span className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ring-1 ring-inset ${TypeColor[n.type]}`}>
+                    <span className="w-4 h-4 block">{TypeIcon[n.type]}</span>
+                  </span>
+
+                  <span className="flex-1 min-w-0">
+                    <span className={`block text-[13px] leading-snug truncate ${n.is_read ? 'text-gray-400' : 'text-white font-medium'}`}>
+                      {n.title}
+                    </span>
+                    {n.body && (
+                      <span className="block truncate text-[11.5px] text-gray-500 mt-0.5">{n.body}</span>
+                    )}
+                    <span className="block text-[11px] text-gray-600 mt-1 tabular-nums">{timeAgo(n.created_at)}</span>
+                  </span>
+
+                  {!n.is_read && (
+                    <span className="shrink-0 mt-2 w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>,
+        document.body,
+      )
+    : null
 
   return (
     <div ref={wrapRef} className="relative">
@@ -235,77 +340,7 @@ export default function TrainerNotificationBell({
         </span>
       </button>
 
-      {/* Dropdown */}
-      {open && (
-        <div
-          className={`bubble-in absolute z-50 w-[min(22rem,calc(100vw-1.5rem))] rounded-2xl border border-white/[0.08] bg-[#111318] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.7)] overflow-hidden ${
-            placement === 'above-left'
-              ? 'bottom-full mb-2 left-0'
-              : 'top-full mt-2 right-0'
-          }`}
-          style={{ transformOrigin: placement === 'above-left' ? 'bottom left' : 'top right' }}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/[0.06]">
-            <div>
-              <p className="text-[13.5px] font-semibold text-white tracking-tight">Benachrichtigungen</p>
-              <p className="text-[11px] text-gray-500 mt-0.5">
-                {unread > 0 ? `${unread} ungelesen` : 'Alles gelesen'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={markAllRead}
-              disabled={unread === 0}
-              className="press text-[11.5px] font-medium text-indigo-400 hover:text-indigo-300 disabled:text-gray-600 disabled:cursor-default transition-colors px-2 py-1 rounded-lg hover:bg-white/[0.05]"
-            >
-              Alle lesen
-            </button>
-          </div>
-
-          {/* List */}
-          <div className="max-h-[min(22rem,calc(100vh-12rem))] overflow-y-auto">
-            {notifications.length === 0 ? (
-              <div className="px-4 py-10 text-center">
-                <div className="mx-auto w-10 h-10 rounded-xl bg-white/[0.04] ring-1 ring-white/[0.08] flex items-center justify-center text-gray-500 mb-3">
-                  <span className="w-5 h-5 block">{BellIcon}</span>
-                </div>
-                <p className="text-[13px] text-gray-500">Keine Benachrichtigungen</p>
-              </div>
-            ) : (
-              notifications.filter(isTrainerBellNotification).map((n, i) => (
-                <button
-                  key={n.id}
-                  type="button"
-                  onClick={() => handleClick(n)}
-                  className={`press w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.04] ${
-                    i !== 0 ? 'border-t border-white/[0.04]' : ''
-                  } ${!n.is_read ? 'bg-indigo-500/[0.06]' : ''}`}
-                >
-                  {/* Type icon badge */}
-                  <span className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ring-1 ring-inset ${TypeColor[n.type]}`}>
-                    <span className="w-4 h-4 block">{TypeIcon[n.type]}</span>
-                  </span>
-
-                  <span className="flex-1 min-w-0">
-                    <span className={`block text-[13px] leading-snug truncate ${n.is_read ? 'text-gray-400' : 'text-white font-medium'}`}>
-                      {n.title}
-                    </span>
-                    {n.body && (
-                      <span className="block truncate text-[11.5px] text-gray-500 mt-0.5">{n.body}</span>
-                    )}
-                    <span className="block text-[11px] text-gray-600 mt-1 tabular-nums">{timeAgo(n.created_at)}</span>
-                  </span>
-
-                  {!n.is_read && (
-                    <span className="shrink-0 mt-2 w-[2px] h-[2px] rounded-full bg-indigo-500" />
-                  )}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
+      {popup}
     </div>
   )
 }

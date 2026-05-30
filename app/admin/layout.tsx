@@ -224,7 +224,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             })}
           </nav>
 
-          <div className="px-3 py-3 border-t border-white/[0.06] shrink-0 overflow-visible">
+          <div className="px-3 py-3 border-t border-white/[0.06] shrink-0">
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] pr-2">
               <div className="w-8 h-8 rounded-full bg-[#A78BFA] flex items-center justify-center text-[#050504] text-[13px] font-semibold">
                 {profile?.full_name?.charAt(0)?.toUpperCase() ?? 'T'}
@@ -234,13 +234,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <div className="text-[#797D83] text-[11px] truncate">{profile?.email}</div>
               </div>
             </div>
-            <div className="mt-2 mb-1 px-2 py-2 rounded-lg bg-white/[0.02] border border-white/[0.06] flex items-center justify-between overflow-visible">
-              <span className="text-[12px] text-[#797D83]">Benachrichtigungen</span>
-              {profile && <TrainerNotificationBell trainerId={profile.id} placement="above-left" />}
-            </div>
             <button
               onClick={handleLogout}
-              className="press w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-[#797D83] hover:text-white hover:bg-white/[0.04]"
+              className="press mt-1 w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-[#797D83] hover:text-white hover:bg-white/[0.04]"
             >
               <span className="w-[18px] h-[18px] flex items-center justify-center text-[#797D83]">{Icon.logout}</span>
               Abmelden
@@ -249,15 +245,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </aside>
 
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="lg:hidden sticky top-0 z-10 bg-[#0b0c0f]/95 backdrop-blur-md border-b border-white/[0.06] px-4 py-3 flex items-center gap-3">
+          <header className="sticky top-0 z-10 bg-[#0b0c0f]/95 backdrop-blur-md border-b border-white/[0.06] px-4 py-3 flex items-center gap-3 h-[56px]">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="press p-1.5 rounded-lg text-white/50 hover:bg-white/[0.06]"
+              className="press lg:hidden p-1.5 rounded-lg text-white/50 hover:bg-white/[0.06]"
             >
               <span className="w-5 h-5 block">{Icon.menu}</span>
             </button>
-            <span className="font-semibold text-[#EDECEA] tracking-tight flex-1">MilaCoach</span>
-            {profile && <TrainerNotificationBell trainerId={profile.id} />}
+            <span className="font-semibold text-[#EDECEA] tracking-tight flex-1 lg:hidden">MilaCoach</span>
+            <div className="ml-auto">
+              {profile && <TrainerNotificationBell trainerId={profile.id} />}
+            </div>
           </header>
 
           <main className="flex-1 overflow-y-auto">

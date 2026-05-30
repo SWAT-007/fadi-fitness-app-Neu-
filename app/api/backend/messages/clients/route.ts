@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const backendResponse = await fetch(
-      `${BACKEND_API_URL}/api/v1/messages/clients${query ? `?${query}` : ''}`,
+      `${BACKEND_API_URL}/api/v1/clients/messages/clients${query ? `?${query}` : ''}`,
       {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },

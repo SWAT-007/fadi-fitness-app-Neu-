@@ -48,6 +48,19 @@ export default function RequestsPage() {
 
   useEffect(() => {
     void load()
+
+    const interval = setInterval(() => void load(), 30_000)
+    const onFocus = () => void load()
+    const onVisibility = () => { if (document.visibilityState === 'visible') void load() }
+
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [load])
 
   const updateStatus = async (id: string, status: 'resolved' | 'rejected') => {
