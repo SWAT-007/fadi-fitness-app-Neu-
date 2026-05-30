@@ -22,8 +22,8 @@ const Icon = {
 }
 
 const AVATAR_GRADIENTS = [
-  'from-indigo-500 to-violet-600',
-  'from-emerald-500 to-teal-600',
+  'from-[#A78BFA] to-[#7C3AED]',
+  'from-[#A78BFA] to-[#7C3AED]',
   'from-rose-500 to-pink-600',
   'from-amber-500 to-orange-600',
   'from-blue-500 to-cyan-600',
@@ -345,33 +345,33 @@ export default function TrainerMessagesPage() {
   }, [clients, search])
 
   if (loading) {
-    return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
+    return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" /></div>
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] lg:h-screen flex bg-gray-50">
+    <div className="h-[calc(100vh-4rem)] lg:h-screen flex bg-[#050504]">
       <aside className={`
         ${selectedClient ? 'hidden md:flex' : 'flex'}
-        w-full md:w-72 lg:w-80 flex-shrink-0 border-r border-gray-200/70 bg-white flex-col
+        w-full md:w-72 lg:w-80 flex-shrink-0 border-r border-white/[0.06] bg-[#111111] flex-col
       `}>
         <div className="px-4 pt-5 pb-3">
-          <h2 className="font-semibold text-gray-900 tracking-tight text-[18px]">Nachrichten</h2>
-          <p className="text-[12px] text-gray-500 mt-0.5">{clients.length} {clients.length === 1 ? 'Kunde' : 'Kunden'}</p>
+          <h2 className="font-semibold text-[#EDECEA] tracking-tight text-[18px]">Nachrichten</h2>
+          <p className="text-[12px] text-[#797D83] mt-0.5">{clients.length} {clients.length === 1 ? 'Kunde' : 'Kunden'}</p>
         </div>
         <div className="px-3 pb-2">
           <div className="relative">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400">{Icon.search}</span>
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#797D83]">{Icon.search}</span>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Suchen..."
-              className="w-full pl-9 pr-3 py-2 bg-gray-100 border border-transparent rounded-xl text-[13px] placeholder:text-gray-400 focus:bg-white focus:border-gray-300 focus:ring-4 focus:ring-indigo-100 transition-all"
+              className="w-full pl-9 pr-3 py-2 bg-white/[0.05] border border-transparent rounded-xl text-[13px] placeholder:text-[#797D83] focus:bg-[#111111] focus:border-white/[0.12] focus:ring-0 transition-all"
             />
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-2 pb-3">
           {filteredClients.length === 0 ? (
-            <p className="text-[13px] text-gray-400 px-3 py-8 text-center">
+            <p className="text-[13px] text-[#797D83] px-3 py-8 text-center">
               {search ? 'Keine Treffer.' : 'Keine Kunden vorhanden.'}
             </p>
           ) : (
@@ -383,28 +383,28 @@ export default function TrainerMessagesPage() {
                   <button
                     onClick={() => setSelectedClient(client)}
                     className={`press relative w-full flex items-center gap-3 px-3 py-2.5 my-0.5 rounded-xl text-left transition-colors ${
-                      isSelected ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                      isSelected ? 'bg-[#A78BFA]/10' : 'hover:bg-[#050504]'
                     }`}
                   >
-                    {isSelected && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-7 w-[3px] rounded-r-full bg-indigo-600" />}
+                    {isSelected && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-7 w-[3px] rounded-r-full bg-[#A78BFA]" />}
                     <Avatar name={client.full_name} size={36} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className={`min-w-0 truncate text-[13.5px] font-medium tracking-tight ${isSelected ? 'text-indigo-700' : 'text-gray-900'}`}>
+                        <span className={`min-w-0 truncate text-[13.5px] font-medium tracking-tight ${isSelected ? 'text-[#A78BFA]' : 'text-[#EDECEA]'}`}>
                           {client.full_name}
                         </span>
                         {unreadCount > 0 && (
-                          <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-indigo-500 text-white text-[11px] font-bold leading-none flex items-center justify-center ring-1 ring-white tabular-nums">
+                          <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-[#A78BFA] text-white text-[11px] font-bold leading-none flex items-center justify-center ring-1 ring-white tabular-nums">
                             {unreadCount > 99 ? '99+' : unreadCount}
                           </span>
                         )}
                       </div>
-                      <div className="text-[11.5px] text-gray-400 truncate">
+                      <div className="text-[11.5px] text-[#797D83] truncate">
                         {client.user_id ? client.email : 'Kein App-Zugang'}
                       </div>
                     </div>
                     {!client.user_id && (
-                      <span className="w-3.5 h-3.5 text-gray-300">{Icon.lock}</span>
+                      <span className="w-3.5 h-3.5 text-white/50">{Icon.lock}</span>
                     )}
                   </button>
                 </StaggerItem>
@@ -416,40 +416,40 @@ export default function TrainerMessagesPage() {
 
       <section className={`${selectedClient ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-w-0`}>
         {!selectedClient ? (
-          <EmptyState icon={Icon.chat} title="Waehle einen Kunden" subtitle="Klicke links auf einen Kunden, um die Unterhaltung zu oeffnen." />
+          <EmptyState icon={Icon.chat} title="Wähle einen Kunden" subtitle="Klicke links auf einen Kunden, um die Unterhaltung zu oeffnen." />
         ) : !selectedClient.user_id ? (
           <EmptyState
             icon={Icon.lock}
             title={`${selectedClient.full_name} hat noch keinen App-Zugang`}
-            subtitle="Kunden muessen sich registrieren, um Nachrichten zu empfangen."
+            subtitle="Kunden müssen sich registrieren, um Nachrichten zu empfangen."
           />
         ) : (
           <>
-            <header className="px-4 lg:px-6 py-3.5 border-b border-gray-200/70 bg-white/80 backdrop-blur-md flex items-center gap-3 sticky top-0 z-10">
+            <header className="px-4 lg:px-6 py-3.5 border-b border-white/[0.06] bg-[#0b0c0f]/95 backdrop-blur-md flex items-center gap-3 sticky top-0 z-10">
               <button
                 onClick={() => setSelectedClient(null)}
-                className="press md:hidden -ml-1 p-1.5 rounded-lg text-gray-700 hover:bg-gray-100"
-                aria-label="Zurueck"
+                className="press md:hidden -ml-1 p-1.5 rounded-lg text-[#EDECEA] hover:bg-white/[0.05]"
+                aria-label="Zurück"
               >
                 <span className="w-5 h-5 block">{Icon.back}</span>
               </button>
               <Avatar name={selectedClient.full_name} size={36} />
               <div className="min-w-0">
-                <div className="font-semibold text-gray-900 text-[14px] tracking-tight truncate">{selectedClient.full_name}</div>
-                <div className="text-[11.5px] text-gray-500 truncate">{selectedClient.email}</div>
+                <div className="font-semibold text-[#EDECEA] text-[14px] tracking-tight truncate">{selectedClient.full_name}</div>
+                <div className="text-[11.5px] text-[#797D83] truncate">{selectedClient.email}</div>
               </div>
-              <span className="ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10.5px] font-medium ring-1 ring-inset ring-emerald-200/60">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#A78BFA]/10 text-[#A78BFA] text-[10.5px] font-medium ring-1 ring-inset ring-[#A78BFA]/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#A78BFA]" />
                 Auto-Refresh
               </span>
             </header>
 
-            <div className="flex-1 overflow-y-auto px-3 lg:px-6 py-5 bg-gradient-to-b from-gray-50 to-white">
+            <div className="flex-1 overflow-y-auto px-3 lg:px-6 py-5 bg-[#050504]">
               {messages.length === 0 ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center px-6">
-                    <p className="text-gray-500 text-[13px] font-medium">Noch keine Nachrichten</p>
-                    <p className="text-gray-400 text-[12px] mt-1">Schreibe die erste Nachricht.</p>
+                    <p className="text-[#797D83] text-[13px] font-medium">Noch keine Nachrichten</p>
+                    <p className="text-[#797D83] text-[12px] mt-1">Schreibe die erste Nachricht.</p>
                   </div>
                 </div>
               ) : (
@@ -460,9 +460,9 @@ export default function TrainerMessagesPage() {
 
             <form
               onSubmit={sendMessage}
-              className="px-3 lg:px-6 py-3 border-t border-gray-200/70 bg-white"
+              className="px-3 lg:px-6 py-3 border-t border-white/[0.06] bg-[#111111]"
             >
-              <div className="flex items-end gap-2 bg-gray-50 border border-gray-200/80 rounded-2xl px-3 py-2 focus-within:border-indigo-300 focus-within:ring-4 focus-within:ring-indigo-100 transition-all">
+              <div className="flex items-end gap-2 bg-[#050504] border border-white/[0.08] rounded-2xl px-3 py-2 focus-within:border-[#A78BFA]/40 focus-within:ring-1 focus-within:ring-[#A78BFA]/10 transition-all">
                 <textarea
                   ref={inputRef}
                   rows={1}
@@ -475,12 +475,12 @@ export default function TrainerMessagesPage() {
                     }
                   }}
                   placeholder="Nachricht schreiben..."
-                  className="flex-1 resize-none bg-transparent text-[14px] py-1.5 max-h-[140px] placeholder:text-gray-400 focus:outline-none"
+                  className="flex-1 resize-none bg-transparent text-[14px] py-1.5 max-h-[140px] placeholder:text-[#797D83] focus:outline-none"
                 />
                 <button
                   type="submit"
                   disabled={sending || !newMessage.trim()}
-                  className="press shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-white bg-gradient-to-br from-indigo-600 to-violet-600 shadow-[0_4px_12px_-4px_rgba(79,70,229,0.55)] disabled:opacity-40 disabled:shadow-none transition-opacity"
+                  className="press shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-white bg-gradient-to-br from-[#A78BFA] to-[#7C3AED] shadow-[0_4px_12px_-4px_rgba(79,70,229,0.55)] disabled:opacity-40 disabled:shadow-none transition-opacity"
                   aria-label="Senden"
                 >
                   {sending ? (
@@ -490,8 +490,8 @@ export default function TrainerMessagesPage() {
                   )}
                 </button>
               </div>
-              <p className="text-[10.5px] text-gray-400 mt-1.5 px-1 hidden sm:block">
-                Enter zum Senden | Shift+Enter fuer neue Zeile
+              <p className="text-[10.5px] text-[#797D83] mt-1.5 px-1 hidden sm:block">
+                Enter zum Senden | Shift+Enter für neue Zeile
               </p>
             </form>
           </>
@@ -517,7 +517,7 @@ function MessageList({ messages, myId, accent }: { messages: Message[]; myId: st
       {groups.map((g, gi) => (
         <div key={gi} className="space-y-1">
           <div className="flex items-center justify-center my-3">
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200/70 text-[10.5px] font-medium uppercase tracking-[0.1em] text-gray-500">
+            <span className="px-3 py-1 rounded-full bg-[#111111] border border-white/[0.06] text-[10.5px] font-medium uppercase tracking-[0.1em] text-[#797D83]">
               {g.dateLabel}
             </span>
           </div>
@@ -555,9 +555,9 @@ function Bubble({
   accent: 'indigo' | 'emerald'
 }) {
   const meBg = accent === 'indigo'
-    ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-[0_4px_12px_-6px_rgba(79,70,229,0.5)]'
-    : 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-[0_4px_12px_-6px_rgba(16,185,129,0.5)]'
-  const themBg = 'bg-white border border-gray-200/70 text-gray-900 shadow-[0_1px_2px_rgba(16,24,40,0.04)]'
+    ? 'bg-gradient-to-br from-[#A78BFA] to-[#7C3AED] text-white shadow-[0_4px_12px_-6px_rgba(79,70,229,0.5)]'
+    : 'bg-gradient-to-br from-[#A78BFA] to-[#7C3AED] text-white shadow-[0_4px_12px_-6px_rgba(167,139,250,0.4)]'
+  const themBg = 'bg-[#111111] border border-white/[0.06] text-[#EDECEA] shadow-[0_1px_2px_rgba(16,24,40,0.04)]'
 
   const radius = isMe
     ? `rounded-2xl ${isLastOfRun ? 'rounded-br-md' : ''} ${!isFirstOfRun ? 'rounded-tr-md' : ''}`
@@ -567,12 +567,12 @@ function Bubble({
     <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${isFirstOfRun ? 'mt-2' : 'mt-0.5'}`}>
       <div className={`bubble-in max-w-[78%] sm:max-w-[68%] lg:max-w-[60%] px-3.5 py-2 ${radius} ${isMe ? meBg : themBg}`}>
         <p className="text-[14px] leading-relaxed whitespace-pre-wrap break-words">{content}</p>
-        <div className={`flex items-center gap-1 mt-1 ${isMe ? 'text-white/70' : 'text-gray-400'}`}>
+        <div className={`flex items-center gap-1 mt-1 ${isMe ? 'text-white/70' : 'text-[#797D83]'}`}>
           <span className="text-[10.5px] tabular-nums">
             {formatMessageTimestamp(createdAt)}
           </span>
           {isMe && isLastOfRun && (
-            <svg className={readAt ? 'text-sky-300' : 'text-white/40'} viewBox="0 0 20 12" width="18" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg className={readAt ? 'text-[#A78BFA]/80' : 'text-white/40'} viewBox="0 0 20 12" width="18" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <polyline points="1,7 4.5,10.5 10.5,2.5" />
               <polyline points="7,7 10.5,10.5 16.5,2.5" />
             </svg>
@@ -599,11 +599,11 @@ function EmptyState({ icon, title, subtitle }: { icon: ReactNode; title: string;
   return (
     <div className="flex-1 flex items-center justify-center p-6">
       <div className="text-center max-w-sm">
-        <div className="mx-auto w-14 h-14 rounded-2xl bg-white ring-1 ring-inset ring-black/5 flex items-center justify-center text-gray-400 shadow-sm">
+        <div className="mx-auto w-14 h-14 rounded-2xl bg-[#111111] ring-1 ring-inset ring-white/[0.06] flex items-center justify-center text-[#797D83] shadow-sm">
           <span className="w-7 h-7 block">{icon}</span>
         </div>
-        <h3 className="mt-4 font-semibold text-gray-900 tracking-tight">{title}</h3>
-        <p className="text-[13px] text-gray-500 mt-1">{subtitle}</p>
+        <h3 className="mt-4 font-semibold text-[#EDECEA] tracking-tight">{title}</h3>
+        <p className="text-[13px] text-[#797D83] mt-1">{subtitle}</p>
       </div>
     </div>
   )

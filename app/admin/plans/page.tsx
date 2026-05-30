@@ -126,11 +126,11 @@ export default function PlansPage() {
     const payload = await response.json().catch(() => null)
     setDeleteId(null)
     if (response.ok) {
-      showToast('Plan geloescht', 'danger')
+      showToast('Plan gelöscht', 'danger')
     } else if (response.status === 401) {
       showToast('Backend-Login erforderlich.', 'danger')
     } else {
-      showToast((payload && typeof payload.message === 'string' && payload.message) || 'Plan konnte nicht geloescht werden.', 'danger')
+      showToast((payload && typeof payload.message === 'string' && payload.message) || 'Plan konnte nicht gelöscht werden.', 'danger')
     }
     await load()
   }
@@ -139,35 +139,35 @@ export default function PlansPage() {
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Trainingspläne</h1>
-          <p className="text-gray-500 text-sm mt-1"><AnimatedNumber value={plans.length} /> Plaene erstellt</p>
+          <h1 className="text-2xl font-bold text-[#EDECEA]">Trainingspläne</h1>
+          <p className="text-[#797D83] text-sm mt-1"><AnimatedNumber value={plans.length} /> Pläne erstellt</p>
         </div>
         <div className="flex gap-2">
           <Link
             href="/admin/exercises"
-            className="border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
+            className="border border-white/[0.08] hover:bg-[#050504] text-[#EDECEA] text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
           >
             Übungs-Datenbank
           </Link>
           <Link
             href="/admin/plans/new"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2"
+            className="bg-[#A78BFA] hover:bg-[#B79FFB] text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2"
           >
             <span className="text-lg leading-none">+</span> Neuer Plan
           </Link>
         </div>
       </div>
 
-      <form onSubmit={handleAssignPlan} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm mb-6">
-        <h2 className="font-semibold text-gray-900 mb-4">Plan zuweisen</h2>
+      <form onSubmit={handleAssignPlan} className="bg-[#111111] rounded-2xl border border-white/[0.06] p-5 shadow-sm mb-6">
+        <h2 className="font-semibold text-[#EDECEA] mb-4">Plan zuweisen</h2>
 
         {assignError && (
-          <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-4">
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl mb-4">
             {assignError}
           </div>
         )}
         {assignSuccess && (
-          <div className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl mb-4">
+          <div className="bg-[#A78BFA]/10 border border-[#A78BFA]/20 text-[#A78BFA] text-sm px-4 py-3 rounded-xl mb-4">
             {assignSuccess}
           </div>
         )}
@@ -179,7 +179,7 @@ export default function PlansPage() {
               setAssignClientId(e.target.value)
               setAssignSuccess('')
             }}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="px-3 py-2.5 border border-white/[0.08] rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/30 focus:border-transparent"
           >
             <option value="">Client auswaehlen</option>
             {clients.map(client => (
@@ -193,7 +193,7 @@ export default function PlansPage() {
               setAssignPlanId(e.target.value)
               setAssignSuccess('')
             }}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="px-3 py-2.5 border border-white/[0.08] rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/30 focus:border-transparent"
           >
             <option value="">Plan auswaehlen</option>
             {plans.map(plan => (
@@ -205,7 +205,7 @@ export default function PlansPage() {
             type="submit"
             disabled={!assignClientId || !assignPlanId || assigning}
             success={assignDone}
-            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
+            className="px-4 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
           >
             {assigning ? 'Speichern...' : 'Zuweisen'}
           </SuccessButton>
@@ -214,17 +214,17 @@ export default function PlansPage() {
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
         </div>
       ) : error ? (
-        <div className="bg-white rounded-2xl border border-red-100 py-10 text-center">
-          <p className="text-red-600 text-sm">{error}</p>
+        <div className="bg-[#111111] rounded-2xl border border-red-500/20 py-10 text-center">
+          <p className="text-red-400 text-sm">{error}</p>
         </div>
       ) : plans.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 py-16 text-center">
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] py-16 text-center">
           <div className="text-5xl mb-3">📋</div>
-          <p className="text-gray-500 mb-3">Noch keine Pläne erstellt.</p>
-          <Link href="/admin/plans/new" className="text-indigo-600 text-sm hover:underline">
+          <p className="text-[#797D83] mb-3">Noch keine Pläne erstellt.</p>
+          <Link href="/admin/plans/new" className="text-[#A78BFA] text-sm hover:underline">
             Ersten Plan erstellen
           </Link>
         </div>
@@ -233,27 +233,27 @@ export default function PlansPage() {
           {plans.map((plan, index) => {
             const dayCount = (plan as WorkoutPlan & { workout_days: { id: string }[] }).workout_days?.length ?? 0
             return (
-              <StaggerItem key={plan.id} index={index} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
+              <StaggerItem key={plan.id} index={index} className="bg-[#111111] rounded-2xl border border-white/[0.06] shadow-sm hover:shadow-md transition-shadow group">
                 <Link href={`/admin/plans/${plan.id}`} className="block p-5">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-xl mb-4">📋</div>
-                  <h3 className="font-semibold text-gray-900 mb-1">{plan.name}</h3>
-                  {plan.description && <p className="text-sm text-gray-500 mb-3 line-clamp-2">{plan.description}</p>}
-                  <div className="flex items-center gap-3 text-xs text-gray-400">
+                  <div className="w-10 h-10 rounded-xl bg-[#A78BFA]/10 flex items-center justify-center text-xl mb-4">📋</div>
+                  <h3 className="font-semibold text-[#EDECEA] mb-1">{plan.name}</h3>
+                  {plan.description && <p className="text-sm text-[#797D83] mb-3 line-clamp-2">{plan.description}</p>}
+                  <div className="flex items-center gap-3 text-xs text-[#797D83]">
                     <span>{dayCount} Trainingstag{dayCount !== 1 ? 'e' : ''}</span>
                     <span>·</span>
                     <span>{new Date(plan.created_at).toLocaleDateString('de-DE')}</span>
                   </div>
                 </Link>
-                <div className="px-5 pb-4 flex gap-2 border-t border-gray-100 pt-3">
+                <div className="px-5 pb-4 flex gap-2 border-t border-white/[0.06] pt-3">
                   <Link
                     href={`/admin/plans/${plan.id}`}
-                    className="flex-1 text-center text-xs text-indigo-600 hover:text-indigo-700 font-medium py-1.5 rounded-lg hover:bg-indigo-50 transition-colors"
+                    className="flex-1 text-center text-xs text-[#A78BFA] hover:text-[#A78BFA] font-medium py-1.5 rounded-lg hover:bg-[#A78BFA]/10 transition-colors"
                   >
                     Bearbeiten
                   </Link>
                   <button
                     onClick={() => setDeleteId(plan.id)}
-                    className="flex-1 text-xs text-red-500 hover:text-red-600 font-medium py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                    className="flex-1 text-xs text-red-500 hover:text-red-400 font-medium py-1.5 rounded-lg hover:bg-red-500/100/10 transition-colors"
                   >
                     Löschen
                   </button>
@@ -267,13 +267,13 @@ export default function PlansPage() {
       {/* Delete Confirm */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center">
+          <div className="bg-[#111111] rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center">
             <div className="text-4xl mb-3">⚠️</div>
-            <h3 className="font-semibold text-gray-900 mb-2">Plan löschen?</h3>
-            <p className="text-gray-500 text-sm mb-6">Alle Trainingstage und Übungen werden mitgelöscht.</p>
+            <h3 className="font-semibold text-[#EDECEA] mb-2">Plan löschen?</h3>
+            <p className="text-[#797D83] text-sm mb-6">Alle Trainingstage und Übungen werden mitgelöscht.</p>
             <div className="flex gap-3">
-              <button onClick={() => setDeleteId(null)} className="flex-1 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50">Abbrechen</button>
-              <button onClick={handleDelete} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-colors">Löschen</button>
+              <button onClick={() => setDeleteId(null)} className="flex-1 py-2.5 border border-white/[0.08] text-[#EDECEA] text-sm font-medium rounded-xl hover:bg-[#050504]">Abbrechen</button>
+              <button onClick={handleDelete} className="flex-1 py-2.5 bg-red-500/80 hover:bg-red-500 text-white text-sm font-medium rounded-xl transition-colors">Löschen</button>
             </div>
           </div>
         </div>

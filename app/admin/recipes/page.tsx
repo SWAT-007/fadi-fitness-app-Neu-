@@ -109,8 +109,8 @@ function parseOptionalInt(s: string): number | null {
 }
 
 const inputCls =
-  'w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition'
-const labelCls = 'block text-xs font-semibold text-gray-600 mb-1'
+  'w-full px-3 py-2 border border-white/[0.08] rounded-lg text-sm focus:ring-2 focus:ring-[#A78BFA]/30 focus:border-transparent transition'
+const labelCls = 'block text-xs font-semibold text-[#797D83] mb-1'
 
 export default function RecipesPage() {
   const [recipes, setRecipes] = useState<RecipeRow[]>([])
@@ -249,20 +249,20 @@ export default function RecipesPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Rezepte</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{recipes.length} Rezepte in der Datenbank</p>
+          <h1 className="text-2xl font-bold text-[#EDECEA]">Rezepte</h1>
+          <p className="text-sm text-[#797D83] mt-0.5">{recipes.length} Rezepte in der Datenbank</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={openCreate}
-            className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition"
+            className="px-4 py-2 bg-[#A78BFA] text-white text-sm font-semibold rounded-xl hover:bg-[#B79FFB] transition"
           >
             + Neues Rezept
           </button>
           <button
             onClick={handleImport}
             disabled={importing}
-            className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition disabled:opacity-50"
+            className="px-4 py-2 bg-[#A78BFA] text-white text-sm font-semibold rounded-xl hover:bg-[#B79FFB] transition disabled:opacity-50"
           >
             {importing ? 'Importiere...' : 'PDF-Import'}
           </button>
@@ -274,8 +274,8 @@ export default function RecipesPage() {
         <div
           className={`border text-sm px-4 py-3 rounded-xl ${
             importResult.errors.length > 0
-              ? 'bg-orange-50 border-orange-200 text-orange-800'
-              : 'bg-green-50 border-green-200 text-green-800'
+              ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+              : 'bg-[#A78BFA]/10 border-[#A78BFA]/20 text-[#A78BFA]'
           }`}
         >
           <p className="font-semibold mb-0.5">Import abgeschlossen</p>
@@ -301,16 +301,16 @@ export default function RecipesPage() {
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Rezepte suchen..."
-        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+        className="w-full px-4 py-2.5 border border-white/[0.08] rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/30 focus:border-transparent transition"
       />
 
       {/* List */}
       {loading ? (
         <div className="flex justify-center py-10">
-          <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-400 text-sm">
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-10 text-center text-[#797D83] text-sm">
           {recipes.length === 0 ? 'Noch keine Rezepte vorhanden.' : 'Keine Rezepte gefunden.'}
         </div>
       ) : (
@@ -328,32 +328,32 @@ export default function RecipesPage() {
             return (
               <div
                 key={r.id}
-                className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+                className="bg-[#111111] rounded-2xl border border-white/[0.06] shadow-sm overflow-hidden"
               >
                 {/* Card header */}
                 <div
-                  className="flex items-start justify-between gap-3 px-5 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                  className="flex items-start justify-between gap-3 px-5 py-4 cursor-pointer hover:bg-[#050504] transition-colors"
                   onClick={() => setExpanded(expanded === r.id ? null : r.id)}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-gray-900 text-sm leading-snug">{r.name}</p>
+                      <p className="font-semibold text-[#EDECEA] text-sm leading-snug">{r.name}</p>
                       {r.category && (
-                        <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-medium">
+                        <span className="text-xs bg-[#A78BFA]/10 text-[#A78BFA] px-2 py-0.5 rounded-full font-medium">
                           {r.category}
                         </span>
                       )}
                       {r.servings != null && (
-                        <span className="text-xs text-gray-400">{r.servings} Port.</span>
+                        <span className="text-xs text-[#797D83]">{r.servings} Port.</span>
                       )}
                     </div>
                     {r.description && (
-                      <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[340px]">
+                      <p className="text-xs text-[#797D83] mt-0.5 truncate max-w-[340px]">
                         {r.description}
                       </p>
                     )}
                     {hasMacros && (
-                      <p className="text-xs text-gray-400 mt-1">
+                      <p className="text-xs text-[#797D83] mt-1">
                         {[
                           r.totalCalories != null && `${r.totalCalories} kcal`,
                           r.proteinG != null && `P: ${r.proteinG}g`,
@@ -364,21 +364,21 @@ export default function RecipesPage() {
                           .join(' · ')}
                       </p>
                     )}
-                    {timeInfo && <p className="text-xs text-gray-400 mt-0.5">{timeInfo}</p>}
+                    {timeInfo && <p className="text-xs text-[#797D83] mt-0.5">{timeInfo}</p>}
                     {r.sourcePdf && (
-                      <p className="text-xs text-indigo-400 mt-0.5 truncate max-w-[340px]">
+                      <p className="text-xs text-[#A78BFA]/70 mt-0.5 truncate max-w-[340px]">
                         PDF: {r.sourcePdf}
                       </p>
                     )}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 pt-0.5">
-                    <span className="text-gray-400 text-lg">{expanded === r.id ? '▲' : '▼'}</span>
+                    <span className="text-[#797D83] text-lg">{expanded === r.id ? '▲' : '▼'}</span>
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
                         openEdit(r)
                       }}
-                      className="text-xs text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded-lg transition-colors"
+                      className="text-xs text-[#A78BFA] hover:text-[#A78BFA] hover:bg-[#A78BFA]/10 px-2 py-1 rounded-lg transition-colors"
                     >
                       Bearbeiten
                     </button>
@@ -388,7 +388,7 @@ export default function RecipesPage() {
                         handleDelete(r.id)
                       }}
                       disabled={deleting === r.id}
-                      className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors disabled:opacity-40"
+                      className="text-xs text-red-500 hover:text-red-400 hover:bg-red-500/100/10 px-2 py-1 rounded-lg transition-colors disabled:opacity-40"
                     >
                       {deleting === r.id ? '...' : 'Löschen'}
                     </button>
@@ -397,11 +397,11 @@ export default function RecipesPage() {
 
                 {/* Expanded details */}
                 {expanded === r.id && (
-                  <div className="border-t border-gray-100 px-5 py-4 space-y-4 text-sm">
+                  <div className="border-t border-white/[0.06] px-5 py-4 space-y-4 text-sm">
                     {r.instructions && (
                       <div>
-                        <p className="font-semibold text-gray-700 mb-1">Zubereitung</p>
-                        <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">
+                        <p className="font-semibold text-[#EDECEA] mb-1">Zubereitung</p>
+                        <p className="text-[#797D83] whitespace-pre-wrap leading-relaxed">
                           {r.instructions}
                         </p>
                       </div>
@@ -409,8 +409,8 @@ export default function RecipesPage() {
                     {Array.isArray(r.ingredients) &&
                       (r.ingredients as unknown[]).length > 0 && (
                         <div>
-                          <p className="font-semibold text-gray-700 mb-1">Zutaten</p>
-                          <ul className="list-disc list-inside text-gray-600 space-y-0.5">
+                          <p className="font-semibold text-[#EDECEA] mb-1">Zutaten</p>
+                          <ul className="list-disc list-inside text-[#797D83] space-y-0.5">
                             {(r.ingredients as { name?: string }[]).map((ing, i) => (
                               <li key={i}>
                                 {typeof ing === 'string' ? ing : (ing?.name ?? '')}
@@ -420,7 +420,7 @@ export default function RecipesPage() {
                         </div>
                       )}
                     {r.imageUrl && (
-                      <p className="text-xs text-gray-400">Bild: {r.imageUrl}</p>
+                      <p className="text-xs text-[#797D83]">Bild: {r.imageUrl}</p>
                     )}
                   </div>
                 )}
@@ -433,15 +433,15 @@ export default function RecipesPage() {
       {/* Create / Edit modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-[#111111] rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             {/* Modal header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
-              <h2 className="text-lg font-bold text-gray-900">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] sticky top-0 bg-[#111111] z-10">
+              <h2 className="text-lg font-bold text-[#EDECEA]">
                 {editingId ? 'Rezept bearbeiten' : 'Neues Rezept'}
               </h2>
               <button
                 onClick={closeModal}
-                className="text-gray-400 hover:text-gray-700 text-xl leading-none"
+                className="text-[#797D83] hover:text-[#EDECEA] text-xl leading-none"
               >
                 ✕
               </button>
@@ -618,17 +618,17 @@ export default function RecipesPage() {
             </div>
 
             {/* Modal footer */}
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white">
+            <div className="flex justify-end gap-3 px-6 py-4 border-t border-white/[0.06] sticky bottom-0 bg-[#111111]">
               <button
                 onClick={closeModal}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition"
+                className="px-4 py-2 text-sm text-[#797D83] hover:text-[#EDECEA] transition"
               >
                 Abbrechen
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={saving}
-                className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition disabled:opacity-50"
+                className="px-5 py-2 bg-[#A78BFA] text-white text-sm font-semibold rounded-xl hover:bg-[#B79FFB] transition disabled:opacity-50"
               >
                 {saving ? 'Speichern...' : editingId ? 'Aktualisieren' : 'Erstellen'}
               </button>

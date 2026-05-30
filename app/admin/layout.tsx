@@ -50,8 +50,8 @@ type NavBadgeKey = 'messages' | 'requests'
 const navItems: { href: string; label: string; icon: ReactNode; badgeKey?: NavBadgeKey }[] = [
   { href: '/admin', label: 'Dashboard', icon: Icon.dashboard },
   { href: '/admin/clients', label: 'Kunden', icon: Icon.users },
-  { href: '/admin/plans', label: 'Trainingsplaene', icon: Icon.plans },
-  { href: '/admin/nutrition', label: 'Ernaehrung', icon: Icon.nutrition },
+  { href: '/admin/plans', label: 'Trainingspläne', icon: Icon.plans },
+  { href: '/admin/nutrition', label: 'Ernährung', icon: Icon.nutrition },
   { href: '/admin/recipes', label: 'Rezepte', icon: Icon.recipes },
   { href: '/admin/requests', label: 'Anfragen', icon: Icon.requests, badgeKey: 'requests' },
   { href: '/admin/messages', label: 'Nachrichten', icon: Icon.messages, badgeKey: 'messages' },
@@ -171,7 +171,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <aside
           className={`
           fixed inset-y-0 left-0 z-30 w-[260px] flex flex-col overflow-visible
-          bg-[#0b0c0f] text-gray-300
+          bg-[#0b0c0f] text-white/50
           border-r border-white/[0.06]
           transition-transform duration-300
           lg:translate-x-0 lg:static lg:z-auto
@@ -185,7 +185,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <img src="/logo.png" alt="MilaCoach" className="w-9 h-9 rounded-lg object-contain ring-1 ring-white/10" />
               <div className="leading-tight">
                 <div className="text-white font-semibold text-[15px] tracking-tight">MilaCoach</div>
-                <div className="text-gray-500 text-[11px] uppercase tracking-[0.12em] mt-0.5">Trainer</div>
+                <div className="text-[#797D83] text-[11px] uppercase tracking-[0.12em] mt-0.5">Trainer</div>
               </div>
             </div>
           </div>
@@ -204,13 +204,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   className={`press group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13.5px] font-medium ${
                     active
                       ? 'text-white bg-white/[0.06]'
-                      : 'text-gray-400 hover:text-white hover:bg-white/[0.04]'
+                      : 'text-[#797D83] hover:text-white hover:bg-white/[0.04]'
                   }`}
                 >
                   {active && (
                     <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-[#A78BFA]" />
                   )}
-                  <span className={`w-[18px] h-[18px] flex items-center justify-center ${active ? 'text-[#A78BFA]' : 'text-gray-500 group-hover:text-gray-300'}`}>
+                  <span className={`w-[18px] h-[18px] flex items-center justify-center ${active ? 'text-[#A78BFA]' : 'text-[#797D83] group-hover:text-white/50'}`}>
                     {item.icon}
                   </span>
                   <span className="flex-1 truncate">{item.label}</span>
@@ -231,18 +231,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-white text-[13px] font-medium truncate">{profile?.full_name}</div>
-                <div className="text-gray-500 text-[11px] truncate">{profile?.email}</div>
+                <div className="text-[#797D83] text-[11px] truncate">{profile?.email}</div>
               </div>
             </div>
             <div className="mt-2 mb-1 px-2 py-2 rounded-lg bg-white/[0.02] border border-white/[0.06] flex items-center justify-between overflow-visible">
-              <span className="text-[12px] text-gray-400">Benachrichtigungen</span>
+              <span className="text-[12px] text-[#797D83]">Benachrichtigungen</span>
               {profile && <TrainerNotificationBell trainerId={profile.id} />}
             </div>
             <button
               onClick={handleLogout}
-              className="press w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-gray-400 hover:text-white hover:bg-white/[0.04]"
+              className="press w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-[#797D83] hover:text-white hover:bg-white/[0.04]"
             >
-              <span className="w-[18px] h-[18px] flex items-center justify-center text-gray-500">{Icon.logout}</span>
+              <span className="w-[18px] h-[18px] flex items-center justify-center text-[#797D83]">{Icon.logout}</span>
               Abmelden
             </button>
           </div>
@@ -252,7 +252,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <header className="lg:hidden sticky top-0 z-10 bg-[#0b0c0f]/95 backdrop-blur-md border-b border-white/[0.06] px-4 py-3 flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="press p-1.5 rounded-lg text-gray-300 hover:bg-white/[0.06]"
+              className="press p-1.5 rounded-lg text-white/50 hover:bg-white/[0.06]"
             >
               <span className="w-5 h-5 block">{Icon.menu}</span>
             </button>
