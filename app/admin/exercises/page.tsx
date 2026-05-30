@@ -25,30 +25,13 @@ type BackendExerciseLibraryItem = {
 const emptyForm = (): LibForm => ({ name: '', muscle_group: '', equipment: '', image_url: '' })
 
 const MUSCLE_GROUPS = [
-  'Brust',
-  'Rücken',
-  'Schultern',
-  'Bizeps',
-  'Trizeps',
-  'Beine',
-  'Gesäß',
-  'Bauch',
-  'Waden',
-  'Unterarme',
-  'Ganzkörper',
-  'Cardio',
+  'Brust', 'Rücken', 'Schultern', 'Bizeps', 'Trizeps', 'Beine',
+  'Gesäß', 'Bauch', 'Waden', 'Unterarme', 'Ganzkörper', 'Cardio',
 ] as const
 
 const EQUIPMENT = [
-  'Langhantel',
-  'Kurzhantel',
-  'Maschine',
-  'Kabelzug',
-  'Körpergewicht',
-  'Klimmzugstange',
-  'Kettlebell',
-  'Bank',
-  'Sonstiges',
+  'Langhantel', 'Kurzhantel', 'Maschine', 'Kabelzug', 'Körpergewicht',
+  'Klimmzugstange', 'Kettlebell', 'Bank', 'Sonstiges',
 ] as const
 
 const mapBackendItem = (row: BackendExerciseLibraryItem): ExerciseLibraryItem => ({
@@ -60,6 +43,12 @@ const mapBackendItem = (row: BackendExerciseLibraryItem): ExerciseLibraryItem =>
   created_by: null,
   created_at: row.createdAt,
 })
+
+const inputCls =
+  'w-full px-3 py-2.5 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-[#EDECEA] placeholder:text-[#797D83] focus:ring-2 focus:ring-[#A78BFA]/40 focus:border-[#A78BFA]/30 focus:outline-none transition'
+const selectCls =
+  'w-full px-3 py-2.5 bg-[#0b0c0f] border border-white/[0.08] rounded-xl text-sm text-[#EDECEA] focus:ring-2 focus:ring-[#A78BFA]/40 focus:border-[#A78BFA]/30 focus:outline-none transition'
+const labelCls = 'block text-xs font-medium text-[#797D83] mb-1.5'
 
 export default function ExerciseLibraryPage() {
   const [items, setItems] = useState<ExerciseLibraryItem[]>([])
@@ -79,18 +68,16 @@ export default function ExerciseLibraryPage() {
     try {
       const response = await fetch('/api/backend/exercises/library', { cache: 'no-store' })
       const payload = await response.json().catch(() => null)
-
       if (!response.ok) {
-        if (response.status === 401) {
-          setError('Backend-Login erforderlich.')
-        } else {
-          setError((payload && typeof payload.message === 'string' && payload.message) || 'Übungen konnten nicht geladen werden.')
-        }
+        setError(
+          response.status === 401
+            ? 'Backend-Login erforderlich.'
+            : (payload && typeof payload.message === 'string' && payload.message) || 'Übungen konnten nicht geladen werden.',
+        )
         setItems([])
         setLoading(false)
         return
       }
-
       const rows: BackendExerciseLibraryItem[] =
         payload && Array.isArray(payload.exercises) ? payload.exercises : []
       setItems(rows.map(mapBackendItem))
@@ -102,9 +89,7 @@ export default function ExerciseLibraryPage() {
     }
   }, [])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useEffect(() => { void load() }, [load])
 
   const filtered = items.filter((i) => {
     const matchSearch = i.name.toLowerCase().includes(search.toLowerCase())
@@ -112,25 +97,11 @@ export default function ExerciseLibraryPage() {
     return matchSearch && matchGroup
   })
 
-  const resetForm = () => {
-    setForm(emptyForm())
-    setError(null)
-  }
-
-  const openAdd = () => {
-    setEditItem(null)
-    resetForm()
-    setShowForm(true)
-  }
-
+  const resetForm = () => { setForm(emptyForm()); setError(null) }
+  const openAdd = () => { setEditItem(null); resetForm(); setShowForm(true) }
   const openEdit = (item: ExerciseLibraryItem) => {
     setEditItem(item)
-    setForm({
-      name: item.name,
-      muscle_group: item.muscle_group ?? '',
-      equipment: item.equipment ?? '',
-      image_url: item.image_url ?? '',
-    })
+    setForm({ name: item.name, muscle_group: item.muscle_group ?? '', equipment: item.equipment ?? '', image_url: item.image_url ?? '' })
     setError(null)
     setShowForm(true)
   }
@@ -142,13 +113,15 @@ export default function ExerciseLibraryPage() {
     const fd = new FormData()
     fd.append('image', file)
     try {
-      const response = await fetch(`/api/backend/exercises/library/${id}/image`, {
-        method: 'POST',
-        body: fd,
-      })
-      const payload = await response.json().catch(() => null) as { exercise?: BackendExerciseLibraryItem; message?: string } | null
+      const response = await fetch(`/api/backend/exercises/library/${id}/image`, { method: 'POST', body: fd })
+      const payload = await response.json().catch(() => null) as {
+        exercise?: BackendExerciseLibraryItem
+        message?: string
+        errorId?: string
+      } | null
       if (!response.ok) {
-        setError(payload?.message ?? 'Bild-Upload fehlgeschlagen.')
+        const msg = payload?.message ?? 'Bild-Upload fehlgeschlagen.'
+        setError(payload?.errorId ? `${msg} [${payload.errorId}]` : msg)
         return
       }
       if (payload?.exercise) {
@@ -166,13 +139,9 @@ export default function ExerciseLibraryPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.name.trim()) {
-      setError('Name ist erforderlich.')
-      return
-    }
+    if (!form.name.trim()) { setError('Name ist erforderlich.'); return }
     setSaving(true)
     setError(null)
-
     try {
       const response = await fetch(
         editItem ? `/api/backend/exercises/library/${editItem.id}` : '/api/backend/exercises/library',
@@ -187,18 +156,16 @@ export default function ExerciseLibraryPage() {
           }),
         },
       )
-
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
-        if (response.status === 401) {
-          setError('Backend-Login erforderlich.')
-        } else {
-          setError((payload && typeof payload.message === 'string' && payload.message) || 'Speichern fehlgeschlagen.')
-        }
+        setError(
+          response.status === 401
+            ? 'Backend-Login erforderlich.'
+            : (payload && typeof payload.message === 'string' && payload.message) || 'Speichern fehlgeschlagen.',
+        )
         setSaving(false)
         return
       }
-
       setShowForm(false)
       await load()
     } catch {
@@ -210,9 +177,7 @@ export default function ExerciseLibraryPage() {
 
   const handleDelete = async (item: ExerciseLibraryItem) => {
     if (!confirm(`"${item.name}" wirklich löschen?`)) return
-    const response = await fetch(`/api/backend/exercises/library/${item.id}`, {
-      method: 'DELETE',
-    })
+    const response = await fetch(`/api/backend/exercises/library/${item.id}`, { method: 'DELETE' })
     const payload = await response.json().catch(() => null)
     if (!response.ok) {
       alert((payload && typeof payload.message === 'string' && payload.message) || 'Löschen fehlgeschlagen.')
@@ -224,14 +189,17 @@ export default function ExerciseLibraryPage() {
   if (loading) {
     return (
       <div className="p-8 flex justify-center">
-        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <Link href="/admin/plans" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-5">
+      <Link
+        href="/admin/plans"
+        className="flex items-center gap-1.5 text-sm text-[#797D83] hover:text-[#EDECEA] mb-5 transition-colors"
+      >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
@@ -240,88 +208,80 @@ export default function ExerciseLibraryPage() {
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Übungs-Datenbank</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{items.length} Übungen · Name + Bild</p>
+          <h1 className="text-2xl font-bold text-[#EDECEA]">Übungs-Datenbank</h1>
+          <p className="text-sm text-[#797D83] mt-0.5">{items.length} Übungen · Name + Bild</p>
         </div>
         <button
           onClick={openAdd}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
+          className="flex items-center gap-2 bg-[#A78BFA] hover:bg-[#B79FFB] text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
         >
           + Übung hinzufügen
         </button>
       </div>
 
       {showForm && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-5">
-          <h2 className="font-semibold text-gray-900 mb-4">
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-6 mb-5">
+          <h2 className="font-semibold text-[#EDECEA] mb-4">
             {editItem ? `"${editItem.name}" bearbeiten` : 'Neue Übung'}
           </h2>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid sm:grid-cols-3 gap-4">
               <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Name *</label>
+                <label className={labelCls}>Name *</label>
                 <input
                   autoFocus
                   value={form.name}
                   onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                   placeholder="z.B. Bankdrücken"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className={inputCls}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Muskelgruppe</label>
+                <label className={labelCls}>Muskelgruppe</label>
                 <select
                   value={form.muscle_group}
                   onChange={(e) => setForm((p) => ({ ...p, muscle_group: e.target.value }))}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                  className={selectCls}
                 >
                   <option value="">— Auswählen —</option>
-                  {MUSCLE_GROUPS.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
-                  ))}
+                  {MUSCLE_GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Equipment</label>
+              <label className={labelCls}>Equipment</label>
               <select
                 value={form.equipment}
                 onChange={(e) => setForm((p) => ({ ...p, equipment: e.target.value }))}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                className={selectCls}
               >
                 <option value="">— Auswählen —</option>
-                {EQUIPMENT.map((eq) => (
-                  <option key={eq} value={eq}>
-                    {eq}
-                  </option>
-                ))}
+                {EQUIPMENT.map((eq) => <option key={eq} value={eq}>{eq}</option>)}
               </select>
             </div>
 
             {editItem && (
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Bild hochladen</label>
+                <label className={labelCls}>Bild hochladen</label>
                 <div className="flex items-center gap-3">
-                  <div className="w-16 h-16 rounded-xl bg-gray-100 border border-gray-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                  <div className="w-16 h-16 rounded-xl bg-white/[0.04] border border-white/[0.06] overflow-hidden flex-shrink-0 flex items-center justify-center">
                     {resolveImageUrl(editItem.image_url) ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={resolveImageUrl(editItem.image_url)!} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <span className="text-gray-300 text-xs">—</span>
+                      <span className="text-[#797D83] text-xs">—</span>
                     )}
                   </div>
-                  <label className="flex flex-col gap-1 cursor-pointer">
+                  <label className="flex flex-col gap-1.5 cursor-pointer">
                     <span className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl border transition-colors select-none ${
                       imageUploading === editItem.id
-                        ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-wait'
-                        : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 cursor-pointer'
+                        ? 'bg-white/[0.03] border-white/[0.06] text-[#797D83] cursor-wait'
+                        : 'bg-white/[0.06] border-white/[0.08] text-[#EDECEA] hover:bg-white/[0.10] cursor-pointer'
                     }`}>
                       {imageUploading === editItem.id ? (
                         <>
-                          <span className="w-3 h-3 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
+                          <span className="w-3 h-3 border-2 border-[#797D83] border-t-[#A78BFA] rounded-full animate-spin" />
                           Wird hochgeladen…
                         </>
                       ) : (
@@ -335,37 +295,39 @@ export default function ExerciseLibraryPage() {
                       disabled={imageUploading === editItem.id}
                       onChange={(e) => { void handleImageUpload(editItem.id, e.target.files?.[0] ?? null) }}
                     />
-                    <span className="text-xs text-gray-400">Max. 10 MB · JPG, PNG, WebP, HEIC</span>
+                    <span className="text-xs text-[#797D83]">Max. 10 MB · JPG, PNG, WebP, HEIC</span>
                   </label>
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Bild-URL</label>
+              <label className={labelCls}>Bild-URL</label>
               <input
                 value={form.image_url}
                 onChange={(e) => setForm((p) => ({ ...p, image_url: e.target.value }))}
                 placeholder="https://... oder /uploads/exercises/..."
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className={inputCls}
               />
-              <p className="text-xs text-gray-500 mt-1">Oder URL manuell eingeben / korrigieren.</p>
+              <p className="text-xs text-[#797D83] mt-1">Oder URL manuell eingeben / korrigieren.</p>
             </div>
 
-            {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">⚠️ {error}</p>}
+            {error && (
+              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl">⚠ {error}</p>
+            )}
 
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="flex-1 py-2.5 border border-gray-200 text-gray-600 text-sm rounded-xl hover:bg-gray-50"
+                className="flex-1 py-2.5 border border-white/[0.08] text-[#797D83] text-sm rounded-xl hover:bg-white/[0.04] transition-colors"
               >
                 Abbrechen
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl disabled:opacity-60 transition-colors"
+                className="flex-1 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-white text-sm font-medium rounded-xl disabled:opacity-60 transition-colors"
               >
                 {saving ? 'Speichern…' : editItem ? 'Aktualisieren' : 'Hinzufügen'}
               </button>
@@ -375,7 +337,7 @@ export default function ExerciseLibraryPage() {
       )}
 
       {error && !showForm && (
-        <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-4">⚠️ {error}</p>
+        <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl mb-4">⚠ {error}</p>
       )}
 
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
@@ -383,53 +345,49 @@ export default function ExerciseLibraryPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Suchen…"
-          className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className="flex-1 px-4 py-2.5 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-[#EDECEA] placeholder:text-[#797D83] focus:ring-2 focus:ring-[#A78BFA]/40 focus:border-[#A78BFA]/30 focus:outline-none transition"
         />
         <select
           value={filterGroup}
           onChange={(e) => setFilterGroup(e.target.value)}
-          className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className="px-3 py-2.5 bg-[#0b0c0f] border border-white/[0.08] rounded-xl text-sm text-[#EDECEA] focus:ring-2 focus:ring-[#A78BFA]/40 focus:border-[#A78BFA]/30 focus:outline-none transition"
         >
           <option value="">Alle Muskelgruppen</option>
-          {MUSCLE_GROUPS.map((g) => (
-            <option key={g} value={g}>
-              {g}
-            </option>
-          ))}
+          {MUSCLE_GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
         </select>
       </div>
 
       {filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 py-16 text-center text-gray-400 text-sm">
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] py-16 text-center text-[#797D83] text-sm">
           {items.length === 0 ? 'Noch keine Übungen in der Datenbank.' : 'Keine Treffer.'}
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {filtered.map((item) => (
-            <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-              <div className="aspect-square bg-gray-100 overflow-hidden">
+            <div key={item.id} className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden flex flex-col">
+              <div className="aspect-square bg-white/[0.04] overflow-hidden">
                 {resolveImageUrl(item.image_url) ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={resolveImageUrl(item.image_url)!} alt={item.name} className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-300 text-xs">Kein Bild</div>
+                  <div className="w-full h-full flex items-center justify-center text-[#797D83] text-xs">Kein Bild</div>
                 )}
               </div>
               <div className="p-3 flex-1 flex flex-col">
-                <div className="font-semibold text-gray-900 text-sm leading-tight mb-1 line-clamp-2">{item.name}</div>
-                <div className="text-xs text-gray-400 mb-3">
+                <div className="font-semibold text-[#EDECEA] text-sm leading-tight mb-1 line-clamp-2">{item.name}</div>
+                <div className="text-xs text-[#797D83] mb-3">
                   {[item.muscle_group, item.equipment].filter(Boolean).join(' · ') || '—'}
                 </div>
                 <div className="mt-auto flex gap-1 justify-end">
                   <button
                     onClick={() => openEdit(item)}
-                    className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+                    className="px-2 py-1 text-xs text-[#797D83] hover:text-[#EDECEA] hover:bg-white/[0.06] rounded-lg transition-colors"
                   >
                     Bearbeiten
                   </button>
                   <button
                     onClick={() => handleDelete(item)}
-                    className="px-2 py-1 text-xs text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                    className="px-2 py-1 text-xs text-red-400/70 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                   >
                     Löschen
                   </button>
