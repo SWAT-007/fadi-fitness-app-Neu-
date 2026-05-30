@@ -122,17 +122,17 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
       <button
         onClick={() => setSectionOpen(o => !o)}
-        className="w-full text-left flex items-center justify-between gap-2 px-5 py-4 hover:bg-gray-50/60 transition-colors"
+        className="w-full text-left flex items-center justify-between gap-2 px-5 py-4 hover:bg-white/[0.03] transition-colors"
       >
         <div>
-          <h2 className="font-bold text-gray-900">Vorherige Mahlzeiten</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{history.length} Einträge</p>
+          <h2 className="font-bold text-[#EDECEA]">Vorherige Mahlzeiten</h2>
+          <p className="text-xs text-[#797D83] mt-0.5">{history.length} Einträge</p>
         </div>
         <svg
-          className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform duration-200 ${sectionOpen ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-[#797D83] flex-shrink-0 transition-transform duration-200 ${sectionOpen ? 'rotate-180' : ''}`}
           fill="none" stroke="currentColor" viewBox="0 0 24 24"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -140,11 +140,11 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
       </button>
 
       <Collapsible open={sectionOpen}>
-        <div className="px-4 pb-4 space-y-4 border-t border-gray-100">
+        <div className="px-4 pb-4 space-y-4 border-t border-white/[0.04]">
       {grouped.map(group => (
         <div key={group.label} className="space-y-3 pt-3">
           {/* Date label */}
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">
+          <p className="text-xs font-semibold text-[#797D83] uppercase tracking-wide px-1">
             {group.label}
           </p>
 
@@ -157,7 +157,7 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
             return (
               <div
                 key={entry.id}
-                className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+                className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden"
               >
                 {/* Card header — always visible, click to expand/collapse */}
                 <div
@@ -165,16 +165,16 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
                   tabIndex={0}
                   onClick={() => { if (!isConfirm) toggle(entry.id) }}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggle(entry.id) }}
-                  className="w-full text-left flex items-center justify-between gap-3 px-5 py-3 hover:bg-gray-50/60 transition-colors cursor-pointer"
+                  className="w-full text-left flex items-center justify-between gap-3 px-5 py-3 hover:bg-white/[0.03] transition-colors cursor-pointer"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold text-gray-900 text-sm leading-tight truncate">
+                      <p className="font-semibold text-[#EDECEA] text-sm leading-tight truncate">
                         {entry.meal_name}
                       </p>
-                      <span className="text-[10px] text-gray-400 flex-shrink-0 mt-0.5">{formatEntryTime(entry.logged_at)}</span>
+                      <span className="text-[10px] text-[#797D83] flex-shrink-0 mt-0.5">{formatEntryTime(entry.logged_at)}</span>
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-1 tabular-nums truncate">
+                    <p className="text-[11px] text-[#797D83] mt-1 tabular-nums truncate">
                       {Math.round(entry.total_calories ?? summary.calories)} kcal · {Math.round(summary.protein)}P · {Math.round(summary.carbs)}K · {Math.round(summary.fat)}F
                     </p>
                   </div>
@@ -184,7 +184,7 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
                     <button
                       onClick={e => { e.stopPropagation(); onReuse(entry) }}
                       disabled={!!reusingId || isDeleting}
-                      className="text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1.5 rounded-lg transition-colors hover:bg-green-100 disabled:opacity-40 whitespace-nowrap"
+                      className="text-xs font-semibold text-[#A78BFA] bg-[#A78BFA]/10 border border-[#A78BFA]/20 px-2.5 py-1.5 rounded-lg transition-colors hover:bg-[#A78BFA]/15 disabled:opacity-40 whitespace-nowrap"
                     >
                       {reusingId === entry.id ? '…' : '↺ Wieder verwenden'}
                     </button>
@@ -195,16 +195,16 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
                         className="flex items-center gap-1"
                         onClick={e => e.stopPropagation()}
                       >
-                        <span className="text-xs text-gray-500 whitespace-nowrap">Löschen?</span>
+                        <span className="text-xs text-[#797D83] whitespace-nowrap">Löschen?</span>
                         <button
                           onClick={() => handleDelete(entry.id)}
-                          className="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-2 py-1 rounded-lg transition-colors"
+                          className="text-xs font-semibold text-white bg-red-500/100 hover:bg-red-600 px-2 py-1 rounded-lg transition-colors"
                         >
                           Ja
                         </button>
                         <button
                           onClick={() => setConfirmId(null)}
-                          className="text-xs font-semibold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded-lg transition-colors"
+                          className="text-xs font-semibold text-[#797D83] hover:text-[#EDECEA]/90 bg-white/[0.06] hover:bg-white/[0.08] px-2 py-1 rounded-lg transition-colors"
                         >
                           Nein
                         </button>
@@ -214,7 +214,7 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
                         onClick={e => { e.stopPropagation(); setConfirmId(entry.id) }}
                         disabled={isDeleting}
                         title="Löschen"
-                        className="p-1.5 text-gray-300 hover:text-red-400 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                        className="p-1.5 text-[#797D83]/60 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors disabled:opacity-40"
                       >
                         {isDeleting ? (
                           <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -232,7 +232,7 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
 
                     {/* Expand chevron */}
                     <svg
-                      className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                      className={`w-4 h-4 text-[#797D83] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
                       fill="none" stroke="currentColor" viewBox="0 0 24 24"
                     >
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -242,16 +242,16 @@ export default function MealHistorySection({ history, reusingId, onReuse, onDele
 
                 {/* Collapsible ingredient rows */}
                 <Collapsible open={isOpen}>
-                  <ul className="divide-y divide-gray-100 border-t border-gray-100">
+                  <ul className="divide-y divide-white/[0.04] border-t border-white/[0.04]">
                     {entry.ingredients.map((ing, i) => (
                       <li key={i} className="flex items-center justify-between gap-4 px-5 py-2.5">
-                        <span className="text-sm text-gray-800 truncate">{ing.name}</span>
+                        <span className="text-sm text-[#EDECEA] truncate">{ing.name}</span>
                         <div className="flex items-center gap-2.5 text-xs flex-shrink-0">
-                          <span className="font-semibold text-gray-600 tabular-nums">{ing.grams}g</span>
-                          <span className="text-gray-400 tabular-nums">{ing.calories} kcal</span>
-                          <span className="text-blue-500  tabular-nums">{ing.protein}P</span>
-                          <span className="text-green-500 tabular-nums">{ing.carbs}K</span>
-                          <span className="text-yellow-500 tabular-nums">{ing.fat}F</span>
+                          <span className="font-semibold text-[#797D83] tabular-nums">{ing.grams}g</span>
+                          <span className="text-[#797D83] tabular-nums">{ing.calories} kcal</span>
+                          <span className="text-blue-400  tabular-nums">{ing.protein}P</span>
+                          <span className="text-[#A78BFA]/80 tabular-nums">{ing.carbs}K</span>
+                          <span className="text-amber-400 tabular-nums">{ing.fat}F</span>
                         </div>
                       </li>
                     ))}

@@ -146,14 +146,14 @@ export default function MealDrinks({ mealIndex, logs, onAdd, onDelete }: Props) 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="border-t border-gray-100">
+    <div className="border-t border-white/[0.04]">
 
       {/* Toggle row — always visible */}
       <div className="flex items-center justify-between px-5 py-3">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-600">🥤 Getränke</span>
+          <span className="text-sm font-medium text-[#797D83]">🥤 Getränke</span>
           {totalCal > 0 && (
-            <span className="text-xs text-gray-400 tabular-nums">+{totalCal} kcal</span>
+            <span className="text-xs text-[#797D83] tabular-nums">+{totalCal} kcal</span>
           )}
         </div>
         <button
@@ -161,7 +161,7 @@ export default function MealDrinks({ mealIndex, logs, onAdd, onDelete }: Props) 
           role="switch"
           aria-checked={enabled}
           className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors duration-200 ${
-            enabled ? 'bg-green-500' : 'bg-gray-200'
+            enabled ? 'bg-[#A78BFA]/100' : 'bg-white/[0.15]'
           }`}
         >
           <span
@@ -181,7 +181,7 @@ export default function MealDrinks({ mealIndex, logs, onAdd, onDelete }: Props) 
             <select
               value={preset}
               onChange={e => handlePresetChange(e.target.value)}
-              className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+              className="flex-1 min-w-0 px-3 py-2 border border-white/[0.1] bg-white/[0.05] rounded-xl text-[13px] text-[#EDECEA] placeholder-[#797D83]/60 bg-white focus:border-[#A78BFA]/40 focus:outline-none transition"
             >
               {PRESETS.map(p => (
                 <option key={p.name} value={p.name}>{p.name}</option>
@@ -195,7 +195,7 @@ export default function MealDrinks({ mealIndex, logs, onAdd, onDelete }: Props) 
                 value={customName}
                 onChange={e => setCustomName(e.target.value)}
                 placeholder="Getränkname"
-                className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+                className="flex-1 min-w-0 px-3 py-2 border border-white/[0.1] bg-white/[0.05] rounded-xl text-[13px] text-[#EDECEA] placeholder-[#797D83]/60 focus:border-[#A78BFA]/40 focus:outline-none transition"
               />
             )}
           </div>
@@ -210,9 +210,9 @@ export default function MealDrinks({ mealIndex, logs, onAdd, onDelete }: Props) 
                 onChange={e => handleAmountChange(e.target.value)}
                 min="0"
                 placeholder="250"
-                className="w-[76px] px-2 py-2 pr-6 border border-gray-200 rounded-xl text-sm text-right focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+                className="w-[76px] px-2 py-2 pr-6 border border-white/[0.1] rounded-xl text-sm text-right focus:border-[#A78BFA]/40 focus:outline-none transition"
               />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">ml</span>
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[#797D83] pointer-events-none">ml</span>
             </div>
 
             {/* kcal input — read-only for presets, editable for custom */}
@@ -224,18 +224,18 @@ export default function MealDrinks({ mealIndex, logs, onAdd, onDelete }: Props) 
                 min="0"
                 placeholder="0"
                 readOnly={!isCustom}
-                className={`w-[76px] px-2 py-2 pr-8 border border-gray-200 rounded-xl text-sm text-right focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
-                  !isCustom ? 'bg-gray-50 text-gray-500 cursor-default' : ''
+                className={`w-[76px] px-2 py-2 pr-8 border border-white/[0.1] rounded-xl text-sm text-right focus:border-[#A78BFA]/40 focus:outline-none transition ${
+                  !isCustom ? 'bg-white/[0.03] text-[#797D83] cursor-default' : ''
                 }`}
               />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">kcal</span>
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[#797D83] pointer-events-none">kcal</span>
             </div>
 
             {/* Add button */}
             <button
               onClick={handleAdd}
               disabled={saving || (isCustom && !customName.trim()) || !(parseFloat(amount) > 0)}
-              className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors"
+              className="flex-1 px-3 py-2 bg-[#A78BFA] hover:bg-[#B79FFB] disabled:opacity-40 text-[#050504] text-sm font-semibold rounded-xl transition-colors"
             >
               {saving ? '…' : 'Hinzufügen'}
             </button>
@@ -243,18 +243,18 @@ export default function MealDrinks({ mealIndex, logs, onAdd, onDelete }: Props) 
 
           {/* Drink list */}
           {mealLogs.length > 0 && (
-            <ul className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+            <ul className="divide-y divide-white/[0.04] border border-white/[0.06] rounded-xl overflow-hidden">
               {mealLogs.map(log => (
                 <li key={log.id} className="flex items-center gap-2 px-4 py-2">
                   <span className="text-sm leading-none flex-shrink-0">🥤</span>
-                  <span className="text-xs text-gray-700 flex-1 truncate">{log.drink_name}</span>
-                  <span className="text-xs text-gray-400 tabular-nums flex-shrink-0">
+                  <span className="text-xs text-[#EDECEA]/90 flex-1 truncate">{log.drink_name}</span>
+                  <span className="text-xs text-[#797D83] tabular-nums flex-shrink-0">
                     {log.calories ?? 0} kcal
                   </span>
                   <button
                     onClick={() => handleDelete(log.id)}
                     disabled={deletingId === log.id}
-                    className="text-gray-300 hover:text-red-400 flex-shrink-0 transition-colors disabled:opacity-40"
+                    className="text-[#797D83]/60 hover:text-red-400 flex-shrink-0 transition-colors disabled:opacity-40"
                     title="Entfernen"
                   >
                     {deletingId === log.id ? (

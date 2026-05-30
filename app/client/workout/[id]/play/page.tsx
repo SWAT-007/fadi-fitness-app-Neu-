@@ -350,8 +350,8 @@ export default function WorkoutPlayerPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center p-12">
-        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      <div className="flex justify-center p-12 bg-[#050504] min-h-screen">
+        <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -372,9 +372,9 @@ export default function WorkoutPlayerPage() {
 
   if (!exercise && !complete) {
     return (
-      <div className="flex flex-col items-center justify-center p-12 text-center">
-        <p className="text-gray-700 font-semibold mb-2">Keine Übungen gefunden</p>
-        <Link href="/client/plan" className="text-emerald-600 text-sm">Zurück zum Plan</Link>
+      <div className="flex flex-col items-center justify-center p-12 text-center bg-[#050504] min-h-screen">
+        <p className="text-[#EDECEA] font-semibold mb-2">Keine Übungen gefunden</p>
+        <Link href="/client/plan" className="text-[#A78BFA] text-sm">Zurück zum Plan</Link>
       </div>
     )
   }
@@ -386,36 +386,36 @@ export default function WorkoutPlayerPage() {
     const totalSets = Object.values(logs).flat().length
 
     return (
-      <div className="min-h-screen bg-emerald-600 flex flex-col items-center justify-center p-6 text-white">
-        <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mb-6">
+      <div className="min-h-screen bg-[#A78BFA] flex flex-col items-center justify-center p-6 text-white">
+        <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mb-6 neon-glow">
           <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
           </svg>
         </div>
 
-        <p className="text-emerald-200 text-xs font-bold uppercase tracking-widest mb-2">Geschafft!</p>
+        <p className="text-white/70 text-xs font-bold uppercase tracking-widest mb-2">Geschafft!</p>
         <h1 className="text-3xl font-bold text-center mb-1">Training abgeschlossen</h1>
-        <p className="text-emerald-200 text-sm mb-10">{workout?.name}</p>
+        <p className="text-white/70 text-sm mb-10">{workout?.name}</p>
 
-        <div className="w-full max-w-sm bg-white/15 rounded-3xl p-6 grid grid-cols-2 gap-5 mb-4">
+        <div className="w-full max-w-sm bg-white/15 rounded-3xl p-6 grid grid-cols-2 gap-5 mb-4 border border-white/20">
           <div className="text-center">
             <div className="text-3xl font-bold tabular-nums">{formatTime(finalDurationSeconds)}</div>
-            <div className="text-emerald-200 text-sm mt-1">Dauer</div>
+            <div className="text-white/60 text-sm mt-1">Dauer</div>
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold">{exercises.length}</div>
-            <div className="text-emerald-200 text-sm mt-1">Übungen</div>
+            <div className="text-white/60 text-sm mt-1">Übungen</div>
           </div>
           <div className="text-center col-span-2">
-            <div className="text-3xl font-bold">{completedSets}<span className="text-lg font-normal text-emerald-200"> / {totalSets} Sätze</span></div>
-            <div className="text-emerald-200 text-sm mt-1">Erledigte Sätze</div>
+            <div className="text-3xl font-bold">{completedSets}<span className="text-lg font-normal text-white/60"> / {totalSets} Sätze</span></div>
+            <div className="text-white/60 text-sm mt-1">Erledigte Sätze</div>
           </div>
         </div>
 
         <div className="w-full max-w-sm mt-6">
           <Link
             href="/client"
-            className="w-full py-4 bg-white text-emerald-700 font-bold rounded-2xl text-center block hover:bg-emerald-50 transition-colors"
+            className="w-full py-4 bg-[#050504] text-[#A78BFA] font-bold rounded-2xl text-center block hover:bg-[#111111] transition-colors"
           >
             Zurück zum Dashboard
           </Link>
@@ -427,33 +427,33 @@ export default function WorkoutPlayerPage() {
   // ── Active player ────────────────────────────────────────────────────────
 
   return (
-    <div className="bg-gray-50 min-h-screen">
+    <div className="bg-[#050504] min-h-screen">
 
       {/* Sticky header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3">
+      <div className="sticky top-0 z-10 bg-[#0b0c0f]/95 backdrop-blur-md border-b border-white/[0.06] px-4 py-3">
         <div className="flex items-center justify-between mb-2 max-w-lg mx-auto">
-          <Link href="/client/plan" className="text-gray-400 hover:text-gray-600 transition-colors">
+          <Link href="/client/plan" className="text-[#797D83] hover:text-[#EDECEA] transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </Link>
           <div className="text-center">
-            <p className="text-xs text-gray-400 font-medium">{workout?.name}</p>
-            <p className="text-sm text-gray-900 font-semibold">
+            <p className="text-xs text-[#797D83] font-medium">{workout?.name}</p>
+            <p className="text-sm text-[#EDECEA] font-semibold">
               Übung {currentExerciseIndex + 1} von {exercises.length}
             </p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-gray-400">Zeit</p>
-            <p className="text-sm font-bold text-emerald-600 tabular-nums">{formatTime(elapsed)}</p>
+            <p className="text-xs text-[#797D83]">Zeit</p>
+            <p className="text-sm font-bold text-[#A78BFA] tabular-nums">{formatTime(elapsed)}</p>
           </div>
         </div>
-        <div className="max-w-lg mx-auto text-[11px] text-gray-400 mb-2 text-right">
+        <div className="max-w-lg mx-auto text-[11px] text-[#797D83] mb-2 text-right">
           {syncingProgress ? 'Speichert…' : 'Fortschritt wird automatisch gespeichert'}
         </div>
-        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden max-w-lg mx-auto">
+        <div className="h-1.5 bg-white/[0.07] rounded-full overflow-hidden max-w-lg mx-auto">
           <div
-            className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+            className="h-full bg-[#A78BFA] rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(167,139,250,0.6)]"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -477,22 +477,22 @@ export default function WorkoutPlayerPage() {
                     aria-label={ex.name}
                     className={`relative flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden border-2 transition-all ${
                       isActive
-                        ? 'border-emerald-500 ring-2 ring-emerald-500/20 scale-105'
+                        ? 'border-[#A78BFA] ring-2 ring-[#A78BFA]/20 scale-105'
                         : allDone
-                          ? 'border-emerald-300 opacity-70'
-                          : 'border-gray-200 opacity-60 hover:opacity-100'
+                          ? 'border-[#A78BFA]/40 opacity-70'
+                          : 'border-white/[0.08] opacity-60 hover:opacity-100'
                     }`}
                   >
                     {ex.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={ex.imageUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-[9px] font-bold uppercase px-1 text-center leading-tight">
+                      <div className="w-full h-full bg-[#1a1a1a] flex items-center justify-center text-[#797D83] text-[9px] font-bold uppercase px-1 text-center leading-tight">
                         {ex.name.slice(0, 8)}
                       </div>
                     )}
                     {allDone && (
-                      <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center">
+                      <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#A78BFA] flex items-center justify-center">
                         <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                         </svg>
@@ -506,22 +506,22 @@ export default function WorkoutPlayerPage() {
         )}
 
         {/* Exercise name + trainer targets */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">{exercise.name}</h1>
-          <p className="text-emerald-600 text-sm font-medium">
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] px-5 py-4">
+          <h1 className="text-2xl font-bold text-[#EDECEA] mb-1">{exercise.name}</h1>
+          <p className="text-[#A78BFA] text-sm font-medium">
             {exercise.sets} Sätze × {exercise.reps}
             {exercise.targetWeightKg ? ` · ${exercise.targetWeightKg} kg` : ''}
           </p>
           {exercise.note && (
-            <p className="text-gray-500 text-sm mt-2">💡 {exercise.note}</p>
+            <p className="text-[#797D83] text-sm mt-2">💡 {exercise.note}</p>
           )}
           {swapSent === exercise.id ? (
-            <p className="mt-3 text-xs text-gray-400">✓ Anfrage gesendet — dein Trainer wird sie prüfen.</p>
+            <p className="mt-3 text-xs text-[#797D83]">✓ Anfrage gesendet — dein Trainer wird sie prüfen.</p>
           ) : (
             <button
               type="button"
               onClick={() => { setSwapReason(''); setError(''); setSwapModalOpen(true) }}
-              className="mt-3 text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+              className="mt-3 text-xs text-[#797D83] hover:text-[#A78BFA] underline underline-offset-2 transition-colors"
             >
               Übung tauschen anfragen
             </button>
@@ -529,15 +529,14 @@ export default function WorkoutPlayerPage() {
         </div>
 
         {/* Sets table */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06]">
           {/* Column headers */}
           <div className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 px-3 pt-3 pb-2">
-            {/* # with settings icon */}
             <div className="flex flex-col items-center gap-0.5">
-              <svg className="w-3 h-3 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="w-3 h-3 text-[#797D83]" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
               </svg>
-              <span className="text-[10px] font-semibold text-gray-400">#</span>
+              <span className="text-[10px] font-semibold text-[#797D83]">#</span>
             </div>
             {/* KG with pencil — tap to bulk-edit */}
             <button
@@ -545,16 +544,15 @@ export default function WorkoutPlayerPage() {
               onClick={() => { setBulkKgOpen(v => !v); setBulkKgValue(exerciseSets[0]?.weight ?? '') }}
               className="flex items-center justify-center gap-1 group"
             >
-              <span className="text-[10px] font-semibold text-gray-400 group-hover:text-emerald-600 transition-colors">KG</span>
-              <svg className="w-3 h-3 text-gray-300 group-hover:text-emerald-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span className="text-[10px] font-semibold text-[#797D83] group-hover:text-[#A78BFA] transition-colors">KG</span>
+              <svg className="w-3 h-3 text-[#797D83]/50 group-hover:text-[#A78BFA] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
               </svg>
             </button>
-            <span className="text-[10px] font-semibold text-gray-400 text-center">WDH</span>
-            {/* 10RM read-only */}
+            <span className="text-[10px] font-semibold text-[#797D83] text-center">WDH</span>
             <div className="flex items-center justify-center gap-0.5">
-              <span className="text-[10px] font-semibold text-gray-400">10RM</span>
-              <svg className="w-3 h-3 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span className="text-[10px] font-semibold text-[#797D83]">10RM</span>
+              <svg className="w-3 h-3 text-[#797D83]/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
               </svg>
             </div>
@@ -572,19 +570,19 @@ export default function WorkoutPlayerPage() {
                 onChange={e => setBulkKgValue(e.target.value)}
                 placeholder="kg für alle Sätze"
                 autoFocus
-                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-center font-semibold text-gray-900 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                className="flex-1 px-3 py-2 bg-white/[0.05] border border-white/[0.1] rounded-xl text-sm text-center font-semibold text-[#EDECEA] placeholder-[#797D83] focus:ring-2 focus:ring-[#A78BFA]/40 focus:border-transparent focus:outline-none"
               />
               <button
                 type="button"
                 onClick={applyBulkKg}
-                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition-colors"
+                className="px-4 py-2 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-xs font-bold rounded-xl transition-colors"
               >
                 Alle setzen
               </button>
             </div>
           )}
 
-          <div className="mx-3 border-t border-gray-100" />
+          <div className="mx-3 border-t border-white/[0.06]" />
 
           {/* Set rows */}
           <div className="py-2 space-y-1">
@@ -596,11 +594,11 @@ export default function WorkoutPlayerPage() {
                 return (
                   <div
                     key={setIndex}
-                    className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 bg-blue-50 rounded-2xl px-2 py-2"
+                    className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 bg-[#A78BFA]/[0.08] rounded-2xl px-2 py-2 border border-[#A78BFA]/[0.12]"
                   >
                     <div className="relative flex items-center justify-center">
-                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-blue-500" />
-                      <span className="text-sm font-bold text-gray-900 tabular-nums">{setIndex + 1}</span>
+                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#A78BFA] shadow-[0_0_6px_rgba(167,139,250,0.8)]" />
+                      <span className="text-sm font-bold text-[#EDECEA] tabular-nums">{setIndex + 1}</span>
                     </div>
                     <input
                       type="number"
@@ -610,15 +608,15 @@ export default function WorkoutPlayerPage() {
                       value={set.weight}
                       onChange={e => updateSet(exercise.id, setIndex, 'weight', e.target.value)}
                       placeholder="—"
-                      className="w-full px-2 py-2 bg-white rounded-xl text-sm text-center font-bold text-gray-900 tabular-nums shadow-sm border-0 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                      className="w-full px-2 py-2 bg-white/[0.07] rounded-xl text-sm text-center font-bold text-[#EDECEA] tabular-nums border border-white/[0.08] focus:ring-2 focus:ring-[#A78BFA]/40 focus:border-[#A78BFA]/30 focus:outline-none"
                     />
-                    <span className="text-sm font-bold text-gray-900 text-center tabular-nums">{set.reps}</span>
-                    <span className="text-xs font-medium text-blue-500 text-center tabular-nums">{orm}</span>
+                    <span className="text-sm font-bold text-[#EDECEA] text-center tabular-nums">{set.reps}</span>
+                    <span className="text-xs font-medium text-[#A78BFA] text-center tabular-nums">{orm}</span>
                     <button
                       type="button"
                       aria-label={`Satz ${setIndex + 1} abhaken`}
                       onClick={() => updateSet(exercise.id, setIndex, 'completed', !set.completed)}
-                      className="w-9 h-9 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center text-white transition-colors shadow-sm mx-auto"
+                      className="w-9 h-9 rounded-full bg-[#A78BFA] hover:bg-[#B79FFB] flex items-center justify-center text-[#050504] transition-colors shadow-[0_4px_12px_rgba(167,139,250,0.4)] mx-auto"
                     >
                       <CheckIcon />
                     </button>
@@ -632,15 +630,15 @@ export default function WorkoutPlayerPage() {
                     key={setIndex}
                     className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 px-2 py-2"
                   >
-                    <span className="text-sm font-semibold text-emerald-500 text-center tabular-nums">{setIndex + 1}</span>
-                    <span className="text-sm text-gray-400 text-center tabular-nums">{set.weight || '—'}</span>
-                    <span className="text-sm text-gray-400 text-center tabular-nums">{set.reps}</span>
-                    <span className="text-xs text-gray-400 text-center tabular-nums">{orm}</span>
+                    <span className="text-sm font-semibold text-[#A78BFA] text-center tabular-nums">{setIndex + 1}</span>
+                    <span className="text-sm text-[#797D83] text-center tabular-nums">{set.weight || '—'}</span>
+                    <span className="text-sm text-[#797D83] text-center tabular-nums">{set.reps}</span>
+                    <span className="text-xs text-[#797D83] text-center tabular-nums">{orm}</span>
                     <button
                       type="button"
                       aria-label={`Satz ${setIndex + 1} rückgängig`}
                       onClick={() => updateSet(exercise.id, setIndex, 'completed', !set.completed)}
-                      className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-500 transition-colors mx-auto"
+                      className="w-9 h-9 rounded-full bg-[#A78BFA]/10 flex items-center justify-center text-[#A78BFA] transition-colors mx-auto"
                     >
                       <CheckIcon />
                     </button>
@@ -653,7 +651,7 @@ export default function WorkoutPlayerPage() {
                   key={setIndex}
                   className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 px-2 py-2"
                 >
-                  <span className="text-sm text-gray-400 text-center tabular-nums">{setIndex + 1}</span>
+                  <span className="text-sm text-[#797D83] text-center tabular-nums">{setIndex + 1}</span>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -662,14 +660,14 @@ export default function WorkoutPlayerPage() {
                     value={set.weight}
                     onChange={e => updateSet(exercise.id, setIndex, 'weight', e.target.value)}
                     placeholder="—"
-                    className="w-full px-2 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm text-center text-gray-400 tabular-nums focus:ring-1 focus:ring-gray-300 focus:outline-none"
+                    className="w-full px-2 py-2 bg-white/[0.03] border border-white/[0.06] rounded-xl text-sm text-center text-[#797D83] tabular-nums focus:ring-1 focus:ring-[#A78BFA]/30 focus:outline-none"
                   />
-                  <span className="text-sm text-gray-400 text-center tabular-nums">{set.reps}</span>
-                  <span className="text-xs text-gray-300 text-center">—</span>
+                  <span className="text-sm text-[#797D83] text-center tabular-nums">{set.reps}</span>
+                  <span className="text-xs text-[#797D83]/40 text-center">—</span>
                   <button
                     type="button"
                     disabled
-                    className="w-9 h-9 rounded-full border-2 border-gray-100 flex items-center justify-center text-transparent mx-auto cursor-not-allowed opacity-40"
+                    className="w-9 h-9 rounded-full border-2 border-white/[0.08] flex items-center justify-center text-transparent mx-auto cursor-not-allowed opacity-30"
                   >
                     <CheckIcon />
                   </button>
@@ -678,7 +676,7 @@ export default function WorkoutPlayerPage() {
             })}
           </div>
 
-          <div className="pb-3 text-center text-xs text-gray-400">
+          <div className="pb-3 text-center text-xs text-[#797D83]">
             {completedCount === exerciseSets.length
               ? (currentExerciseIndex >= exercises.length - 1
                   ? (saving ? 'Wird gespeichert…' : 'Workout wird abgeschlossen…')
@@ -688,7 +686,7 @@ export default function WorkoutPlayerPage() {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl">
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl">
             {error}
           </div>
         )}
@@ -697,14 +695,14 @@ export default function WorkoutPlayerPage() {
 
       {/* Swap request modal */}
       {swapModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
-          <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-2xl">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <p className="text-xs text-gray-400 mb-0.5">{exercise.name}</p>
-              <h2 className="font-semibold text-gray-900">Übung tauschen anfragen</h2>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-sm bg-[#111111] border border-white/[0.08] rounded-2xl overflow-hidden shadow-2xl">
+            <div className="px-5 py-4 border-b border-white/[0.06]">
+              <p className="text-xs text-[#797D83] mb-0.5">{exercise.name}</p>
+              <h2 className="font-semibold text-[#EDECEA]">Übung tauschen anfragen</h2>
             </div>
             <div className="px-5 py-4">
-              <label className="block text-xs font-medium text-gray-500 mb-2">
+              <label className="block text-xs font-medium text-[#797D83] mb-2">
                 Warum möchtest du diese Übung tauschen?
               </label>
               <textarea
@@ -713,10 +711,10 @@ export default function WorkoutPlayerPage() {
                 placeholder="z.B. Schmerzen im Schultergelenk, kein passendes Gerät…"
                 rows={4}
                 autoFocus
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none transition"
+                className="w-full px-4 py-3 bg-white/[0.05] border border-white/[0.08] rounded-xl text-sm text-[#EDECEA] placeholder:text-[#797D83] focus:ring-2 focus:ring-[#A78BFA]/30 focus:border-[#A78BFA]/30 focus:outline-none resize-none transition"
               />
               {error && (
-                <div className="mt-3 bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl">
+                <div className="mt-3 bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl">
                   {error}
                 </div>
               )}
@@ -725,7 +723,7 @@ export default function WorkoutPlayerPage() {
               <button
                 type="button"
                 onClick={() => setSwapModalOpen(false)}
-                className="flex-1 py-3 border border-gray-200 text-gray-600 font-medium rounded-xl hover:bg-gray-50 transition-colors text-sm"
+                className="flex-1 py-3 border border-white/[0.08] text-[#797D83] font-medium rounded-xl hover:bg-white/[0.04] transition-colors text-sm"
               >
                 Abbrechen
               </button>
@@ -733,7 +731,7 @@ export default function WorkoutPlayerPage() {
                 type="button"
                 onClick={handleSwapRequest}
                 disabled={!swapReason.trim() || swapSending}
-                className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors text-sm"
+                className="flex-1 py-3 bg-[#A78BFA] hover:bg-[#B79FFB] disabled:opacity-40 text-[#050504] font-semibold rounded-xl transition-colors text-sm"
               >
                 {swapSending ? 'Wird gesendet…' : 'Anfrage senden'}
               </button>

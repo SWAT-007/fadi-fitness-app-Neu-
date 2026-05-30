@@ -15,6 +15,7 @@ const nextConfig = withPWAConfig({
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'omyahzgbzmvovrmeuxlv.supabase.co' },
+      { protocol: 'http', hostname: 'localhost', port: '4000' },
     ],
   },
 });

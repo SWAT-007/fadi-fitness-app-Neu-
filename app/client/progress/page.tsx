@@ -6,7 +6,7 @@ import type { CheckinImage, ProgressLog, WeeklyCheckin } from '@/lib/types'
 import Lightbox from '@/components/Lightbox'
 import { AnimatedNumber, Collapsible, StaggerItem, useToast } from '@/components/Motion'
 
-// ─── Local types ────────────────────────────────────────────────────────────
+// ─── Local types ─────────────────────────────────────────────────────────────
 
 type ExerciseLogItem = {
   actual_weight: number | null
@@ -149,7 +149,7 @@ function resolveCheckinImageUrl(storagePath: string): string | null {
   return null
 }
 
-// ─── Pure helpers ────────────────────────────────────────────────────────────
+// ─── Pure helpers ─────────────────────────────────────────────────────────────
 
 function getMonday(date: Date): string {
   const d = new Date(date)
@@ -229,7 +229,7 @@ function formatDuration(s: number | null | undefined): string {
   return m % 60 > 0 ? `${h}h ${m % 60}m` : `${h}h`
 }
 
-// ─── Chart components ────────────────────────────────────────────────────────
+// ─── Chart components ─────────────────────────────────────────────────────────
 
 function SvgLineChart({ data }: { data: { label: string; value: number }[] }) {
   if (data.length < 2) return null
@@ -246,24 +246,23 @@ function SvgLineChart({ data }: { data: { label: string; value: number }[] }) {
   const fmt = (s: string) => new Date(s).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 100 }}>
-      <path d={areaPath} fill="#10b981" fillOpacity="0.1" />
-      <line x1={P.l} y1={py(min)} x2={W - P.r} y2={py(min)} stroke="#f3f4f6" strokeWidth="1" />
-      <line x1={P.l} y1={py(max)} x2={W - P.r} y2={py(max)} stroke="#f3f4f6" strokeWidth="1" />
-      <path d={linePath} fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={areaPath} fill="#A78BFA" fillOpacity="0.08" />
+      <line x1={P.l} y1={py(min)} x2={W - P.r} y2={py(min)} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+      <line x1={P.l} y1={py(max)} x2={W - P.r} y2={py(max)} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+      <path d={linePath} fill="none" stroke="#A78BFA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       {data.map((d, i) => (
-        <circle key={i} cx={px(i)} cy={py(d.value)} r="3" fill="white" stroke="#10b981" strokeWidth="2" />
+        <circle key={i} cx={px(i)} cy={py(d.value)} r="3" fill="#111111" stroke="#A78BFA" strokeWidth="2" />
       ))}
-      <text x={P.l - 4} y={py(max) + 4} textAnchor="end" fontSize="9" fill="#9ca3af">{max.toFixed(1)}</text>
-      <text x={P.l - 4} y={py(min) + 4} textAnchor="end" fontSize="9" fill="#9ca3af">{min.toFixed(1)}</text>
-      <text x={px(0)} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{fmt(data[0].label)}</text>
-      <text x={px(data.length - 1)} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{fmt(data[data.length - 1].label)}</text>
+      <text x={P.l - 4} y={py(max) + 4} textAnchor="end" fontSize="9" fill="#797D83">{max.toFixed(1)}</text>
+      <text x={P.l - 4} y={py(min) + 4} textAnchor="end" fontSize="9" fill="#797D83">{min.toFixed(1)}</text>
+      <text x={px(0)} y={H - 4} textAnchor="middle" fontSize="9" fill="#797D83">{fmt(data[0].label)}</text>
+      <text x={px(data.length - 1)} y={H - 4} textAnchor="middle" fontSize="9" fill="#797D83">{fmt(data[data.length - 1].label)}</text>
     </svg>
   )
 }
 
-function BarChart({ data, color, formatValue }: {
+function BarChart({ data, formatValue }: {
   data: { label: string; value: number }[]
-  color: string
   formatValue: (v: number) => string
 }) {
   const max = Math.max(...data.map(d => d.value), 1)
@@ -272,24 +271,24 @@ function BarChart({ data, color, formatValue }: {
       <div className="flex items-end gap-1" style={{ height: 64 }}>
         {data.map((d, i) => (
           <div key={i} className="flex-1 flex flex-col items-center justify-end gap-px min-w-0">
-            {d.value > 0 && <span className="text-[9px] text-gray-400 truncate">{formatValue(d.value)}</span>}
+            {d.value > 0 && <span className="text-[9px] text-[#797D83] truncate">{formatValue(d.value)}</span>}
             <div
               className="w-full rounded-t-sm"
-              style={{ height: d.value > 0 ? `${Math.max(3, Math.round((d.value / max) * 52))}px` : 0, backgroundColor: color }}
+              style={{ height: d.value > 0 ? `${Math.max(3, Math.round((d.value / max) * 52))}px` : 0, backgroundColor: '#A78BFA', opacity: 0.7 }}
             />
           </div>
         ))}
       </div>
-      <div className="flex gap-1 mt-1 border-t border-gray-100 pt-1.5">
+      <div className="flex gap-1 mt-1 border-t border-white/[0.06] pt-1.5">
         {data.map((d, i) => (
-          <p key={i} className="flex-1 text-center text-[9px] text-gray-400 truncate">{d.label}</p>
+          <p key={i} className="flex-1 text-center text-[9px] text-[#797D83] truncate">{d.label}</p>
         ))}
       </div>
     </div>
   )
 }
 
-// ─── Check-in subcomponents ──────────────────────────────────────────────────
+// ─── Check-in subcomponents ───────────────────────────────────────────────────
 
 function RatingButtons({ value, onChange, emojis }: {
   value: number
@@ -304,11 +303,13 @@ function RatingButtons({ value, onChange, emojis }: {
           type="button"
           onClick={() => onChange(i + 1)}
           className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 rounded-xl text-base transition-all ${
-            value === i + 1 ? 'bg-emerald-100 ring-2 ring-emerald-500' : 'bg-gray-50 hover:bg-gray-100'
+            value === i + 1
+              ? 'bg-[#A78BFA]/10 ring-1 ring-[#A78BFA]/60'
+              : 'bg-white/[0.04] hover:bg-white/[0.07]'
           }`}
         >
           <span>{emoji}</span>
-          <span className="text-[10px] text-gray-500">{i + 1}</span>
+          <span className="text-[10px] text-[#797D83]">{i + 1}</span>
         </button>
       ))}
     </div>
@@ -317,16 +318,16 @@ function RatingButtons({ value, onChange, emojis }: {
 
 function RatingBadge({ value, label }: { value: number | null | undefined; label: string }) {
   if (!value) return null
-  const color = value >= 4 ? 'text-green-700 bg-green-50' : value >= 3 ? 'text-yellow-700 bg-yellow-50' : 'text-red-700 bg-red-50'
+  const color = value >= 4 ? 'text-[#A78BFA] bg-[#A78BFA]/10' : value >= 3 ? 'text-amber-400 bg-amber-400/10' : 'text-red-400 bg-red-400/10'
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-gray-500 w-20 flex-shrink-0">{label}</span>
+      <span className="text-xs text-[#797D83] w-20 flex-shrink-0">{label}</span>
       <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg ${color}`}>{value}/5</span>
     </div>
   )
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 type Tab = 'overview' | 'checkin' | 'records'
 
@@ -357,7 +358,7 @@ export default function ProgressPage() {
   const [checkinError, setCheckinError] = useState<string | null>(null)
   const [checkinSuccess, setCheckinSuccess] = useState(false)
 
-  // Image upload (new files, not yet uploaded)
+  // Image upload
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [ciFiles, setCiFiles] = useState<File[]>([])
   const [ciPreviews, setCiPreviews] = useState<string[]>([])
@@ -398,7 +399,7 @@ export default function ProgressPage() {
 
   useEffect(() => { load() }, [load])
 
-  // ─── Derived data ────────────────────────────────────────────────────────
+  // ─── Derived data ──────────────────────────────────────────────────────────
 
   const streak = useMemo(() => calcStreak(workoutLogs.map(l => l.date)), [workoutLogs])
   const prs = useMemo(() => calcPRs(workoutLogs), [workoutLogs])
@@ -416,7 +417,7 @@ export default function ProgressPage() {
   const firstWeight = progressLogs[progressLogs.length - 1]?.body_weight
   const weightChange = latestWeight && firstWeight ? latestWeight - firstWeight : null
 
-  // ─── Handlers ────────────────────────────────────────────────────────────
+  // ─── Handlers ──────────────────────────────────────────────────────────────
 
   const openEditCheckin = () => {
     if (thisWeekCheckin) {
@@ -542,22 +543,27 @@ export default function ProgressPage() {
     setLightboxIdx(startIndex)
   }
 
-  // ─── Render ──────────────────────────────────────────────────────────────
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="flex justify-center p-12">
-        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   if (!clientId) {
     return (
-      <div className="p-4 max-w-lg mx-auto">
-        <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center shadow-sm">
-          <div className="text-4xl mb-3">🔗</div>
-          <p className="text-gray-500 text-sm">Dein Konto ist noch nicht mit einem Trainer verknüpft.</p>
+      <div className="p-4 max-w-[480px] mx-auto">
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-10 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[#797D83] mx-auto mb-3">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M14.828 14.828a4 4 0 015.656 0l4-4a4 4 0 01-5.656-5.656l-1.1 1.1" />
+            </svg>
+          </div>
+          <p className="text-[#797D83] text-sm">Dein Konto ist noch nicht mit einem Trainer verknüpft.</p>
         </div>
       </div>
     )
@@ -570,7 +576,7 @@ export default function ProgressPage() {
   ]
 
   return (
-    <div className="p-4 max-w-lg mx-auto">
+    <div className="px-4 pt-4 pb-8 max-w-[480px] mx-auto">
       {lightboxUrls.length > 0 && (
         <Lightbox
           urls={lightboxUrls}
@@ -579,16 +585,18 @@ export default function ProgressPage() {
         />
       )}
 
-      <h1 className="text-xl font-bold text-gray-900 mb-4">Fortschritt</h1>
+      <h1 className="text-[22px] font-bold text-[#EDECEA] tracking-tight mb-4">Fortschritt</h1>
 
       {/* Tab switcher */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-5">
+      <div className="flex gap-1 bg-[#111111] border border-white/[0.06] p-1 rounded-xl mb-5">
         {tabs.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${
-              tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            className={`press flex-1 py-2 text-[13px] font-medium rounded-lg transition-colors ${
+              tab === t.key
+                ? 'bg-[#A78BFA] text-[#050504] shadow-sm'
+                : 'text-[#797D83] hover:text-[#EDECEA]'
             }`}
           >
             {t.label}
@@ -601,50 +609,52 @@ export default function ProgressPage() {
         <div className="space-y-4">
           {/* Stats grid */}
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm text-center">
-              <div className="text-xl font-bold text-gray-900">{latestWeight ? <AnimatedNumber value={latestWeight} decimals={1} /> : '-'}</div>
-              <div className="text-xs text-gray-500 mt-0.5">kg aktuell</div>
-            </div>
-            <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm text-center">
-              <div className="text-xl font-bold text-gray-900"><AnimatedNumber value={totalWorkouts} /></div>
-              <div className="text-xs text-gray-500 mt-0.5">Trainings</div>
-            </div>
-            <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm text-center">
-              <div className={`text-xl font-bold ${streak > 0 ? 'text-orange-500' : 'text-gray-400'}`}>
-                {streak > 0 ? <AnimatedNumber value={streak} /> : '-'}
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-4 text-center">
+              <div className="text-[20px] font-bold text-[#EDECEA] tabular-nums">
+                {latestWeight ? <AnimatedNumber value={latestWeight} decimals={1} /> : '–'}
               </div>
-              <div className="text-xs text-gray-500 mt-0.5">{streak > 0 ? '🔥 Wochen' : 'Streak'}</div>
+              <div className="text-[11px] text-[#797D83] mt-0.5">kg aktuell</div>
+            </div>
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-4 text-center">
+              <div className="text-[20px] font-bold text-[#EDECEA] tabular-nums">
+                <AnimatedNumber value={totalWorkouts} />
+              </div>
+              <div className="text-[11px] text-[#797D83] mt-0.5">Trainings</div>
+            </div>
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-4 text-center">
+              <div className={`text-[20px] font-bold tabular-nums ${streak > 0 ? 'text-[#A78BFA]' : 'text-[#797D83]'}`}>
+                {streak > 0 ? <AnimatedNumber value={streak} /> : '–'}
+              </div>
+              <div className="text-[11px] text-[#797D83] mt-0.5">Streak</div>
             </div>
           </div>
 
           {/* Weight chart */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-5">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="font-semibold text-gray-900 text-sm">Gewichtsverlauf</h3>
+                <h3 className="font-semibold text-[#EDECEA] text-[13px]">Gewichtsverlauf</h3>
                 {weightChange !== null && (
-                  <p className={`text-xs mt-0.5 font-medium ${weightChange < 0 ? 'text-emerald-600' : weightChange > 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                  <p className={`text-[11px] mt-0.5 font-medium ${weightChange < 0 ? 'text-[#A78BFA]' : weightChange > 0 ? 'text-red-400' : 'text-[#797D83]'}`}>
                     Gesamt: {weightChange > 0 ? '+' : ''}{weightChange.toFixed(1)} kg
                   </p>
                 )}
               </div>
             </div>
-
             {chartData.length >= 2 ? (
               <SvgLineChart data={chartData} />
             ) : (
-              <p className="text-sm text-gray-400 text-center py-6">Mindestens 2 Einträge für den Verlauf nötig.</p>
+              <p className="text-[13px] text-[#797D83] text-center py-6">Mindestens 2 Einträge für den Verlauf nötig.</p>
             )}
           </div>
 
           {/* Volume bar chart */}
           {weeklyVolume.some(w => w.volume > 0) && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-              <h3 className="font-semibold text-gray-900 text-sm">Trainingsvolumen</h3>
-              <p className="text-xs text-gray-400 mt-0.5 mb-4">Kg bewegt pro Woche (Gewicht × Wdh. × Sätze)</p>
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-5">
+              <h3 className="font-semibold text-[#EDECEA] text-[13px]">Trainingsvolumen</h3>
+              <p className="text-[11px] text-[#797D83] mt-0.5 mb-4">kg bewegt pro Woche (Gewicht × Wdh. × Sätze)</p>
               <BarChart
                 data={weeklyVolume.map(w => ({ label: w.label, value: w.volume }))}
-                color="#6366f1"
                 formatValue={formatVolume}
               />
             </div>
@@ -652,48 +662,44 @@ export default function ProgressPage() {
 
           {/* Recent workouts */}
           {workoutLogs.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
               <button
                 type="button"
                 onClick={() => setShowRecentWorkouts(open => !open)}
-                className={`w-full px-5 py-4 flex items-center justify-between text-left transition-colors hover:bg-gray-50 ${
-                  showRecentWorkouts ? 'border-b border-gray-100' : ''
-                }`}
+                className={`w-full px-5 py-4 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors ${showRecentWorkouts ? 'border-b border-white/[0.04]' : ''}`}
                 aria-expanded={showRecentWorkouts}
               >
-                <h3 className="font-semibold text-gray-900 text-sm">Letzte Trainings</h3>
+                <h3 className="font-semibold text-[#EDECEA] text-[13px]">Letzte Trainings</h3>
                 <svg
-                  className={`w-4 h-4 text-gray-400 transition-transform ${showRecentWorkouts ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+                  className={`w-4 h-4 text-[#797D83] transition-transform ${showRecentWorkouts ? 'rotate-180' : ''}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               <Collapsible open={showRecentWorkouts}>
-                <ul className="divide-y divide-gray-100">
+                <ul className="divide-y divide-white/[0.04]">
                   {workoutLogs.slice(0, 5).map((log, index) => (
                     <li key={log.id}>
                       <StaggerItem index={index} className="flex items-center gap-3 px-5 py-3">
-                      <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500 flex-shrink-0">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-gray-900">
-                          {(log.workout_day as { name: string } | null)?.name ?? 'Training'}
+                        <div className="w-8 h-8 rounded-xl bg-[#A78BFA]/10 flex items-center justify-center text-[#A78BFA] flex-shrink-0">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
                         </div>
-                        <div className="text-xs text-gray-400">
-                          {new Date(log.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13px] font-medium text-[#EDECEA]">
+                            {(log.workout_day as { name: string } | null)?.name ?? 'Training'}
+                          </div>
+                          <div className="text-[11px] text-[#797D83]">
+                            {new Date(log.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })}
+                          </div>
                         </div>
-                      </div>
-                      {log.duration_seconds ? (
-                        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-lg tabular-nums">
-                          {formatDuration(log.duration_seconds)}
-                        </span>
-                      ) : null}
+                        {log.duration_seconds ? (
+                          <span className="text-[11px] text-[#797D83] bg-white/[0.05] px-2 py-1 rounded-lg tabular-nums">
+                            {formatDuration(log.duration_seconds)}
+                          </span>
+                        ) : null}
                       </StaggerItem>
                     </li>
                   ))}
@@ -704,27 +710,27 @@ export default function ProgressPage() {
 
           {/* Weight history */}
           {progressLogs.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-              <div className="px-5 py-4 border-b border-gray-100">
-                <h3 className="font-semibold text-gray-900 text-sm">Gewichtsverlauf</h3>
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/[0.04]">
+                <h3 className="font-semibold text-[#EDECEA] text-[13px]">Gewichtsverlauf</h3>
               </div>
-              <ul className="divide-y divide-gray-100">
+              <ul className="divide-y divide-white/[0.04]">
                 {progressLogs.map((log, i) => {
                   const prev = progressLogs[i + 1]
                   const diff = log.body_weight && prev?.body_weight ? log.body_weight - prev.body_weight : null
                   return (
                     <li key={log.id} className="flex items-center gap-4 px-5 py-3">
                       <div className="flex-1">
-                        <div className="font-medium text-gray-900 text-sm">
+                        <div className="font-medium text-[#EDECEA] text-[13px]">
                           {log.body_weight ? `${log.body_weight} kg` : '–'}
                         </div>
-                        <div className="text-xs text-gray-400">
+                        <div className="text-[11px] text-[#797D83]">
                           {new Date(log.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })}
                         </div>
-                        {log.notes && <div className="text-xs text-gray-400 italic mt-0.5">{log.notes}</div>}
+                        {log.notes && <div className="text-[11px] text-[#797D83]/70 italic mt-0.5">{log.notes}</div>}
                       </div>
                       {diff !== null && (
-                        <span className={`text-sm font-semibold ${diff < 0 ? 'text-emerald-600' : diff > 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                        <span className={`text-[13px] font-semibold ${diff < 0 ? 'text-[#A78BFA]' : diff > 0 ? 'text-red-400' : 'text-[#797D83]'}`}>
                           {diff > 0 ? '+' : ''}{diff.toFixed(1)} kg
                         </span>
                       )}
@@ -736,9 +742,13 @@ export default function ProgressPage() {
           )}
 
           {progressLogs.length === 0 && workoutLogs.length === 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center shadow-sm">
-              <div className="text-4xl mb-3">📈</div>
-              <p className="text-gray-500 text-sm">Noch keine Daten. Starte dein erstes Training!</p>
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-10 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[#797D83] mx-auto mb-3">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 17l6-6 4 4 8-8M14 7h7v7" />
+                </svg>
+              </div>
+              <p className="text-[#797D83] text-[13px]">Noch keine Daten. Starte dein erstes Training!</p>
             </div>
           )}
         </div>
@@ -748,87 +758,84 @@ export default function ProgressPage() {
       {tab === 'checkin' && (
         <div className="space-y-4">
 
-          {/* Success banner */}
           {checkinSuccess && (
-            <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
-              <span className="text-xl">✅</span>
-              <p className="text-sm font-medium text-emerald-700">Check-in erfolgreich gespeichert!</p>
+            <div className="flex items-center gap-3 bg-[#A78BFA]/[0.08] border border-[#A78BFA]/20 rounded-2xl px-4 py-3">
+              <span className="text-[#A78BFA] font-bold text-lg">✓</span>
+              <p className="text-[13px] font-medium text-[#A78BFA]">Check-in erfolgreich gespeichert!</p>
             </div>
           )}
 
-          {/* Error banner (outside form, for errors that persist after close) */}
           {checkinError && !showCheckinForm && (
-            <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
-              <span className="text-base mt-0.5">⚠️</span>
+            <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/20 rounded-2xl px-4 py-3">
+              <span className="text-red-400 text-base mt-0.5">⚠</span>
               <div className="flex-1">
-                <p className="text-sm font-medium text-red-700">{checkinError}</p>
-                <button onClick={() => setCheckinError(null)} className="text-xs text-red-500 underline mt-1">Schließen</button>
+                <p className="text-[13px] text-red-400">{checkinError}</p>
+                <button onClick={() => setCheckinError(null)} className="text-[11px] text-red-400/70 underline mt-1">Schließen</button>
               </div>
             </div>
           )}
 
-          {/* This week status */}
           {alreadyCheckedIn && !showCheckinForm ? (
-            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5">
+            <div className="bg-[#A78BFA]/[0.07] border border-[#A78BFA]/15 rounded-2xl p-5">
               <div className="flex items-start gap-3">
-                <span className="text-2xl">✅</span>
+                <span className="text-[#A78BFA] text-xl font-bold">✓</span>
                 <div className="flex-1">
-                  <div className="font-semibold text-emerald-800 text-sm">Check-in für diese Woche erledigt</div>
-                  <p className="text-xs text-emerald-600 mt-0.5">Woche ab {new Date(thisWeekStart).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}</p>
-                  <p className="text-xs text-emerald-700 mt-1">Du kannst diesen Check-in bei Bedarf bearbeiten, es wird kein separater neuer Wochen-Check-in erstellt.</p>
-                  <button onClick={openEditCheckin} className="text-xs text-emerald-700 underline mt-2 hover:text-emerald-900">
+                  <div className="font-semibold text-[#EDECEA] text-[13px]">Check-in für diese Woche erledigt</div>
+                  <p className="text-[11px] text-[#A78BFA]/70 mt-0.5">Woche ab {new Date(thisWeekStart).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}</p>
+                  <p className="text-[11px] text-[#EDECEA]/60 mt-1">Du kannst diesen Check-in bei Bedarf bearbeiten.</p>
+                  <button onClick={openEditCheckin} className="text-[11px] text-[#A78BFA] underline mt-2 hover:text-[#B79FFB]">
                     Bearbeiten
                   </button>
                 </div>
               </div>
             </div>
           ) : !showCheckinForm ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-              <h3 className="font-semibold text-gray-900 mb-1">Wöchentlicher Check-in</h3>
-              <p className="text-sm text-gray-500 mb-4">Berichte deinem Trainer 1x pro Woche, wie deine Woche war – Stimmung, Energie, Schlaf und mehr.</p>
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-5">
+              <h3 className="font-semibold text-[#EDECEA] mb-1">Wöchentlicher Check-in</h3>
+              <p className="text-[13px] text-[#797D83] mb-4 leading-relaxed">Berichte deinem Trainer 1x pro Woche, wie deine Woche war – Stimmung, Energie, Schlaf und mehr.</p>
               <button
                 onClick={() => { setCheckinError(null); setCheckinSuccess(false); setShowCheckinForm(true) }}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors"
+                className="press w-full py-3 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-[13px] font-bold rounded-xl transition-colors shadow-[0_4px_16px_-4px_rgba(167,139,250,0.4)]"
               >
                 Check-in ausfüllen
               </button>
             </div>
           ) : (
-            <form onSubmit={handleSaveCheckin} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm space-y-5">
-              <h3 className="font-semibold text-gray-900">
+            <form onSubmit={handleSaveCheckin} className="bg-[#111111] rounded-2xl border border-white/[0.06] p-5 space-y-5">
+              <h3 className="font-semibold text-[#EDECEA]">
                 Wöchentlicher Check-in
-                <span className="ml-2 text-xs font-normal text-gray-400">
+                <span className="ml-2 text-[11px] font-normal text-[#797D83]">
                   Woche ab {new Date(thisWeekStart).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
                 </span>
               </h3>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Stimmung</label>
+                <label className="block text-[11px] font-semibold text-[#797D83] mb-2 uppercase tracking-[0.1em]">Stimmung</label>
                 <RatingButtons value={ciMood} onChange={setCiMood} emojis={['😫', '😕', '😐', '🙂', '😄']} />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Energie</label>
+                <label className="block text-[11px] font-semibold text-[#797D83] mb-2 uppercase tracking-[0.1em]">Energie</label>
                 <RatingButtons value={ciEnergy} onChange={setCiEnergy} emojis={['🪫', '😴', '⚡', '🔥', '💥']} />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Schlafqualität</label>
+                <label className="block text-[11px] font-semibold text-[#797D83] mb-2 uppercase tracking-[0.1em]">Schlafqualität</label>
                 <RatingButtons value={ciSleep} onChange={setCiSleep} emojis={['😱', '😔', '😐', '😊', '😴']} />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Hunger / Ernährung</label>
+                <label className="block text-[11px] font-semibold text-[#797D83] mb-2 uppercase tracking-[0.1em]">Hunger / Ernährung</label>
                 <RatingButtons value={ciHunger} onChange={setCiHunger} emojis={['🤢', '😞', '😐', '😋', '🥗']} />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Stress</label>
+                <label className="block text-[11px] font-semibold text-[#797D83] mb-2 uppercase tracking-[0.1em]">Stress</label>
                 <RatingButtons value={ciStress} onChange={setCiStress} emojis={['😤', '😰', '😶', '😌', '🧘']} />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Gewicht (kg, optional)</label>
+                <label className="block text-[11px] font-semibold text-[#797D83] mb-1.5 uppercase tracking-[0.1em]">Gewicht (kg, optional)</label>
                 <input
                   type="number"
                   inputMode="decimal"
@@ -837,31 +844,33 @@ export default function ProgressPage() {
                   value={ciWeight}
                   onChange={e => setCiWeight(e.target.value)}
                   placeholder="z. B. 78.4"
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-white/[0.1] bg-white/[0.05] rounded-xl text-[13px] text-[#EDECEA] placeholder-[#797D83]/60 focus:border-[#A78BFA]/40 focus:outline-none transition"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Kommentar</label>
+                <label className="block text-[11px] font-semibold text-[#797D83] mb-1.5 uppercase tracking-[0.1em]">Kommentar</label>
                 <textarea
                   value={ciComment}
                   onChange={e => setCiComment(e.target.value)}
                   placeholder="Wie war deine Woche? Was lief gut, was nicht?"
                   rows={3}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
+                  className="w-full px-4 py-2.5 border border-white/[0.1] bg-white/[0.05] rounded-xl text-[13px] text-[#EDECEA] placeholder-[#797D83]/60 focus:border-[#A78BFA]/40 focus:outline-none transition resize-none"
                 />
               </div>
 
               {/* Image Upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Fotos (optional, max. 5)</label>
+                <label className="block text-[11px] font-semibold text-[#797D83] mb-1.5 uppercase tracking-[0.1em]">Fotos (optional, max. 5)</label>
                 <div
                   onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
                   onDragLeave={() => setIsDragging(false)}
                   onDrop={e => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files) }}
                   onClick={() => fileInputRef.current?.click()}
                   className={`border-2 border-dashed rounded-xl px-4 py-5 text-center cursor-pointer transition-colors ${
-                    isDragging ? 'border-emerald-400 bg-emerald-50' : 'border-gray-200 hover:border-emerald-300 bg-gray-50'
+                    isDragging
+                      ? 'border-[#A78BFA]/40 bg-[#A78BFA]/[0.05]'
+                      : 'border-white/[0.1] hover:border-[#A78BFA]/25 bg-white/[0.02]'
                   }`}
                 >
                   <input
@@ -872,18 +881,19 @@ export default function ProgressPage() {
                     className="hidden"
                     onChange={e => handleFiles(e.target.files)}
                   />
-                  <p className="text-sm text-gray-400">📷 Tippen oder ablegen</p>
-                  <p className="text-xs text-gray-300 mt-0.5">JPEG, PNG, WebP, HEIC · max. 10 MB</p>
+                  <p className="text-[13px] text-[#797D83]">📷 Tippen oder ablegen</p>
+                  <p className="text-[11px] text-[#797D83]/50 mt-0.5">JPEG, PNG, WebP, HEIC · max. 10 MB</p>
                 </div>
                 {ciPreviews.length > 0 && (
                   <div className="grid grid-cols-4 gap-2 mt-2">
                     {ciPreviews.map((preview, idx) => (
-                      <div key={idx} className="relative aspect-square rounded-xl overflow-hidden ring-1 ring-gray-200">
+                      <div key={idx} className="relative aspect-square rounded-xl overflow-hidden ring-1 ring-white/[0.1]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={preview} alt="" className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() => removeNewFile(idx)}
-                          className="absolute top-1 right-1 bg-black/50 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs leading-none"
+                          className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs leading-none"
                         >
                           ✕
                         </button>
@@ -891,14 +901,13 @@ export default function ProgressPage() {
                     ))}
                   </div>
                 )}
-                {uploadProgress && <p className="text-xs text-gray-400 mt-1">{uploadProgress}</p>}
+                {uploadProgress && <p className="text-[11px] text-[#797D83] mt-1">{uploadProgress}</p>}
               </div>
 
-              {/* Inline error inside form */}
               {checkinError && (
-                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                  <span className="text-sm mt-0.5">⚠️</span>
-                  <p className="text-sm text-red-700 flex-1">{checkinError}</p>
+                <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+                  <span className="text-red-400 text-sm mt-0.5">⚠</span>
+                  <p className="text-[13px] text-red-400 flex-1">{checkinError}</p>
                 </div>
               )}
 
@@ -906,16 +915,16 @@ export default function ProgressPage() {
                 <button
                   type="button"
                   onClick={() => { setShowCheckinForm(false); setCheckinError(null) }}
-                  className="flex-1 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50"
+                  className="press flex-1 py-2.5 border border-white/[0.08] text-[#797D83] text-[13px] font-medium rounded-xl hover:bg-white/[0.04]"
                 >
                   Abbrechen
                 </button>
                 <button
                   type="submit"
                   disabled={savingCheckin}
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-60"
+                  className="press flex-1 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-[13px] font-bold rounded-xl transition-colors disabled:opacity-50 shadow-[0_4px_12px_-4px_rgba(167,139,250,0.4)]"
                 >
-                  {savingCheckin ? 'Speichern…' : thisWeekCheckin ? 'Check-in aktualisieren' : 'Check-in senden'}
+                  {savingCheckin ? 'Speichern…' : thisWeekCheckin ? 'Aktualisieren' : 'Check-in senden'}
                 </button>
               </div>
             </form>
@@ -923,19 +932,19 @@ export default function ProgressPage() {
 
           {/* History */}
           {checkins.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-              <div className="px-5 py-4 border-b border-gray-100">
-                <h3 className="font-semibold text-gray-900 text-sm">Verlauf</h3>
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/[0.04]">
+                <h3 className="font-semibold text-[#EDECEA] text-[13px]">Verlauf</h3>
               </div>
-              <ul className="divide-y divide-gray-100">
+              <ul className="divide-y divide-white/[0.04]">
                 {checkins.map(ci => (
                   <li key={ci.id} className="px-5 py-4">
                     <div className="flex items-center justify-between mb-3">
-                      <div className="text-sm font-semibold text-gray-900">
+                      <div className="text-[13px] font-semibold text-[#EDECEA]">
                         Woche ab {new Date(ci.week_start).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </div>
                       {ci.body_weight && (
-                        <span className="text-sm font-bold text-emerald-600">{ci.body_weight} kg</span>
+                        <span className="text-[13px] font-bold text-[#A78BFA]">{ci.body_weight} kg</span>
                       )}
                     </div>
                     <div className="grid grid-cols-2 gap-1.5 mb-2">
@@ -946,10 +955,8 @@ export default function ProgressPage() {
                       <RatingBadge value={ci.stress} label="Stress" />
                     </div>
                     {ci.comment && (
-                      <p className="text-xs text-gray-500 italic border-l-2 border-gray-200 pl-3 mt-2">{ci.comment}</p>
+                      <p className="text-[11px] text-[#797D83] italic border-l-2 border-white/[0.1] pl-3 mt-2">{ci.comment}</p>
                     )}
-
-                    {/* Images */}
                     {(ci.checkin_images?.length ?? 0) > 0 && (
                       <div className="grid grid-cols-4 gap-1.5 mt-3">
                         {ci.checkin_images!.map((img, imgIdx) => {
@@ -959,12 +966,12 @@ export default function ProgressPage() {
                               key={img.id}
                               type="button"
                               onClick={() => openLightbox(ci.checkin_images!, imgIdx)}
-                              className="relative aspect-square rounded-xl overflow-hidden ring-1 ring-gray-200 hover:ring-emerald-400 hover:scale-105 transition-all"
+                              className="relative aspect-square rounded-xl overflow-hidden ring-1 ring-white/[0.08] hover:ring-[#A78BFA]/40 hover:scale-105 transition-all"
                             >
                               <Image src={url} alt="" fill className="object-cover" />
                             </button>
                           ) : (
-                            <div key={img.id} className="aspect-square rounded-xl bg-gray-100" />
+                            <div key={img.id} className="aspect-square rounded-xl bg-white/[0.04]" />
                           )
                         })}
                       </div>
@@ -976,9 +983,13 @@ export default function ProgressPage() {
           )}
 
           {checkins.length === 0 && !showCheckinForm && (
-            <div className="bg-white rounded-2xl border border-gray-100 py-10 text-center shadow-sm">
-              <div className="text-3xl mb-2">📝</div>
-              <p className="text-gray-400 text-sm">Noch keine Check-ins vorhanden.</p>
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] py-10 text-center">
+              <div className="w-10 h-10 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[#797D83] mx-auto mb-3">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <p className="text-[#797D83] text-[13px]">Noch keine Check-ins vorhanden.</p>
             </div>
           )}
         </div>
@@ -988,31 +999,37 @@ export default function ProgressPage() {
       {tab === 'records' && (
         <div className="space-y-4">
           {prs.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 py-14 text-center shadow-sm">
-              <div className="text-4xl mb-3">🏆</div>
-              <p className="text-gray-500 text-sm">Noch keine Rekorde. Starte ein Training!</p>
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] py-14 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-[#A78BFA]/10 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-6 h-6 text-[#A78BFA]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                </svg>
+              </div>
+              <p className="text-[#797D83] text-[13px]">Noch keine Rekorde. Starte ein Training!</p>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-              <div className="px-5 py-4 border-b border-gray-100">
-                <h3 className="font-semibold text-gray-900 text-sm">Persönliche Rekorde</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Höchstes Gewicht pro Übung aus den letzten 60 Einheiten</p>
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/[0.04]">
+                <h3 className="font-semibold text-[#EDECEA] text-[13px]">Persönliche Rekorde</h3>
+                <p className="text-[11px] text-[#797D83] mt-0.5">Höchstes Gewicht pro Übung aus den letzten 60 Einheiten</p>
               </div>
-              <ul className="divide-y divide-gray-100">
+              <ul className="divide-y divide-white/[0.04]">
                 {prs.map(pr => (
                   <li key={pr.name} className="flex items-center gap-4 px-5 py-3.5">
-                    <div className="w-9 h-9 rounded-xl bg-yellow-50 flex items-center justify-center flex-shrink-0 text-base">
-                      🏆
+                    <div className="w-9 h-9 rounded-xl bg-[#A78BFA]/10 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-4 h-4 text-[#A78BFA]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-900 truncate">{pr.name}</div>
-                      <div className="text-xs text-gray-400">
+                      <div className="text-[13px] font-medium text-[#EDECEA] truncate">{pr.name}</div>
+                      <div className="text-[11px] text-[#797D83]">
                         {new Date(pr.date).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <div className="text-sm font-bold text-gray-900">{pr.weight} kg</div>
-                      <div className="text-xs text-gray-400">{pr.reps} Wdh.</div>
+                      <div className="text-[13px] font-bold text-[#EDECEA]">{pr.weight} kg</div>
+                      <div className="text-[11px] text-[#797D83]">{pr.reps} Wdh.</div>
                     </div>
                   </li>
                 ))}

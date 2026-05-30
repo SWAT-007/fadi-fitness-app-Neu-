@@ -153,25 +153,25 @@ export default function MealLogger() {
   return (
     <div className="space-y-4">
       {/* ── Form ─────────────────────────────────────────────────────────── */}
-      <div ref={formRef} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <h2 className="font-semibold text-gray-900 mb-4">Mahlzeit eintragen</h2>
+      <div ref={formRef} className="bg-[#111111] rounded-2xl border border-white/[0.06] p-5">
+        <h2 className="font-semibold text-[#EDECEA] mb-4">Mahlzeit eintragen</h2>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-3">{error}</div>
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl mb-3">{error}</div>
         )}
         {flash && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm px-4 py-3 rounded-xl mb-3">{flash}</div>
+          <div className="bg-[#A78BFA]/[0.08] border border-[#A78BFA]/20 text-[#A78BFA] text-sm px-4 py-3 rounded-xl mb-3">{flash}</div>
         )}
 
         <form onSubmit={handleSave} className="space-y-3">
           <div>
-            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Bezeichnung</label>
+            <label className="block text-xs font-semibold text-[#797D83] uppercase tracking-wide mb-1.5">Bezeichnung</label>
             <input
               value={form.meal_name}
               onChange={set('meal_name')}
               required
               placeholder="z.B. Haferflocken mit Beeren"
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+              className="w-full px-4 py-2.5 border border-white/[0.1] rounded-xl text-sm focus:border-[#A78BFA]/40 focus:outline-none transition"
             />
           </div>
 
@@ -183,16 +183,16 @@ export default function MealLogger() {
               { field: 'fat_g'     as const, label: 'Fett',          unit: 'g',    step: '0.1' },
             ] as const).map(({ field, label, unit, step }) => (
               <div key={field}>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{label}</label>
+                <label className="block text-xs font-semibold text-[#797D83] uppercase tracking-wide mb-1.5">{label}</label>
                 <div className="relative">
                   <input
                     type="number" min="0" step={step}
                     value={form[field]}
                     onChange={set(field)}
                     placeholder="0"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent transition pr-10"
+                    className="w-full px-3 py-2.5 border border-white/[0.1] rounded-xl text-sm focus:border-[#A78BFA]/40 focus:outline-none transition pr-10"
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">{unit}</span>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#797D83] pointer-events-none">{unit}</span>
                 </div>
               </div>
             ))}
@@ -201,7 +201,7 @@ export default function MealLogger() {
           <button
             type="submit"
             disabled={saving || !form.meal_name.trim()}
-            className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors text-sm"
+            className="w-full py-3 bg-[#A78BFA] hover:bg-[#B79FFB] disabled:opacity-40 text-[#050504] font-semibold rounded-xl transition-colors text-sm"
           >
             {saving ? 'Speichern…' : 'Mahlzeit speichern'}
           </button>
@@ -211,39 +211,39 @@ export default function MealLogger() {
       {/* ── History ──────────────────────────────────────────────────────── */}
       {loading ? (
         <div className="flex justify-center py-6">
-          <div className="w-7 h-7 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-7 h-7 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
         </div>
       ) : grouped.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center shadow-sm">
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-8 text-center shadow-sm">
           <div className="text-3xl mb-2">🍽️</div>
-          <p className="text-gray-500 text-sm">Noch keine Mahlzeiten eingetragen.</p>
+          <p className="text-[#797D83] text-sm">Noch keine Mahlzeiten eingetragen.</p>
         </div>
       ) : (
         <>
-          <h3 className="font-semibold text-gray-900 pt-2">Verlauf</h3>
+          <h3 className="font-semibold text-[#EDECEA] pt-2">Verlauf</h3>
           {grouped.map(group => {
             const totalKcal = group.items.reduce((s, l) => s + (l.calories ?? 0), 0)
             return (
-              <div key={group.dateKey} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{group.label}</span>
-                  {totalKcal > 0 && <span className="text-xs font-medium text-gray-600">{Math.round(totalKcal)} kcal</span>}
+              <div key={group.dateKey} className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
+                <div className="px-5 py-3 bg-white/[0.03] border-b border-white/[0.04] flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[#797D83] uppercase tracking-wide">{group.label}</span>
+                  {totalKcal > 0 && <span className="text-xs font-medium text-[#797D83]">{Math.round(totalKcal)} kcal</span>}
                 </div>
-                <ul className="divide-y divide-gray-100">
+                <ul className="divide-y divide-white/[0.04]">
                   {group.items.map(log => (
                     <li key={log.id} className="flex items-start gap-3 px-5 py-4">
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 text-sm">{log.meal_name}</p>
+                        <p className="font-medium text-[#EDECEA] text-sm">{log.meal_name}</p>
                         <div className="flex flex-wrap gap-x-3 mt-1">
-                          {log.calories  != null && <span className="text-xs text-gray-500">{log.calories} kcal</span>}
-                          {log.protein_g != null && <span className="text-xs text-blue-600">{log.protein_g}g E</span>}
-                          {log.carbs_g   != null && <span className="text-xs text-green-600">{log.carbs_g}g K</span>}
-                          {log.fat_g     != null && <span className="text-xs text-yellow-600">{log.fat_g}g F</span>}
+                          {log.calories  != null && <span className="text-xs text-[#797D83]">{log.calories} kcal</span>}
+                          {log.protein_g != null && <span className="text-xs text-blue-400">{log.protein_g}g E</span>}
+                          {log.carbs_g   != null && <span className="text-xs text-[#A78BFA]">{log.carbs_g}g K</span>}
+                          {log.fat_g     != null && <span className="text-xs text-amber-400">{log.fat_g}g F</span>}
                         </div>
                       </div>
                       <button
                         onClick={() => reAdd(log)}
-                        className="flex-shrink-0 text-xs font-semibold text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition-colors"
+                        className="flex-shrink-0 text-xs font-semibold text-[#A78BFA] hover:text-[#A78BFA] bg-[#A78BFA]/10 hover:bg-[#A78BFA]/15 px-3 py-1.5 rounded-lg transition-colors"
                       >
                         + Nochmal
                       </button>

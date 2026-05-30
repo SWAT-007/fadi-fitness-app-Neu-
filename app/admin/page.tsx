@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import type { Client } from '@/lib/types'
 import { AnimatedNumber, StaggerItem } from '@/components/Motion'
 
@@ -57,15 +58,13 @@ const Icon = {
   arrow: <svg viewBox="0 0 24 24" {...stroke}><path d="M9 5l7 7-7 7" /></svg>,
   plus: <svg viewBox="0 0 24 24" {...stroke}><path d="M12 5v14M5 12h14" /></svg>,
   sparkle: <svg viewBox="0 0 24 24" {...stroke}><path d="M12 4l1.5 4.5L18 10l-4.5 1.5L12 16l-1.5-4.5L6 10l4.5-1.5L12 4z" /></svg>,
+  message: <svg viewBox="0 0 24 24" {...stroke}><path d="M4 6a2 2 0 012-2h12a2 2 0 012 2v9a2 2 0 01-2 2h-7l-4 3.5V17H6a2 2 0 01-2-2V6z" /></svg>,
 }
 
 type StatCard = {
   label: string
   value: number
   href: string
-  accent: string
-  iconBg: string
-  iconColor: string
   icon: ReactNode
 }
 
@@ -91,13 +90,7 @@ export default function TrainerDashboard() {
         const payload = await response.json().catch(() => null) as TrainerDashboardResponse | null
 
         if (response.status === 401) {
-          setStats({
-            clients: 0,
-            activePlanAssignments: 0,
-            nutritionPlans: 0,
-            pendingRequests: 0,
-            unreadMessages: 0,
-          })
+          setStats({ clients: 0, activePlanAssignments: 0, nutritionPlans: 0, pendingRequests: 0, unreadMessages: 0 })
           setRecentClients([])
           setErrorMessage('Backend-Login erforderlich.')
           return
@@ -133,16 +126,9 @@ export default function TrainerDashboard() {
         setRecentClients(mappedRecentClients)
       } catch (error) {
         console.error('Failed to load admin dashboard', error)
-        setStats({
-          clients: 0,
-          activePlanAssignments: 0,
-          nutritionPlans: 0,
-          pendingRequests: 0,
-          unreadMessages: 0,
-        })
+        setStats({ clients: 0, activePlanAssignments: 0, nutritionPlans: 0, pendingRequests: 0, unreadMessages: 0 })
         setRecentClients([])
-        const fallback = 'Dashboard-Daten konnten gerade nicht geladen werden.'
-        setErrorMessage(error instanceof Error ? error.message : fallback)
+        setErrorMessage(error instanceof Error ? error.message : 'Dashboard-Daten konnten gerade nicht geladen werden.')
       } finally {
         setLoading(false)
       }
@@ -151,31 +137,11 @@ export default function TrainerDashboard() {
   }, [])
 
   const statCards: StatCard[] = [
-    {
-      label: 'Aktive Kunden', value: stats.clients, href: '/admin/clients',
-      accent: 'from-indigo-500/10 to-transparent',
-      iconBg: 'bg-indigo-50', iconColor: 'text-indigo-600', icon: Icon.users,
-    },
-    {
-      label: 'Aktive Trainingspläne', value: stats.activePlanAssignments, href: '/admin/plans',
-      accent: 'from-violet-500/10 to-transparent',
-      iconBg: 'bg-violet-50', iconColor: 'text-violet-600', icon: Icon.plans,
-    },
-    {
-      label: 'Ernährungspläne', value: stats.nutritionPlans, href: '/admin/nutrition',
-      accent: 'from-orange-500/10 to-transparent',
-      iconBg: 'bg-orange-50', iconColor: 'text-orange-600', icon: Icon.flame,
-    },
-    {
-      label: 'Offene Anfragen', value: stats.pendingRequests, href: '/admin/requests',
-      accent: 'from-emerald-500/10 to-transparent',
-      iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600', icon: Icon.sparkle,
-    },
-    {
-      label: 'Ungelesene Nachrichten', value: stats.unreadMessages, href: '/admin/messages',
-      accent: 'from-cyan-500/10 to-transparent',
-      iconBg: 'bg-cyan-50', iconColor: 'text-cyan-600', icon: Icon.arrow,
-    },
+    { label: 'Kunden', value: stats.clients, href: '/admin/clients', icon: Icon.users },
+    { label: 'Aktive Pläne', value: stats.activePlanAssignments, href: '/admin/plans', icon: Icon.plans },
+    { label: 'Ernährungspläne', value: stats.nutritionPlans, href: '/admin/nutrition', icon: Icon.flame },
+    { label: 'Anfragen', value: stats.pendingRequests, href: '/admin/requests', icon: Icon.sparkle },
+    { label: 'Nachrichten', value: stats.unreadMessages, href: '/admin/messages', icon: Icon.message },
   ]
 
   const today = new Date()
@@ -190,48 +156,59 @@ export default function TrainerDashboard() {
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   return (
     <div className="px-5 lg:px-8 py-6 lg:py-8 max-w-6xl mx-auto">
-      {/* Hero */}
-      <div className="mb-8">
-        <div className="text-[11px] font-medium tracking-[0.14em] uppercase text-gray-400">{dateLabel}</div>
-        <h1 className="mt-1 text-[28px] lg:text-[32px] font-semibold text-gray-900 tracking-tight leading-tight">
-          {greeting}{trainerName ? `, ${trainerName}` : ''}.
-        </h1>
-        <p className="text-gray-500 text-[14px] mt-1.5">
-          Hier ist ein Überblick über deine Kunden und Pläne.
-        </p>
-        {errorMessage && (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            {errorMessage}
-          </div>
-        )}
+
+      {/* Hero trainer card — image 2 */}
+      <div className="relative overflow-hidden rounded-3xl mb-6 h-[220px] lg:h-[280px]">
+        <Image
+          src="/images/app-style/2.jpeg"
+          alt="Trainer"
+          fill
+          className="object-cover object-top"
+          style={{ filter: 'brightness(0.5) contrast(1.15)' }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#050504]/90 via-[#050504]/50 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#050504]/60 to-transparent" />
+        {/* purple rim accent */}
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-[#A78BFA]/0 via-[#A78BFA]/40 to-[#A78BFA]/0" />
+
+        <div className="absolute inset-0 flex flex-col justify-end p-6 lg:p-8">
+          <p className="text-[11px] font-medium tracking-[0.18em] uppercase text-[#A78BFA] mb-1">{dateLabel}</p>
+          <h1 className="text-[28px] lg:text-[36px] font-bold text-white tracking-tight leading-tight">
+            {greeting}{trainerName ? `, ${trainerName}` : ''}.
+          </h1>
+          <p className="text-white/60 text-[13px] mt-1">Hier ist dein heutiger Überblick.</p>
+        </div>
       </div>
 
+      {errorMessage && (
+        <div className="mb-5 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+          {errorMessage}
+        </div>
+      )}
+
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
         {statCards.map((card, i) => (
           <StaggerItem key={card.label} index={i}>
             <Link
               href={card.href}
-              className="lift relative block overflow-hidden rounded-2xl bg-white border border-gray-200/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)] hover:border-gray-300/80 hover:shadow-[0_8px_24px_-12px_rgba(16,24,40,0.12)] p-5"
+              className="lift press group relative flex flex-col gap-3 p-4 rounded-2xl bg-[#111111] border border-white/[0.06] hover:border-[#A78BFA]/20 hover:bg-[#181818] transition-colors"
             >
-              <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${card.accent}`} />
-              <div className="relative flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[12.5px] font-medium text-gray-500">{card.label}</p>
-                  <p className="text-[32px] font-semibold text-gray-900 mt-1 tracking-tight tabular-nums leading-none">
-                    <AnimatedNumber value={card.value} />
-                  </p>
-                </div>
-                <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${card.iconBg} ${card.iconColor} ring-1 ring-inset ring-black/5`}>
-                  <span className="w-5 h-5 block">{card.icon}</span>
-                </div>
+              <div className="w-9 h-9 rounded-xl bg-[#A78BFA]/10 flex items-center justify-center text-[#A78BFA]">
+                <span className="w-4.5 h-4.5 block">{card.icon}</span>
+              </div>
+              <div>
+                <p className="text-[28px] font-bold text-[#EDECEA] tabular-nums leading-none">
+                  <AnimatedNumber value={card.value} />
+                </p>
+                <p className="text-[11.5px] text-[#797D83] mt-1">{card.label}</p>
               </div>
             </Link>
           </StaggerItem>
@@ -239,46 +216,46 @@ export default function TrainerDashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
         <Link
           href="/admin/clients/new"
-          className="lift press group relative overflow-hidden rounded-2xl p-5 flex items-center gap-4 text-white bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 shadow-[0_8px_24px_-12px_rgba(79,70,229,0.55)]"
+          className="lift press group relative overflow-hidden rounded-2xl p-5 flex items-center gap-4 bg-[#A78BFA] shadow-[0_8px_32px_-12px_rgba(167,139,250,0.45)]"
         >
-          <span className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-white/10 blur-2xl" />
-          <div className="relative w-11 h-11 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center ring-1 ring-white/20">
-            <span className="w-5 h-5 block">{Icon.plus}</span>
+          <span className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+          <div className="relative w-11 h-11 rounded-xl bg-black/15 flex items-center justify-center">
+            <span className="w-5 h-5 block text-[#050504]">{Icon.plus}</span>
           </div>
           <div className="relative flex-1 min-w-0">
-            <div className="font-semibold tracking-tight">Neuen Kunden anlegen</div>
-            <div className="text-indigo-100/90 text-[13px] mt-0.5">Profil, Ziele, Plan zuweisen</div>
+            <div className="font-bold text-[#050504] tracking-tight">Neuen Kunden anlegen</div>
+            <div className="text-[#050504]/60 text-[13px] mt-0.5">Profil, Ziele, Plan zuweisen</div>
           </div>
-          <span className="relative w-4 h-4 text-white/80 transition-transform duration-200 group-hover:translate-x-0.5">{Icon.arrow}</span>
+          <span className="relative w-4 h-4 text-[#050504]/60 transition-transform duration-200 group-hover:translate-x-0.5">{Icon.arrow}</span>
         </Link>
         <Link
           href="/admin/plans/new"
-          className="lift press group relative overflow-hidden rounded-2xl p-5 flex items-center gap-4 bg-white border border-gray-200/70 hover:border-gray-300/80 shadow-[0_1px_2px_rgba(16,24,40,0.04)] hover:shadow-[0_8px_24px_-12px_rgba(16,24,40,0.12)]"
+          className="lift press group relative overflow-hidden rounded-2xl p-5 flex items-center gap-4 bg-[#111111] border border-white/[0.06] hover:border-white/[0.1] hover:bg-[#181818]"
         >
-          <div className="w-11 h-11 rounded-xl bg-gray-50 ring-1 ring-inset ring-black/5 flex items-center justify-center text-gray-700">
+          <div className="w-11 h-11 rounded-xl bg-white/[0.06] flex items-center justify-center text-[#797D83]">
             <span className="w-5 h-5 block">{Icon.sparkle}</span>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-gray-900 tracking-tight">Trainingsplan erstellen</div>
-            <div className="text-gray-500 text-[13px] mt-0.5">Wochenplan oder Vorlage</div>
+            <div className="font-bold text-[#EDECEA] tracking-tight">Trainingsplan erstellen</div>
+            <div className="text-[#797D83] text-[13px] mt-0.5">Wochenplan oder Vorlage</div>
           </div>
-          <span className="w-4 h-4 text-gray-400 transition-transform duration-200 group-hover:translate-x-0.5">{Icon.arrow}</span>
+          <span className="w-4 h-4 text-[#797D83] transition-transform duration-200 group-hover:translate-x-0.5">{Icon.arrow}</span>
         </Link>
       </div>
 
       {/* Recent Clients */}
-      <div className="bg-white rounded-2xl border border-gray-200/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)] overflow-hidden">
-        <div className="px-5 lg:px-6 py-4 flex items-center justify-between border-b border-gray-100">
+      <div className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div className="px-5 lg:px-6 py-4 flex items-center justify-between border-b border-white/[0.06]">
           <div>
-            <h2 className="font-semibold text-gray-900 tracking-tight">Neueste Kunden</h2>
-            <p className="text-[12.5px] text-gray-500 mt-0.5">Zuletzt hinzugefügt</p>
+            <h2 className="font-bold text-[#EDECEA] tracking-tight">Neueste Kunden</h2>
+            <p className="text-[12.5px] text-[#797D83] mt-0.5">Zuletzt hinzugefügt</p>
           </div>
           <Link
             href="/admin/clients"
-            className="press text-[13px] font-medium text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 px-2 py-1 -mr-2 rounded-lg hover:bg-indigo-50"
+            className="press text-[13px] font-medium text-[#A78BFA] hover:text-[#B79FFB] inline-flex items-center gap-1 px-2 py-1 -mr-2 rounded-lg hover:bg-[#A78BFA]/[0.08]"
           >
             Alle anzeigen
             <span className="w-3.5 h-3.5">{Icon.arrow}</span>
@@ -286,13 +263,13 @@ export default function TrainerDashboard() {
         </div>
         {recentClients.length === 0 ? (
           <div className="px-6 py-14 text-center">
-            <div className="mx-auto w-12 h-12 rounded-2xl bg-gray-50 ring-1 ring-inset ring-black/5 flex items-center justify-center text-gray-400">
+            <div className="mx-auto w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[#797D83]">
               <span className="w-6 h-6 block">{Icon.users}</span>
             </div>
-            <p className="mt-3 text-gray-600 text-sm">Noch keine Kunden.</p>
+            <p className="mt-3 text-[#797D83] text-sm">Noch keine Kunden.</p>
             <Link
               href="/admin/clients/new"
-              className="press inline-flex items-center gap-1.5 mt-3 px-3.5 py-2 rounded-xl bg-gray-900 text-white text-[13px] font-medium hover:bg-gray-800"
+              className="press inline-flex items-center gap-1.5 mt-3 px-3.5 py-2 rounded-xl bg-[#A78BFA] text-[#050504] text-[13px] font-bold"
             >
               <span className="w-3.5 h-3.5">{Icon.plus}</span> Ersten Kunden hinzufügen
             </Link>
@@ -300,20 +277,20 @@ export default function TrainerDashboard() {
         ) : (
           <ul>
             {recentClients.map((client, index) => (
-              <li key={client.id} className={index !== 0 ? 'border-t border-gray-100' : ''}>
+              <li key={client.id} className={index !== 0 ? 'border-t border-white/[0.04]' : ''}>
                 <StaggerItem index={index}>
                   <Link
                     href={`/admin/clients/${client.id}`}
-                    className="press group flex items-center gap-4 px-5 lg:px-6 py-3.5 hover:bg-gray-50/70"
+                    className="press group flex items-center gap-4 px-5 lg:px-6 py-3.5 hover:bg-white/[0.03]"
                   >
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 text-white flex items-center justify-center font-semibold text-[13px] ring-2 ring-white shadow-sm">
+                    <div className="w-9 h-9 rounded-full bg-[#A78BFA]/15 border border-[#A78BFA]/20 text-[#A78BFA] flex items-center justify-center font-bold text-[13px]">
                       {client.full_name.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 text-[14px] truncate tracking-tight">{client.full_name}</div>
-                      <div className="text-gray-500 text-[12.5px] truncate">{client.email}</div>
+                      <div className="font-medium text-[#EDECEA] text-[14px] truncate tracking-tight">{client.full_name}</div>
+                      <div className="text-[#797D83] text-[12.5px] truncate">{client.email}</div>
                     </div>
-                    <span className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-transform duration-200 group-hover:translate-x-0.5">
+                    <span className="w-4 h-4 text-[#797D83]/40 group-hover:text-[#797D83] transition-transform duration-200 group-hover:translate-x-0.5">
                       {Icon.arrow}
                     </span>
                   </Link>

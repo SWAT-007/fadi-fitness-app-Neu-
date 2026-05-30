@@ -65,7 +65,7 @@ export default function ClientDashboard() {
   const [weightSaving, setWeightSaving] = useState(false)
   const [weightSaved, setWeightSaved] = useState(false)
 
-interface DashboardPayload {
+  interface DashboardPayload {
     client?: {
       id: string
       fullName: string
@@ -102,26 +102,13 @@ interface DashboardPayload {
   useEffect(() => {
     const load = async () => {
       try {
-        const response = await fetch('/api/backend/me/dashboard', {
-          method: 'GET',
-          cache: 'no-store',
-        })
-
-        if (response.status === 401) {
-          router.replace('/login')
-          return
-        }
-        if (response.status === 403) {
-          router.replace('/admin')
-          return
-        }
+        const response = await fetch('/api/backend/me/dashboard', { method: 'GET', cache: 'no-store' })
+        if (response.status === 401) { router.replace('/login'); return }
+        if (response.status === 403) { router.replace('/admin'); return }
 
         const payload = await response.json().catch(() => null) as DashboardPayload | null
         if (!response.ok || !payload?.client) {
-          showToast(
-            withErrorId(payload?.message ?? 'Dashboard-Daten konnten nicht geladen werden.', payload?.errorId),
-            'danger',
-          )
+          showToast(withErrorId(payload?.message ?? 'Dashboard-Daten konnten nicht geladen werden.', payload?.errorId), 'danger')
           setLoading(false)
           return
         }
@@ -134,22 +121,10 @@ interface DashboardPayload {
           created_at: '',
         }
         setClient(clientData)
-        setProfile({
-          id: payload.client.id,
-          email: payload.client.email,
-          full_name: payload.client.fullName,
-          role: 'client',
-          created_at: '',
-        })
+        setProfile({ id: payload.client.id, email: payload.client.email, full_name: payload.client.fullName, role: 'client', created_at: '' })
 
         if (payload.activePlan?.plan) {
-          const mappedPlan: WorkoutPlan = {
-            id: payload.activePlan.plan.id,
-            trainer_id: payload.client.trainerId,
-            name: payload.activePlan.plan.name,
-            created_at: '',
-          }
-          setActivePlan(mappedPlan)
+          setActivePlan({ id: payload.activePlan.plan.id, trainer_id: payload.client.trainerId, name: payload.activePlan.plan.name, created_at: '' })
           setPlanDays((payload.activePlan.plan.days ?? []).sort((a, b) => a.sort_order - b.sort_order))
         }
 
@@ -169,26 +144,12 @@ interface DashboardPayload {
         setTotalWorkouts(payload.workoutStats?.completedCount ?? 0)
         setCompletedDayIds(new Set(completedIds))
         setActiveDayIds(new Set(activeIds))
-        setWeeklyStats({
-          workouts: weekMonthlySubset.length,
-          seconds: weekMonthlySubset.reduce((sum, log) => sum + (log.durationSeconds ?? 0), 0),
-        })
-        setMonthlyStats({
-          workouts: monthlyWorkouts.length,
-          seconds: monthlyWorkouts.reduce((sum, log) => sum + (log.durationSeconds ?? 0), 0),
-        })
+        setWeeklyStats({ workouts: weekMonthlySubset.length, seconds: weekMonthlySubset.reduce((s, l) => s + (l.durationSeconds ?? 0), 0) })
+        setMonthlyStats({ workouts: monthlyWorkouts.length, seconds: monthlyWorkouts.reduce((s, l) => s + (l.durationSeconds ?? 0), 0) })
         setHasWeeklyCheckin(Boolean(payload.hasCurrentWeekCheckin))
         setUnreadMessageCount(payload.unreadMessageCount ?? 0)
-
         setLastWeight(payload.latestProgressLog
-          ? {
-              id: payload.latestProgressLog.id,
-              client_id: payload.client.id,
-              date: payload.latestProgressLog.date,
-              body_weight: payload.latestProgressLog.bodyWeight,
-              notes: payload.latestProgressLog.notes ?? null,
-              created_at: '',
-            }
+          ? { id: payload.latestProgressLog.id, client_id: payload.client.id, date: payload.latestProgressLog.date, body_weight: payload.latestProgressLog.bodyWeight, notes: payload.latestProgressLog.notes ?? null, created_at: '' }
           : null)
       } catch (error) {
         showToast(error instanceof Error ? error.message : 'Netzwerkfehler beim Laden.', 'danger')
@@ -218,15 +179,8 @@ interface DashboardPayload {
       showToast(withErrorId(payload?.message ?? 'Gewicht konnte nicht gespeichert werden.', payload?.errorId), 'danger')
       return
     }
-    if (response.ok && payload?.progressLog) {
-      setLastWeight({
-        id: payload.progressLog.id,
-        client_id: client.id,
-        date: payload.progressLog.date,
-        body_weight: payload.progressLog.bodyWeight,
-        notes: payload.progressLog.notes ?? null,
-        created_at: '',
-      })
+    if (payload?.progressLog) {
+      setLastWeight({ id: payload.progressLog.id, client_id: client.id, date: payload.progressLog.date, body_weight: payload.progressLog.bodyWeight, notes: payload.progressLog.notes ?? null, created_at: '' })
     }
     setWeightInput('')
     setWeightOpen(false)
@@ -248,27 +202,26 @@ interface DashboardPayload {
   const weeklyProgressPct = Math.min(100, Math.round((weeklyStats.workouts / weeklyGoal) * 100))
   const trainingStatusText = !activePlan
     ? 'Kein aktiver Plan'
-    : activeDayIds.size > 0
-      ? 'Workout läuft'
-      : completedDayIds.size > 0
-        ? `${completedDayIds.size} Tag(e) erledigt`
-        : 'Noch kein Workout'
+    : activeDayIds.size > 0 ? 'Workout läuft'
+    : completedDayIds.size > 0 ? `${completedDayIds.size} Tag(e) erledigt`
+    : 'Noch kein Workout'
 
   if (loading) {
-    return <div className="flex justify-center p-12"><div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" /></div>
+    return <div className="flex justify-center p-12"><div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" /></div>
   }
 
   return (
     <div className="px-4 pt-4 pb-8 max-w-lg mx-auto">
-      {/* Hero — gradient greeting card with weekly progress ring */}
-      <div className="relative overflow-hidden rounded-3xl mb-4 p-5 text-white bg-gradient-to-br from-[#0b0c0f] via-[#111318] to-[#1a1d24] shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
-        <span className="pointer-events-none absolute -right-10 -top-10 w-44 h-44 rounded-full bg-emerald-500/20 blur-3xl" />
-        <span className="pointer-events-none absolute right-12 bottom-0 w-28 h-28 rounded-full bg-violet-500/15 blur-3xl" />
+
+      {/* Hero greeting card */}
+      <div className="relative overflow-hidden rounded-3xl mb-4 p-5 bg-[#111111] border border-white/[0.06] shadow-[0_12px_40px_-16px_rgba(0,0,0,0.6)]">
+        <span className="pointer-events-none absolute -right-10 -top-10 w-44 h-44 rounded-full bg-[#A78BFA]/10 blur-3xl" />
+        <span className="pointer-events-none absolute right-12 bottom-0 w-28 h-28 rounded-full bg-[#A78BFA]/5 blur-3xl" />
         <div className="relative flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium tracking-[0.16em] uppercase text-white/50">{greeting}</p>
-            <h1 className="mt-1 text-[26px] font-semibold tracking-tight leading-tight">{firstName}</h1>
-            <p className="text-white/60 text-[13px] mt-1.5">
+            <p className="text-[11px] font-medium tracking-[0.16em] uppercase text-[#797D83]">{greeting}</p>
+            <h1 className="mt-1 text-[28px] font-bold tracking-tight leading-tight text-[#EDECEA]">{firstName}</h1>
+            <p className="text-[#797D83] text-[13px] mt-1.5">
               {weeklyStats.workouts === 0
                 ? 'Bereit für dein erstes Training diese Woche?'
                 : `${weeklyStats.workouts} von ${weeklyGoal} Trainings diese Woche.`}
@@ -280,60 +233,45 @@ interface DashboardPayload {
 
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-3 mb-4">
-        <StatCard
+        <DarkStatCard
           label="Trainings gesamt"
           value={<AnimatedNumber value={totalWorkouts} />}
-          accent="from-emerald-500/10 to-transparent"
-          iconBg="bg-emerald-50" iconColor="text-emerald-600"
           icon={Icon.flame}
         />
-        <StatCard
+        <DarkStatCard
           label="Letztes Gewicht"
           value={lastWeight?.body_weight
-            ? <><AnimatedNumber value={lastWeight.body_weight} decimals={1} /><span className="text-base font-medium text-gray-500 ml-1">kg</span></>
-            : <span className="text-gray-400">–</span>}
-          accent="from-violet-500/10 to-transparent"
-          iconBg="bg-violet-50" iconColor="text-violet-600"
+            ? <><AnimatedNumber value={lastWeight.body_weight} decimals={1} /><span className="text-base font-medium text-[#797D83] ml-1">kg</span></>
+            : <span className="text-[#797D83]">–</span>}
           icon={Icon.scale}
         />
       </div>
 
       {/* Active plan */}
       {!client ? (
-        <EmptyCard icon={Icon.dumbbell} text="Dein Kundenkonto ist noch nicht mit deinem Trainer verbunden." />
+        <DarkEmptyCard icon={Icon.dumbbell} text="Dein Kundenkonto ist noch nicht mit deinem Trainer verbunden." />
       ) : !activePlan ? (
-        <EmptyCard icon={Icon.dumbbell} text="Dir wurde noch kein Trainingsplan zugewiesen." />
+        <DarkEmptyCard icon={Icon.dumbbell} text="Dir wurde noch kein Trainingsplan zugewiesen." />
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-200/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)] mb-4 overflow-hidden">
-          <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-gray-100">
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] mb-4 overflow-hidden">
+          <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-white/[0.04]">
             <div>
-              <p className="text-[11px] text-gray-500 font-medium uppercase tracking-[0.12em]">Aktueller Plan</p>
-              <h2 className="font-semibold text-gray-900 mt-0.5 tracking-tight">{activePlan.name}</h2>
+              <p className="text-[11px] text-[#797D83] font-medium uppercase tracking-[0.12em]">Aktueller Plan</p>
+              <h2 className="font-bold text-[#EDECEA] mt-0.5 tracking-tight">{activePlan.name}</h2>
             </div>
             <Link
               href="/client/plan"
-              className="press inline-flex items-center gap-1 text-[12.5px] font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 -mr-1 rounded-lg hover:bg-emerald-50"
+              className="press inline-flex items-center gap-1 text-[12.5px] font-medium text-[#A78BFA] hover:text-[#B79FFB] px-2 py-1 -mr-1 rounded-lg hover:bg-[#A78BFA]/[0.08]"
             >
               Alle Tage <span className="w-3.5 h-3.5">{Icon.arrow}</span>
             </Link>
           </div>
           <div className="p-2.5 space-y-1">
-            {menuOpenDayId && (
-              <div className="fixed inset-0 z-10" onClick={() => setMenuOpenDayId(null)} />
-            )}
+            {menuOpenDayId && <div className="fixed inset-0 z-10" onClick={() => setMenuOpenDayId(null)} />}
             {planDays.map((day, index) => {
               const isActive = activeDayIds.has(day.id)
               const isDone = !isActive && completedDayIds.has(day.id)
-              const rowBg = isActive
-                ? 'bg-blue-50/70 hover:bg-blue-50'
-                : isDone
-                  ? 'bg-emerald-50/60 hover:bg-emerald-50'
-                  : 'hover:bg-gray-50'
-              const iconBg = isActive
-                ? 'bg-blue-500 text-white ring-2 ring-blue-200'
-                : isDone
-                  ? 'bg-emerald-500 text-white ring-2 ring-emerald-200'
-                  : 'bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200/60'
+              const rowBg = isActive ? 'bg-[#A78BFA]/[0.08]' : isDone ? 'bg-white/[0.03]' : 'hover:bg-white/[0.03]'
 
               return (
                 <StaggerItem key={day.id} index={index} className={`relative ${menuOpenDayId === day.id ? 'z-40' : 'z-0'}`}>
@@ -342,23 +280,27 @@ interface DashboardPayload {
                       onClick={() => router.push(`/client/plan/${day.id}`)}
                       className="press flex items-center gap-3 flex-1 min-w-0 text-left"
                     >
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        isActive ? 'bg-[#A78BFA] text-[#050504]'
+                        : isDone ? 'bg-white/[0.08] text-[#A78BFA]'
+                        : 'bg-white/[0.06] text-[#797D83]'
+                      }`}>
                         {isActive
                           ? <span className="relative flex h-2.5 w-2.5">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#050504] opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#050504]" />
                             </span>
                           : isDone
                             ? <span className="w-5 h-5 block">{Icon.check}</span>
                             : <span className="w-5 h-5 block">{Icon.dumbbell}</span>}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-gray-900 text-[14px] tracking-tight">{day.name}</div>
+                        <div className="font-medium text-[#EDECEA] text-[14px] tracking-tight">{day.name}</div>
                         {isActive
-                          ? <div className="text-[11.5px] text-blue-600 mt-0.5 font-medium">Läuft gerade</div>
+                          ? <div className="text-[11.5px] text-[#A78BFA] mt-0.5 font-medium">Läuft gerade</div>
                           : isDone
-                            ? <div className="text-[11.5px] text-emerald-600 mt-0.5 font-medium">Diese Woche erledigt</div>
-                            : day.description && <div className="text-[11.5px] text-gray-400 truncate mt-0.5">{day.description}</div>
+                            ? <div className="text-[11.5px] text-[#797D83] mt-0.5">Diese Woche erledigt</div>
+                            : day.description && <div className="text-[11.5px] text-[#797D83] truncate mt-0.5">{day.description}</div>
                         }
                       </div>
                     </button>
@@ -366,7 +308,7 @@ interface DashboardPayload {
                     {isActive ? (
                       <button
                         onClick={e => { e.stopPropagation(); router.push(`/client/workout/${day.id}/play`) }}
-                        className="press flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-[12px] font-semibold flex-shrink-0"
+                        className="press flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-[12px] font-bold flex-shrink-0"
                       >
                         <span className="w-3 h-3">{Icon.play}</span>
                         Weiter
@@ -374,7 +316,7 @@ interface DashboardPayload {
                     ) : isDone ? (
                       <button
                         onClick={e => { e.stopPropagation(); setMenuOpenDayId(menuOpenDayId === day.id ? null : day.id) }}
-                        className="press p-1.5 rounded-lg hover:bg-white/70 text-gray-400 flex-shrink-0 relative z-20"
+                        className="press p-1.5 rounded-lg hover:bg-white/[0.06] text-[#797D83] flex-shrink-0 relative z-20"
                         aria-label="Optionen"
                       >
                         <span className="w-4 h-4 block">{Icon.dots}</span>
@@ -382,7 +324,7 @@ interface DashboardPayload {
                     ) : (
                       <button
                         onClick={e => { e.stopPropagation(); router.push(`/client/workout/${day.id}/play`) }}
-                        className="press flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white text-[12px] font-semibold flex-shrink-0 shadow-[0_4px_12px_-4px_rgba(16,185,129,0.5)]"
+                        className="press flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-[12px] font-bold flex-shrink-0 shadow-[0_4px_12px_-4px_rgba(167,139,250,0.4)]"
                       >
                         <span className="w-3 h-3">{Icon.play}</span>
                         Starten
@@ -391,12 +333,12 @@ interface DashboardPayload {
                   </div>
 
                   {isDone && menuOpenDayId === day.id && (
-                    <div ref={menuRef} className="absolute right-2 top-12 z-30 bg-white rounded-xl shadow-lg border border-gray-200/70 py-1 min-w-[170px]">
+                    <div ref={menuRef} className="absolute right-2 top-12 z-30 bg-[#181818] rounded-xl shadow-2xl border border-white/[0.08] py-1 min-w-[170px]">
                       <button
                         onClick={() => { router.push(`/client/workout/${day.id}/play?fresh=1`); setMenuOpenDayId(null) }}
-                        className="press w-full text-left px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                        className="press w-full text-left px-4 py-2.5 text-[13px] text-[#EDECEA] hover:bg-white/[0.04] flex items-center gap-2"
                       >
-                        <span className="w-4 h-4 text-gray-500">{Icon.refresh}</span>
+                        <span className="w-4 h-4 text-[#797D83]">{Icon.refresh}</span>
                         Nochmal starten
                       </button>
                     </div>
@@ -409,32 +351,32 @@ interface DashboardPayload {
       )}
 
       {/* Analyse */}
-      <div className="bg-white rounded-2xl border border-gray-200/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)] mb-4 overflow-hidden">
-        <div className="px-5 pt-4 pb-3 flex items-center gap-2 border-b border-gray-100">
-          <span className="w-4 h-4 text-gray-400">{Icon.trend}</span>
-          <p className="text-[11px] text-gray-500 font-medium uppercase tracking-[0.12em]">Fortschritt</p>
+      <div className="bg-[#111111] rounded-2xl border border-white/[0.06] mb-4 overflow-hidden">
+        <div className="px-5 pt-4 pb-3 flex items-center gap-2 border-b border-white/[0.04]">
+          <span className="w-4 h-4 text-[#797D83]">{Icon.trend}</span>
+          <p className="text-[11px] text-[#797D83] font-medium uppercase tracking-[0.12em]">Fortschritt</p>
         </div>
         <div className="p-3 grid grid-cols-2 gap-2.5">
-          <AnalyseTile label="Diese Woche" sub="Trainings" icon={Icon.dumbbell} value={<AnimatedNumber value={weeklyStats.workouts} />} accent="from-emerald-500/10" />
-          <AnalyseTile label="Diese Woche" sub="Trainingszeit" icon={Icon.clock} value={formatDuration(weeklyStats.seconds)} accent="from-blue-500/10" />
-          <AnalyseTile label="Dieser Monat" sub="Trainings" icon={Icon.dumbbell} value={<AnimatedNumber value={monthlyStats.workouts} />} accent="from-violet-500/10" />
-          <AnalyseTile label="Dieser Monat" sub="Trainingszeit" icon={Icon.clock} value={formatDuration(monthlyStats.seconds)} accent="from-orange-500/10" />
+          <AnalyseTile label="Diese Woche" sub="Trainings" icon={Icon.dumbbell} value={<AnimatedNumber value={weeklyStats.workouts} />} />
+          <AnalyseTile label="Diese Woche" sub="Trainingszeit" icon={Icon.clock} value={formatDuration(weeklyStats.seconds)} />
+          <AnalyseTile label="Dieser Monat" sub="Trainings" icon={Icon.dumbbell} value={<AnimatedNumber value={monthlyStats.workouts} />} />
+          <AnalyseTile label="Dieser Monat" sub="Trainingszeit" icon={Icon.clock} value={formatDuration(monthlyStats.seconds)} />
         </div>
       </div>
 
       {/* Diese Woche */}
-      <div className="bg-white rounded-2xl border border-gray-200/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)] mb-4 overflow-hidden">
-        <div className="px-5 pt-4 pb-3 border-b border-gray-100">
-          <p className="text-[11px] text-gray-500 font-medium uppercase tracking-[0.12em]">Diese Woche</p>
+      <div className="bg-[#111111] rounded-2xl border border-white/[0.06] mb-4 overflow-hidden">
+        <div className="px-5 pt-4 pb-3 border-b border-white/[0.04]">
+          <p className="text-[11px] text-[#797D83] font-medium uppercase tracking-[0.12em]">Diese Woche</p>
         </div>
         <div className="px-5 py-3 space-y-2.5 text-sm">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-gray-600">Training</span>
-            <span className="font-medium text-gray-900">{trainingStatusText}</span>
+            <span className="text-[#797D83]">Training</span>
+            <span className="font-medium text-[#EDECEA]">{trainingStatusText}</span>
           </div>
           <div className="flex items-center justify-between gap-3">
-            <span className="text-gray-600">Check-in</span>
-            <span className={`font-medium ${hasWeeklyCheckin ? 'text-emerald-700' : 'text-amber-700'}`}>
+            <span className="text-[#797D83]">Check-in</span>
+            <span className={`font-medium ${hasWeeklyCheckin ? 'text-[#A78BFA]' : 'text-amber-400'}`}>
               {hasWeeklyCheckin ? 'Erledigt' : 'Offen'}
             </span>
           </div>
@@ -445,24 +387,24 @@ interface DashboardPayload {
       <div className="grid grid-cols-2 gap-3">
         <button
           onClick={() => { setWeightInput(''); setWeightOpen(true) }}
-          className="lift press group relative overflow-hidden rounded-2xl p-4 text-left text-white bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 shadow-[0_8px_24px_-12px_rgba(16,185,129,0.6)]"
+          className="lift press group relative overflow-hidden rounded-2xl p-4 text-left bg-[#A78BFA] shadow-[0_8px_32px_-12px_rgba(167,139,250,0.5)]"
         >
-          <span className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/15 blur-2xl" />
-          <div className="relative w-9 h-9 rounded-xl bg-white/15 backdrop-blur-sm ring-1 ring-white/20 flex items-center justify-center mb-3">
-            <span className="w-4.5 h-4.5 block">{Icon.plus}</span>
+          <span className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+          <div className="relative w-9 h-9 rounded-xl bg-black/15 flex items-center justify-center mb-3">
+            <span className="w-4 h-4 block text-[#050504]">{Icon.plus}</span>
           </div>
-          <div className="relative font-semibold text-[14px] tracking-tight">Gewicht eintragen</div>
-          <div className="relative text-emerald-50/85 text-[12px] mt-0.5">Heute, {new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}</div>
+          <div className="relative font-bold text-[14px] tracking-tight text-[#050504]">Gewicht eintragen</div>
+          <div className="relative text-[#050504]/60 text-[12px] mt-0.5">Heute, {new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}</div>
         </button>
         <Link
           href="/client/messages"
-          className="lift press group rounded-2xl p-4 bg-white border border-gray-200/70 hover:border-gray-300/80 shadow-[0_1px_2px_rgba(16,24,40,0.04)] hover:shadow-[0_8px_24px_-12px_rgba(16,24,40,0.12)]"
+          className="lift press group rounded-2xl p-4 bg-[#111111] border border-white/[0.06] hover:border-white/[0.1] hover:bg-[#181818] transition-colors"
         >
-          <div className="w-9 h-9 rounded-xl bg-gray-50 ring-1 ring-inset ring-black/5 flex items-center justify-center text-gray-700 mb-3">
+          <div className="w-9 h-9 rounded-xl bg-white/[0.06] flex items-center justify-center text-[#797D83] mb-3">
             <span className="w-5 h-5 block">{Icon.chat}</span>
           </div>
-          <div className="font-semibold text-[14px] text-gray-900 tracking-tight">Trainer schreiben</div>
-          <div className="text-gray-500 text-[12px] mt-0.5">Frage stellen oder Update</div>
+          <div className="font-bold text-[14px] text-[#EDECEA] tracking-tight">Trainer schreiben</div>
+          <div className="text-[#797D83] text-[12px] mt-0.5">Frage stellen oder Update</div>
           {unreadMessageCount > 0 && (
             <div className="mt-2 inline-flex min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold items-center justify-center">
               {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
@@ -473,16 +415,16 @@ interface DashboardPayload {
 
       {/* Gewicht-Modal */}
       {weightOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50 backdrop-blur-sm motion-page-fade">
-          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="font-semibold text-gray-900 tracking-tight">Gewicht eintragen</h2>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-sm motion-page-fade">
+          <div className="w-full max-w-sm bg-[#111111] border border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/[0.06]">
+              <h2 className="font-bold text-[#EDECEA] tracking-tight">Gewicht eintragen</h2>
               {lastWeight?.body_weight && (
-                <p className="text-[12px] text-gray-400 mt-0.5">Letzter Eintrag: {lastWeight.body_weight} kg</p>
+                <p className="text-[12px] text-[#797D83] mt-0.5">Letzter Eintrag: {lastWeight.body_weight} kg</p>
               )}
             </div>
             <div className="px-5 py-4">
-              <label className="block text-[13px] font-medium text-gray-700 mb-2">
+              <label className="block text-[12px] font-medium text-[#797D83] mb-2 uppercase tracking-[0.1em]">
                 Aktuelles Gewicht (kg)
               </label>
               <input
@@ -494,13 +436,13 @@ interface DashboardPayload {
                 placeholder="z.B. 72.5"
                 autoFocus
                 onKeyDown={e => e.key === 'Enter' && handleSaveWeight()}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-lg font-semibold text-center tabular-nums focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
+                className="w-full px-4 py-3 border border-white/[0.1] bg-white/[0.05] rounded-xl text-lg font-bold text-center tabular-nums text-[#EDECEA] placeholder-[#797D83] focus:border-[#A78BFA]/40 focus:outline-none transition"
               />
             </div>
             <div className="px-5 pb-5 flex gap-3">
               <button
                 onClick={() => setWeightOpen(false)}
-                className="press flex-1 py-3 border border-gray-200 text-gray-600 font-medium rounded-xl hover:bg-gray-50 text-[13px]"
+                className="press flex-1 py-3 border border-white/[0.08] text-[#797D83] font-medium rounded-xl hover:bg-white/[0.04] text-[13px]"
               >
                 Abbrechen
               </button>
@@ -508,7 +450,7 @@ interface DashboardPayload {
                 onClick={handleSaveWeight}
                 disabled={!weightInput || weightSaving}
                 success={weightSaved}
-                className="press flex-1 py-3 bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-40 text-white font-semibold rounded-xl text-[13px] shadow-[0_4px_12px_-4px_rgba(16,185,129,0.5)]"
+                className="press flex-1 py-3 bg-[#A78BFA] hover:bg-[#B79FFB] disabled:opacity-40 text-[#050504] font-bold rounded-xl text-[13px] shadow-[0_4px_12px_-4px_rgba(167,139,250,0.4)]"
               >
                 {weightSaving ? 'Speichern…' : 'Speichern'}
               </SuccessButton>
@@ -527,39 +469,30 @@ function ProgressRing({ pct }: { pct: number }) {
   return (
     <div className="relative shrink-0 w-14 h-14" aria-label={`${pct}% der Wochenziele`}>
       <svg className="absolute inset-0 -rotate-90" viewBox="0 0 56 56" width="56" height="56">
-        <circle cx="28" cy="28" r={r} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="4" />
+        <circle cx="28" cy="28" r={r} fill="none" stroke="rgba(167,139,250,0.12)" strokeWidth="4" />
         <circle
           cx="28" cy="28" r={r} fill="none"
-          stroke="url(#ringGrad)" strokeWidth="4" strokeLinecap="round"
+          stroke="#A78BFA" strokeWidth="4" strokeLinecap="round"
           strokeDasharray={`${dash} ${c - dash}`}
-          style={{ transition: 'stroke-dasharray 600ms cubic-bezier(0.23, 1, 0.32, 1)' }}
+          style={{ transition: 'stroke-dasharray 600ms cubic-bezier(0.23, 1, 0.32, 1)', filter: 'drop-shadow(0 0 4px rgba(167,139,250,0.5))' }}
         />
-        <defs>
-          <linearGradient id="ringGrad" x1="0" y1="0" x2="56" y2="56">
-            <stop offset="0%" stopColor="#34d399" />
-            <stop offset="100%" stopColor="#a78bfa" />
-          </linearGradient>
-        </defs>
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-[13px] font-semibold tabular-nums text-white">{pct}%</span>
+        <span className="text-[13px] font-bold tabular-nums text-[#A78BFA]">{pct}%</span>
       </div>
     </div>
   )
 }
 
-function StatCard({
-  label, value, accent, iconBg, iconColor, icon,
-}: { label: string; value: ReactNode; accent: string; iconBg: string; iconColor: string; icon: ReactNode }) {
+function DarkStatCard({ label, value, icon }: { label: string; value: ReactNode; icon: ReactNode }) {
   return (
-    <div className="lift relative overflow-hidden bg-white rounded-2xl border border-gray-200/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)] p-4">
-      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${accent} to-transparent`} />
-      <div className="relative flex items-start justify-between gap-2">
+    <div className="lift relative overflow-hidden bg-[#111111] rounded-2xl border border-white/[0.06] p-4">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[24px] font-semibold text-gray-900 tracking-tight tabular-nums leading-none">{value}</div>
-          <div className="text-[11.5px] text-gray-500 mt-2">{label}</div>
+          <div className="text-[24px] font-bold text-[#EDECEA] tracking-tight tabular-nums leading-none">{value}</div>
+          <div className="text-[11.5px] text-[#797D83] mt-2">{label}</div>
         </div>
-        <div className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${iconBg} ${iconColor} ring-1 ring-inset ring-black/5`}>
+        <div className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center bg-[#A78BFA]/10 text-[#A78BFA]">
           <span className="w-4 h-4 block">{icon}</span>
         </div>
       </div>
@@ -567,29 +500,26 @@ function StatCard({
   )
 }
 
-function AnalyseTile({
-  label, sub, icon, value, accent,
-}: { label: string; sub: string; icon: ReactNode; value: ReactNode; accent: string }) {
+function AnalyseTile({ label, sub, icon, value }: { label: string; sub: string; icon: ReactNode; value: ReactNode }) {
   return (
-    <div className={`relative overflow-hidden rounded-xl bg-gray-50 p-3 ring-1 ring-inset ring-black/[0.03]`}>
-      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${accent} to-transparent`} />
-      <div className="relative flex items-center gap-1.5 text-gray-400">
+    <div className="relative overflow-hidden rounded-xl bg-white/[0.03] border border-white/[0.04] p-3">
+      <div className="flex items-center gap-1.5 text-[#797D83]">
         <span className="w-3.5 h-3.5">{icon}</span>
         <span className="text-[10.5px] font-medium uppercase tracking-[0.1em]">{label}</span>
       </div>
-      <div className="relative text-[20px] font-semibold text-gray-900 tracking-tight tabular-nums mt-1.5 leading-none">{value}</div>
-      <div className="relative text-[11.5px] text-gray-400 mt-1">{sub}</div>
+      <div className="text-[20px] font-bold text-[#EDECEA] tracking-tight tabular-nums mt-1.5 leading-none">{value}</div>
+      <div className="text-[11.5px] text-[#797D83] mt-1">{sub}</div>
     </div>
   )
 }
 
-function EmptyCard({ icon, text }: { icon: ReactNode; text: string }) {
+function DarkEmptyCard({ icon, text }: { icon: ReactNode; text: string }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)] p-6 text-center mb-4">
-      <div className="mx-auto w-12 h-12 rounded-2xl bg-gray-50 ring-1 ring-inset ring-black/5 flex items-center justify-center text-gray-400 mb-3">
+    <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-6 text-center mb-4">
+      <div className="mx-auto w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[#797D83] mb-3">
         <span className="w-6 h-6 block">{icon}</span>
       </div>
-      <p className="text-gray-600 text-[13px]">{text}</p>
+      <p className="text-[#797D83] text-[13px]">{text}</p>
     </div>
   )
 }

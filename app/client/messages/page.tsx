@@ -171,14 +171,12 @@ export default function ClientMessagesPage() {
 
   useEffect(() => {
     const refresh = () => { void loadConversation() }
-
     const intervalId = setInterval(refresh, 8000)
     window.addEventListener('focus', refresh)
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') refresh()
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
-
     return () => {
       clearInterval(intervalId)
       window.removeEventListener('focus', refresh)
@@ -240,43 +238,64 @@ export default function ClientMessagesPage() {
   }
 
   if (loading) {
-    return <div className="flex justify-center p-12"><div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" /></div>
+    return (
+      <div className="flex justify-center p-12">
+        <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
   }
 
   if (!client || !trainer) {
     return (
-      <div className="p-4 flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <div className="mx-auto w-14 h-14 rounded-2xl bg-white ring-1 ring-inset ring-black/5 flex items-center justify-center text-gray-400 shadow-sm">
+      <div className="max-w-[480px] mx-auto px-4 py-12 flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <div className="w-14 h-14 rounded-2xl bg-[#111111] border border-white/[0.08] flex items-center justify-center text-[#797D83]">
           <span className="w-7 h-7 block">{Icon.lock}</span>
         </div>
-        <p className="mt-4 text-gray-700 text-[14px] font-medium">Du bist keinem Trainer zugeordnet</p>
-        <p className="text-gray-500 text-[12.5px] mt-1 max-w-xs">
+        <p className="mt-4 text-[#EDECEA] text-[14px] font-medium">Du bist keinem Trainer zugeordnet</p>
+        <p className="text-[#797D83] text-[12.5px] mt-1 max-w-xs leading-relaxed">
           Bitte registriere dich mit derselben E-Mail, die dein Trainer hinterlegt hat.
         </p>
       </div>
     )
   }
 
+  const trainerInitial = (trainer.fullName ?? trainer.email ?? 'T').charAt(0).toUpperCase()
+
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 8rem)' }}>
+    <div className="max-w-[480px] mx-auto flex flex-col" style={{ height: 'calc(100dvh - 4rem)' }}>
+
+      {/* Trainer info bar */}
+      <div className="flex-none px-4 py-3 border-b border-white/[0.06] flex items-center gap-3 bg-[#0b0c0f]/80 backdrop-blur-sm">
+        <div className="w-9 h-9 rounded-full bg-[#A78BFA]/15 border border-[#A78BFA]/20 flex items-center justify-center text-[#A78BFA] text-[14px] font-bold">
+          {trainerInitial}
+        </div>
+        <div>
+          <div className="text-[13px] font-semibold text-[#EDECEA] leading-tight">{trainer.fullName ?? trainer.email}</div>
+          <div className="text-[11px] text-[#797D83]">Dein Trainer</div>
+        </div>
+      </div>
+
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 bg-gradient-to-b from-gray-50 to-white">
+      <div className="flex-1 overflow-y-auto px-4 py-4">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center px-6">
-              <p className="text-gray-500 text-[13px] font-medium">Noch keine Nachrichten</p>
-              <p className="text-gray-400 text-[12px] mt-1">Schreibe die erste Nachricht.</p>
+              <p className="text-[#797D83] text-[13px] font-medium">Noch keine Nachrichten</p>
+              <p className="text-[#797D83]/60 text-[12px] mt-1">Schreibe die erste Nachricht.</p>
             </div>
           </div>
         ) : (
-          <MessageList messages={messages} myId={myUserId} accent="emerald" />
+          <MessageList messages={messages} myId={myUserId} />
         )}
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <form onSubmit={sendMessage} className="px-3 py-3 bg-white border-t border-gray-200/70">
-        <div className="flex items-end gap-2 bg-gray-50 border border-gray-200/80 rounded-2xl px-3 py-2 focus-within:border-emerald-300 focus-within:ring-4 focus-within:ring-emerald-100 transition-all">
+      {/* Input bar */}
+      <form
+        onSubmit={sendMessage}
+        className="flex-none px-4 py-3 border-t border-white/[0.06] bg-[#0b0c0f]/95 backdrop-blur-md"
+      >
+        <div className="flex items-end gap-2.5 bg-[#111111] border border-white/[0.08] rounded-2xl px-3.5 py-2 focus-within:border-[#A78BFA]/30 transition-colors">
           <textarea
             ref={inputRef}
             rows={1}
@@ -289,16 +308,16 @@ export default function ClientMessagesPage() {
               }
             }}
             placeholder="Nachricht schreiben…"
-            className="flex-1 resize-none bg-transparent text-[14px] py-1.5 max-h-[140px] placeholder:text-gray-400 focus:outline-none"
+            className="flex-1 resize-none bg-transparent text-[14px] py-1.5 max-h-[140px] text-[#EDECEA] placeholder-[#797D83]/60 focus:outline-none leading-relaxed"
           />
           <button
             type="submit"
             disabled={sending || !newMessage.trim()}
-            className="press shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-white bg-gradient-to-br from-emerald-500 to-teal-600 shadow-[0_4px_12px_-4px_rgba(16,185,129,0.55)] disabled:opacity-40 disabled:shadow-none transition-opacity"
+            className="press shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-[#050504] bg-[#A78BFA] shadow-[0_4px_12px_-4px_rgba(167,139,250,0.45)] disabled:opacity-35 disabled:shadow-none transition-opacity"
             aria-label="Senden"
           >
             {sending ? (
-              <span className="text-[10px] font-semibold">…</span>
+              <span className="w-3 h-3 border-2 border-[#050504] border-t-transparent rounded-full animate-spin" />
             ) : (
               <span className="w-4 h-4 block translate-x-[1px]">{Icon.send}</span>
             )}
@@ -309,7 +328,7 @@ export default function ClientMessagesPage() {
   )
 }
 
-function MessageList({ messages, myId, accent }: { messages: Message[]; myId: string; accent: 'indigo' | 'emerald' }) {
+function MessageList({ messages, myId }: { messages: Message[]; myId: string }) {
   const groups: Array<{ dateLabel: string; items: Message[] }> = []
   for (const m of messages) {
     const last = groups[groups.length - 1]
@@ -323,9 +342,9 @@ function MessageList({ messages, myId, accent }: { messages: Message[]; myId: st
   return (
     <div className="space-y-5">
       {groups.map((g, gi) => (
-        <div key={gi} className="space-y-1">
+        <div key={gi} className="space-y-0.5">
           <div className="flex items-center justify-center my-3">
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200/70 text-[10.5px] font-medium uppercase tracking-[0.1em] text-gray-500">
+            <span className="px-3 py-1 rounded-full bg-white/[0.06] border border-white/[0.08] text-[10.5px] font-medium uppercase tracking-[0.1em] text-[#797D83]">
               {g.dateLabel}
             </span>
           </div>
@@ -344,7 +363,6 @@ function MessageList({ messages, myId, accent }: { messages: Message[]; myId: st
                 readAt={msg.read_at}
                 isFirstOfRun={isFirstOfRun}
                 isLastOfRun={isLastOfRun}
-                accent={accent}
               />
             )
           })}
@@ -355,17 +373,14 @@ function MessageList({ messages, myId, accent }: { messages: Message[]; myId: st
 }
 
 function Bubble({
-  isMe, content, createdAt, readAt, isFirstOfRun, isLastOfRun, accent,
+  isMe, content, createdAt, readAt, isFirstOfRun, isLastOfRun,
 }: {
   isMe: boolean; content: string; createdAt: string;
   readAt?: string | null;
   isFirstOfRun: boolean; isLastOfRun: boolean;
-  accent: 'indigo' | 'emerald'
 }) {
-  const meBg = accent === 'indigo'
-    ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-[0_4px_12px_-6px_rgba(79,70,229,0.5)]'
-    : 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-[0_4px_12px_-6px_rgba(16,185,129,0.5)]'
-  const themBg = 'bg-white border border-gray-200/70 text-gray-900 shadow-[0_1px_2px_rgba(16,24,40,0.04)]'
+  const meBg = 'bg-[#A78BFA] text-[#050504] shadow-[0_4px_14px_-6px_rgba(167,139,250,0.5)]'
+  const themBg = 'bg-[#1a1a1a] border border-white/[0.07] text-[#EDECEA]'
 
   const radius = isMe
     ? `rounded-2xl ${isLastOfRun ? 'rounded-br-md' : ''} ${!isFirstOfRun ? 'rounded-tr-md' : ''}`
@@ -373,14 +388,20 @@ function Bubble({
 
   return (
     <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${isFirstOfRun ? 'mt-2' : 'mt-0.5'}`}>
-      <div className={`bubble-in max-w-[80%] sm:max-w-[68%] px-3.5 py-2 ${radius} ${isMe ? meBg : themBg}`}>
+      <div className={`bubble-in max-w-[80%] sm:max-w-[70%] px-3.5 py-2.5 ${radius} ${isMe ? meBg : themBg}`}>
         <p className="text-[14px] leading-relaxed whitespace-pre-wrap break-words">{content}</p>
-        <div className={`flex items-center gap-1 mt-1 ${isMe ? 'text-white/70' : 'text-gray-400'}`}>
+        <div className={`flex items-center gap-1 mt-1 ${isMe ? 'text-[#050504]/55' : 'text-[#797D83]'}`}>
           <span className="text-[10.5px] tabular-nums">
             {formatMessageTimestamp(createdAt)}
           </span>
           {isMe && isLastOfRun && (
-            <svg className={readAt ? 'text-sky-300' : 'text-white/40'} viewBox="0 0 20 12" width="18" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg
+              className={readAt ? 'text-[#050504]/70' : 'text-[#050504]/35'}
+              viewBox="0 0 20 12" width="18" height="10"
+              fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"
+              aria-hidden="true"
+            >
               <polyline points="1,7 4.5,10.5 10.5,2.5" />
               <polyline points="7,7 10.5,10.5 16.5,2.5" />
             </svg>

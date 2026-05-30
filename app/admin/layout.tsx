@@ -135,21 +135,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-[#050504]">
+        <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   if (authError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-6 max-w-sm text-center">
-          <h1 className="text-lg font-semibold text-gray-900">Admin nicht erreichbar</h1>
-          <p className="text-sm text-gray-500 mt-2">{authError}</p>
+      <div className="min-h-screen flex items-center justify-center bg-[#050504] px-4">
+        <div className="bg-[#111111] border border-white/[0.06] rounded-2xl p-6 max-w-sm text-center">
+          <h1 className="text-lg font-semibold text-[#EDECEA]">Admin nicht erreichbar</h1>
+          <p className="text-sm text-[#797D83] mt-2">{authError}</p>
           <button
             onClick={() => window.location.reload()}
-            className="press mt-5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl"
+            className="press mt-5 px-4 py-2 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-bold rounded-xl"
           >
             Erneut versuchen
           </button>
@@ -160,7 +160,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <ToastProvider>
-      <div className="min-h-screen flex bg-gray-50">
+      <div className="min-h-screen flex bg-[#050504]">
         {sidebarOpen && (
           <div
             className="fixed inset-0 z-20 bg-black/50 backdrop-blur-sm lg:hidden"
@@ -208,14 +208,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   }`}
                 >
                   {active && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-indigo-500" />
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-[#A78BFA]" />
                   )}
-                  <span className={`w-[18px] h-[18px] flex items-center justify-center ${active ? 'text-indigo-400' : 'text-gray-500 group-hover:text-gray-300'}`}>
+                  <span className={`w-[18px] h-[18px] flex items-center justify-center ${active ? 'text-[#A78BFA]' : 'text-gray-500 group-hover:text-gray-300'}`}>
                     {item.icon}
                   </span>
                   <span className="flex-1 truncate">{item.label}</span>
                   {badgeCount > 0 && (
-                    <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-indigo-500 text-white text-[11px] font-bold leading-none flex items-center justify-center ring-1 ring-white/10 tabular-nums">
+                    <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-[#A78BFA] text-[#050504] text-[11px] font-bold leading-none flex items-center justify-center tabular-nums">
                       {badgeCount > 99 ? '99+' : badgeCount}
                     </span>
                   )}
@@ -226,7 +226,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           <div className="px-3 py-3 border-t border-white/[0.06] shrink-0 overflow-visible">
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] pr-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-[13px] font-semibold ring-1 ring-white/20">
+              <div className="w-8 h-8 rounded-full bg-[#A78BFA] flex items-center justify-center text-[#050504] text-[13px] font-semibold">
                 {profile?.full_name?.charAt(0)?.toUpperCase() ?? 'T'}
               </div>
               <div className="flex-1 min-w-0">
@@ -249,15 +249,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </aside>
 
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="lg:hidden sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200/80 px-4 py-3 flex items-center gap-3">
+          <header className="lg:hidden sticky top-0 z-10 bg-[#0b0c0f]/95 backdrop-blur-md border-b border-white/[0.06] px-4 py-3 flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="press p-1.5 rounded-lg text-gray-700 hover:bg-gray-100"
+              className="press p-1.5 rounded-lg text-gray-300 hover:bg-white/[0.06]"
             >
               <span className="w-5 h-5 block">{Icon.menu}</span>
             </button>
-            <span className="font-semibold text-gray-900 tracking-tight flex-1">MilaCoach</span>
-            {profile && <TrainerNotificationBell trainerId={profile.id} theme="light" />}
+            <span className="font-semibold text-[#EDECEA] tracking-tight flex-1">MilaCoach</span>
+            {profile && <TrainerNotificationBell trainerId={profile.id} />}
           </header>
 
           <main className="flex-1 overflow-y-auto">

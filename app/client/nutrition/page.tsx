@@ -15,9 +15,9 @@ import type { MealHistoryEntry, HistoryIngredient, DrinkLog } from '@/lib/types'
 type FullPlan = NutritionPlan & { nutrition_meals: NutritionMeal[] }
 
 const GOAL_META: Record<NutritionGoal, { label: string; bg: string }> = {
-  cut:      { label: 'Abnehmen',     bg: 'bg-blue-50'   },
-  bulk:     { label: 'Muskelaufbau', bg: 'bg-orange-50' },
-  maintain: { label: 'Erhaltung',    bg: 'bg-green-50'  },
+  cut:      { label: 'Abnehmen',     bg: 'bg-[#111111] border border-white/[0.06]'   },
+  bulk:     { label: 'Muskelaufbau', bg: 'bg-[#111111] border border-white/[0.06]' },
+  maintain: { label: 'Erhaltung',    bg: 'bg-[#A78BFA]/10'  },
 }
 
 const SLOT_CATS: FoodCategory[] = ['protein', 'carbs', 'fat']
@@ -27,13 +27,13 @@ const SLOT_LABEL: Record<FoodCategory, string> = {
   vegetable: 'Gemüse', fruit: 'Obst', dairy: 'Milchprodukt', other: 'Sonstiges',
 }
 const SLOT_COLOR: Record<FoodCategory, { dot: string; text: string; bar: string }> = {
-  protein:   { dot: 'bg-blue-500',   text: 'text-blue-700',   bar: '#3b82f6' },
-  carbs:     { dot: 'bg-green-500',  text: 'text-green-700',  bar: '#22c55e' },
+  protein:   { dot: 'bg-[#111111] border border-white/[0.06]0',   text: 'text-blue-700',   bar: '#3b82f6' },
+  carbs:     { dot: 'bg-[#A78BFA]/100',  text: 'text-[#A78BFA]',  bar: '#22c55e' },
   fat:       { dot: 'bg-yellow-500', text: 'text-yellow-700', bar: '#eab308' },
-  vegetable: { dot: 'bg-green-400',  text: 'text-green-600',  bar: '#22c55e' },
+  vegetable: { dot: 'bg-[#A78BFA]/60',  text: 'text-[#A78BFA]',  bar: '#22c55e' },
   fruit:     { dot: 'bg-pink-500',   text: 'text-pink-700',   bar: '#ec4899' },
   dairy:     { dot: 'bg-purple-500', text: 'text-purple-700', bar: '#a855f7' },
-  other:     { dot: 'bg-gray-400',   text: 'text-gray-600',   bar: '#9ca3af' },
+  other:     { dot: 'bg-[#797D83]/60',   text: 'text-[#797D83]',   bar: '#9ca3af' },
 }
 
 type CmfWithFood = ClientMealFood & { food: Food }
@@ -300,8 +300,8 @@ function CalorieRing({ current, target }: { current: number; target: number }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-xl font-bold text-gray-900">{displayVal}</span>
-        <span className="text-[10px] text-gray-500">/ {target} kcal</span>
+        <span className="text-xl font-bold text-[#EDECEA]">{displayVal}</span>
+        <span className="text-[10px] text-[#797D83]">/ {target} kcal</span>
       </div>
     </div>
   )
@@ -311,7 +311,7 @@ function MiniBar({ current, target, color }: { current: number; target: number; 
   const pct = target > 0 ? Math.min(100, (current / target) * 100) : 0
   const over = target > 0 && current > target
   return (
-    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+    <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
       <div
         className="h-full rounded-full"
         style={{
@@ -341,19 +341,19 @@ function SlotPicker({
   }
 
   return (
-    <div className="border-t border-gray-100 bg-gray-50/50 p-2">
+    <div className="border-t border-white/[0.04] bg-white/[0.02] p-2">
       {list.length > 0 ? (
-        <ul className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm max-h-64 overflow-y-auto">
+        <ul className="bg-[#181818] rounded-lg border border-white/[0.08] overflow-hidden shadow-2xl max-h-64 overflow-y-auto">
           {list.map(f => (
             <li key={f.id}>
               <button
                 type="button"
                 onClick={() => handlePick(f)}
-                className="w-full flex items-center gap-3 px-3 py-2 hover:bg-green-50 text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2 hover:bg-[#A78BFA]/10 text-left transition-colors"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 truncate">{f.name}</div>
-                  <div className="text-[10px] text-gray-400">
+                  <div className="text-sm font-medium text-[#EDECEA] truncate">{f.name}</div>
+                  <div className="text-[10px] text-[#797D83]">
                     {f.kcal_per_100g} kcal · {f.protein_per_100g}P {f.carbs_per_100g}K {f.fat_per_100g}F / 100g
                   </div>
                 </div>
@@ -362,7 +362,7 @@ function SlotPicker({
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-gray-400 px-1 py-2">Nichts gefunden.</p>
+        <p className="text-xs text-[#797D83] px-1 py-2">Nichts gefunden.</p>
       )}
     </div>
   )
@@ -801,14 +801,14 @@ export default function ClientNutritionPage() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
-  if (loading) return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin" /></div>
+  if (loading) return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" /></div>
 
   if (!plan) {
     return (
-      <div className="p-6 max-w-2xl mx-auto">
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
-          <p className="text-gray-600">Kein aktiver Ernährungsplan.</p>
-          <p className="text-xs text-gray-400 mt-2">Sobald dein Trainer dir einen Plan zugewiesen hat, erscheint er hier.</p>
+      <div className="p-6 max-w-[480px] mx-auto">
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-8 text-center">
+          <p className="text-[#797D83]">Kein aktiver Ernährungsplan.</p>
+          <p className="text-xs text-[#797D83] mt-2">Sobald dein Trainer dir einen Plan zugewiesen hat, erscheint er hier.</p>
         </div>
       </div>
     )
@@ -817,13 +817,13 @@ export default function ClientNutritionPage() {
   const goalMeta = GOAL_META[plan.goal]
 
   return (
-    <div className="p-4 max-w-2xl mx-auto space-y-4">
+    <div className="p-4 max-w-[480px] mx-auto space-y-4">
       {/* ─── Header: Plan + Tagesübersicht ───────────────────────────────── */}
       <div className={`${goalMeta.bg} rounded-3xl p-4`}>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-gray-500 font-medium">{goalMeta.label}</p>
-            <h1 className="text-lg font-bold text-gray-900 mt-0.5">{plan.name}</h1>
+            <p className="text-[10px] uppercase tracking-wide text-[#797D83] font-medium">{goalMeta.label}</p>
+            <h1 className="text-lg font-bold text-[#EDECEA] mt-0.5">{plan.name}</h1>
           </div>
           <CalorieRing current={dayTotals.cal} target={plan.target_calories} />
         </div>
@@ -837,8 +837,8 @@ export default function ClientNutritionPage() {
           ].map(m => (
             <div key={m.l}>
               <div className="flex justify-between text-xs mb-1">
-                <span className="text-gray-600 font-medium">{m.l}</span>
-                <span className="text-gray-500"><b className="text-gray-900">{Math.round(m.cur)}</b> / {m.tgt}g</span>
+                <span className="text-[#797D83] font-medium">{m.l}</span>
+                <span className="text-[#797D83]"><b className="text-[#EDECEA]">{Math.round(m.cur)}</b> / {m.tgt}g</span>
               </div>
               <MiniBar current={m.cur} target={m.tgt} color={m.color} />
             </div>
@@ -890,23 +890,23 @@ export default function ClientNutritionPage() {
           const isFlashing = saveFlash.has(meal.id)
 
           return (
-            <div key={meal.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div key={meal.id} className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
               {/* Mahlzeit-Header — always visible, click to expand/collapse */}
               <button
                 onClick={() => toggleCard(meal.id)}
-                className="w-full text-left px-5 py-3 border-b border-gray-50 hover:bg-gray-50/60 transition-colors"
+                className="w-full text-left px-5 py-3 border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors"
               >
                 <div className="flex items-center justify-between">
-                  <h2 className="font-semibold text-gray-900">
-                    <span className="text-gray-400 text-sm font-medium mr-2">#{i + 1}</span>
+                  <h2 className="font-semibold text-[#EDECEA]">
+                    <span className="text-[#797D83] text-sm font-medium mr-2">#{i + 1}</span>
                     {meal.name}
                   </h2>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-xs text-gray-500">
-                      <b className="text-gray-900">{Math.round(tAdj.cal)}</b> / {targetKcal} kcal
+                    <span className="text-xs text-[#797D83]">
+                      <b className="text-[#EDECEA]">{Math.round(tAdj.cal)}</b> / {targetKcal} kcal
                     </span>
                     <svg
-                      className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                      className={`w-4 h-4 text-[#797D83] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
                       fill="none" stroke="currentColor" viewBox="0 0 24 24"
                     >
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -920,18 +920,18 @@ export default function ClientNutritionPage() {
                     const metKey = `${meal.id}-${m.cat}`
                     return (
                       <div key={m.cat}>
-                        <div className="flex items-center gap-1 text-[10px] text-gray-500 mb-0.5">
+                        <div className="flex items-center gap-1 text-[10px] text-[#797D83] mb-0.5">
                           <span className={`w-1.5 h-1.5 rounded-full ${SLOT_COLOR[m.cat].dot}`} />
                           <span>{SLOT_LABEL[m.cat]}</span>
                           {macroMet.has(metKey) && (
-                            <span className="text-[9px] text-green-600 ml-0.5 animate-pulse">✓</span>
+                            <span className="text-[9px] text-[#A78BFA] ml-0.5 animate-pulse">✓</span>
                           )}
                           <span className="ml-auto">
-                            <b className="text-gray-900">{Math.round(m.cur)}</b>/{m.tgt}g
+                            <b className="text-[#EDECEA]">{Math.round(m.cur)}</b>/{m.tgt}g
                           </span>
                         </div>
                         <MiniBar current={m.cur} target={m.tgt} color={SLOT_COLOR[m.cat].bar} />
-                        <p className={`text-[9px] mt-0.5 ${over ? 'text-red-500' : 'text-gray-400'}`}>
+                        <p className={`text-[9px] mt-0.5 ${over ? 'text-red-500' : 'text-[#797D83]'}`}>
                           {over ? `+${Math.abs(Math.round(diff))} über` : diff > 0 ? `${Math.round(diff)} offen` : '✓'}
                         </p>
                       </div>
@@ -959,38 +959,38 @@ export default function ClientNutritionPage() {
                               ? setOpenPicker(null)
                               : setOpenPicker({ mealId: meal.id, cat })
                           }
-                          className="w-full flex items-center gap-3 px-5 py-3 hover:bg-green-50/40 text-left transition-colors"
+                          className="w-full flex items-center gap-3 px-5 py-3 hover:bg-[#A78BFA]/10/40 text-left transition-colors"
                         >
                           <span className={`w-2 h-2 rounded-full ${c.dot}`} />
-                          <span className="text-sm text-gray-400 flex-1">{SLOT_LABEL[cat]}quelle wählen…</span>
-                          <span className="text-green-600 text-sm font-medium">{pickerCat === cat ? '−' : '+'}</span>
+                          <span className="text-sm text-[#797D83] flex-1">{SLOT_LABEL[cat]}quelle wählen…</span>
+                          <span className="text-[#A78BFA] text-sm font-medium">{pickerCat === cat ? '−' : '+'}</span>
                         </button>
                       ) : (
                         <div className="flex items-center gap-3 px-5 py-3">
                           <span className={`w-2 h-2 rounded-full ${c.dot} flex-shrink-0`} />
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-gray-900 truncate">{picked.food.name}</div>
+                            <div className="text-sm font-medium text-[#EDECEA] truncate">{picked.food.name}</div>
                             {calculated && m ? (
-                              <div className="text-[10px] text-gray-400">
-                                <b className="text-gray-700">{Math.round(picked.amount_g)} g</b>
+                              <div className="text-[10px] text-[#797D83]">
+                                <b className="text-[#EDECEA]/90">{Math.round(picked.amount_g)} g</b>
                                 <span className="mx-1">·</span>
                                 {Math.round(m.calories)} kcal · {Math.round(m.protein)}P {Math.round(m.carbs)}K {Math.round(m.fat)}F
                               </div>
                             ) : (
-                              <div className="text-[10px] text-gray-400">
-                                {picked.food.kcal_per_100g} kcal · {picked.food.protein_per_100g}P {picked.food.carbs_per_100g}K {picked.food.fat_per_100g}F <span className="text-gray-300">/ 100g</span>
+                              <div className="text-[10px] text-[#797D83]">
+                                {picked.food.kcal_per_100g} kcal · {picked.food.protein_per_100g}P {picked.food.carbs_per_100g}K {picked.food.fat_per_100g}F <span className="text-[#797D83]/60">/ 100g</span>
                               </div>
                             )}
                           </div>
                           <button
                             onClick={() => setOpenPicker({ mealId: meal.id, cat })}
-                            className="text-[11px] text-gray-500 hover:text-gray-700 underline flex-shrink-0"
+                            className="text-[11px] text-[#797D83] hover:text-[#EDECEA]/90 underline flex-shrink-0"
                           >
                             Ändern
                           </button>
                           <button
                             onClick={() => clearSlot(meal.id, cat)}
-                            className="text-gray-300 hover:text-red-500 flex-shrink-0"
+                            className="text-[#797D83]/60 hover:text-red-500 flex-shrink-0"
                             title="Entfernen"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1009,7 +1009,7 @@ export default function ClientNutritionPage() {
                       )}
 
                       {/* ── Zusatzquelle row ── */}
-                      {idx === 0 && <div className="px-5 py-1 bg-gray-50/70 border-t border-dashed border-gray-100" />}
+                      {idx === 0 && <div className="px-5 py-1 bg-white/[0.02] border-t border-dashed border-white/[0.06]" />}
                       {(() => {
                         const extraSlot = extraSlots[meal.id]?.[cat]
                         const extraPickerOpen = openExtraPicker?.mealId === meal.id && openExtraPicker?.cat === cat
@@ -1023,11 +1023,11 @@ export default function ClientNutritionPage() {
                                     ? setOpenExtraPicker(null)
                                     : setOpenExtraPicker({ mealId: meal.id, cat })
                                 }
-                                className="w-full flex items-center gap-3 pl-8 pr-5 py-2 hover:bg-gray-50/60 text-left transition-colors border-t border-dashed border-gray-100"
+                                className="w-full flex items-center gap-3 pl-8 pr-5 py-2 hover:bg-white/[0.03] text-left transition-colors border-t border-dashed border-white/[0.06]"
                               >
                                 <span className={`w-1.5 h-1.5 rounded-full ${c.dot} opacity-30`} />
-                                <span className="text-xs italic text-gray-400 flex-1">Zusatzquelle wählen…</span>
-                                <span className="text-gray-400 text-xs font-medium">{extraPickerOpen ? '−' : '+'}</span>
+                                <span className="text-xs italic text-[#797D83] flex-1">Zusatzquelle wählen…</span>
+                                <span className="text-[#797D83] text-xs font-medium">{extraPickerOpen ? '−' : '+'}</span>
                               </button>
                               {extraPickerOpen && (
                                 <SlotPicker
@@ -1047,13 +1047,13 @@ export default function ClientNutritionPage() {
                         const extraM = calcMacros(extraSlot.food, extraG)
                         return (
                           <>
-                            <div className={`flex items-center gap-3 pl-8 pr-5 py-2.5 border-t border-dashed border-gray-100 border-l-2 ${c.dot.replace('bg-', 'border-l-')} border-l-opacity-40`}>
+                            <div className={`flex items-center gap-3 pl-8 pr-5 py-2.5 border-t border-dashed border-white/[0.06] border-l-2 ${c.dot.replace('bg-', 'border-l-')} border-l-opacity-40`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${c.dot} opacity-30 flex-shrink-0`} />
                               <div className="flex-1 min-w-0">
-                                <div className="text-xs text-gray-600 italic truncate">{extraSlot.food.name}</div>
+                                <div className="text-xs text-[#797D83] italic truncate">{extraSlot.food.name}</div>
                                 {extraG > 0 && (
-                                  <div className="text-[10px] text-gray-400 mt-0.5">
-                                    <b className="text-gray-600 not-italic">{extraG} g</b>
+                                  <div className="text-[10px] text-[#797D83] mt-0.5">
+                                    <b className="text-[#797D83] not-italic">{extraG} g</b>
                                     <span className="mx-1">·</span>
                                     {Math.round(extraM.calories)} kcal · {Math.round(extraM.protein)}P {Math.round(extraM.carbs)}K {Math.round(extraM.fat)}F
                                   </div>
@@ -1065,9 +1065,9 @@ export default function ClientNutritionPage() {
                                   value={extraSlot.grams}
                                   onChange={e => setExtraSlot(meal.id, cat, { ...extraSlot, grams: e.target.value })}
                                   min="0"
-                                  className="w-16 px-2 py-1 pr-5 text-xs border border-gray-200 rounded-lg bg-white focus:ring-1 focus:ring-green-500 focus:border-transparent text-right"
+                                  className="w-16 px-2 py-1 pr-5 text-xs border border-white/[0.1] rounded-lg bg-white/[0.06] text-[#EDECEA] focus:ring-1 focus:ring-[#A78BFA] focus:outline-none text-right"
                                 />
-                                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">g</span>
+                                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-[#797D83] pointer-events-none">g</span>
                               </div>
                               <button
                                 onClick={() =>
@@ -1075,13 +1075,13 @@ export default function ClientNutritionPage() {
                                     ? setOpenExtraPicker(null)
                                     : setOpenExtraPicker({ mealId: meal.id, cat })
                                 }
-                                className="text-[11px] text-gray-500 hover:text-gray-700 underline flex-shrink-0"
+                                className="text-[11px] text-[#797D83] hover:text-[#EDECEA]/90 underline flex-shrink-0"
                               >
                                 Ändern
                               </button>
                               <button
                                 onClick={() => setExtraSlot(meal.id, cat, null)}
-                                className="text-gray-300 hover:text-red-500 flex-shrink-0 transition-colors"
+                                className="text-[#797D83]/60 hover:text-red-500 flex-shrink-0 transition-colors"
                                 title="Entfernen"
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1109,7 +1109,7 @@ export default function ClientNutritionPage() {
 
               {/* Gemüse-Slot — Gramm vom Trainer vorgegeben, sichtbar nach „Berechnen" */}
               {allowedFree.length > 0 && (
-                <div className="divide-y divide-gray-50 border-t border-gray-50 bg-green-50/20">
+                <div className="divide-y divide-gray-50 border-t border-white/[0.04] bg-[#A78BFA]/10/20">
                   {allowedFree.map(cat => {
                     const picked = slots[cat]
                     const c = SLOT_COLOR[cat]
@@ -1119,34 +1119,34 @@ export default function ClientNutritionPage() {
                         {!picked ? (
                           <button
                             onClick={() => setOpenPicker({ mealId: meal.id, cat })}
-                            className="w-full flex items-center gap-3 px-5 py-3 hover:bg-green-100/40 text-left transition-colors"
+                            className="w-full flex items-center gap-3 px-5 py-3 hover:bg-[#A78BFA]/15/40 text-left transition-colors"
                           >
                             <span className={`w-2 h-2 rounded-full ${c.dot}`} />
-                            <span className="text-sm text-gray-500 flex-1">
+                            <span className="text-sm text-[#797D83] flex-1">
                               {SLOT_LABEL[cat]} wählen
-                              {trainerG > 0 && <span className="ml-1.5 text-[10px] text-gray-400">({trainerG}g vom Trainer)</span>}
+                              {trainerG > 0 && <span className="ml-1.5 text-[10px] text-[#797D83]">({trainerG}g vom Trainer)</span>}
                             </span>
-                            <span className="text-green-600 text-sm font-medium">+</span>
+                            <span className="text-[#A78BFA] text-sm font-medium">+</span>
                           </button>
                         ) : (
                           <div className="flex items-center gap-3 px-5 py-3">
                             <span className={`w-2 h-2 rounded-full ${c.dot} flex-shrink-0`} />
                             <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium text-gray-900 truncate">{picked.food.name}</div>
-                              <div className="text-[10px] text-gray-400">
-                                <b className="text-gray-700">{trainerG} g</b>
-                                <span className="ml-1 text-gray-300">vom Trainer festgelegt</span>
+                              <div className="text-sm font-medium text-[#EDECEA] truncate">{picked.food.name}</div>
+                              <div className="text-[10px] text-[#797D83]">
+                                <b className="text-[#EDECEA]/90">{trainerG} g</b>
+                                <span className="ml-1 text-[#797D83]/60">vom Trainer festgelegt</span>
                               </div>
                             </div>
                             <button
                               onClick={() => setOpenPicker({ mealId: meal.id, cat })}
-                              className="text-[11px] text-gray-500 hover:text-gray-700 underline flex-shrink-0"
+                              className="text-[11px] text-[#797D83] hover:text-[#EDECEA]/90 underline flex-shrink-0"
                             >
                               Ändern
                             </button>
                             <button
                               onClick={() => clearSlot(meal.id, cat)}
-                              className="text-gray-300 hover:text-red-500 flex-shrink-0"
+                              className="text-[#797D83]/60 hover:text-red-500 flex-shrink-0"
                               title="Entfernen"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1182,14 +1182,14 @@ export default function ClientNutritionPage() {
                 const anyUncalc = allMealItems.some(it => !(it.amount_g ?? 0))
                 if (allMacroFilled && anyUncalc) {
                   return (
-                    <div className="px-5 py-3 bg-green-50/50 border-t border-green-100">
+                    <div className="px-5 py-3 bg-[#A78BFA]/[0.06] border-t border-[#A78BFA]/20">
                       <button
                         onClick={() => calcMeal(meal.id)}
-                        className="w-full px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-xl transition-colors"
+                        className="w-full px-4 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl transition-colors"
                       >
                         Mengen berechnen
                       </button>
-                      <p className="text-[10px] text-center text-gray-500 mt-1.5">Zielwerte werden mit Zusatz neu verrechnet.</p>
+                      <p className="text-[10px] text-center text-[#797D83] mt-1.5">Zielwerte werden mit Zusatz neu verrechnet.</p>
                     </div>
                   )
                 }
@@ -1208,9 +1208,9 @@ export default function ClientNutritionPage() {
 
               {/* ── Mahlzeit speichern (erscheint wenn alle Mengen berechnet) ── */}
               {allCalculated && (
-                <div className="px-5 py-3 border-t border-gray-100 space-y-2">
+                <div className="px-5 py-3 border-t border-white/[0.04] space-y-2">
                   {savedMealIds.has(meal.id) && !isFlashing ? (
-                    <p className="text-xs text-center text-green-600 font-semibold py-1">
+                    <p className="text-xs text-center text-[#A78BFA] font-semibold py-1">
                       ✓ Mahlzeit gespeichert
                     </p>
                   ) : (
@@ -1223,15 +1223,15 @@ export default function ClientNutritionPage() {
                         }
                         placeholder={`Name (optional) — z.B. Frühstück, Post-Workout…`}
                         maxLength={60}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+                        className="w-full px-3 py-2 border border-white/[0.1] rounded-xl text-sm text-[#EDECEA] placeholder-gray-400 focus:border-[#A78BFA]/40 focus:outline-none transition"
                       />
                       <button
                         onClick={() => saveMealToHistory(meal.id)}
                         disabled={savingHistoryId === meal.id || isFlashing}
                         className={`w-full px-4 py-2 text-sm font-semibold rounded-xl transition-colors disabled:opacity-50
                           ${isFlashing
-                            ? 'bg-green-100 border border-green-400 text-green-700 ring-2 ring-green-400 animate-pulse'
-                            : 'bg-green-50 hover:bg-green-100 border border-green-200 text-green-700'
+                            ? 'bg-[#A78BFA]/10 border border-[#A78BFA]/40 text-[#A78BFA] ring-2 ring-[#A78BFA]/40 animate-pulse'
+                            : 'bg-[#A78BFA]/10 hover:bg-[#A78BFA]/15 border border-[#A78BFA]/20 text-[#A78BFA]'
                           }`}
                       >
                         {isFlashing
@@ -1256,7 +1256,7 @@ export default function ClientNutritionPage() {
 
       {/* ─── Vorherige Mahlzeiten ────────────────────────────────────────── */}
       {mealHistory.length > 0 && (
-        <div className="border-t border-gray-100 pt-4">
+        <div className="border-t border-white/[0.04] pt-4">
           <MealHistorySection
             history={mealHistory}
             reusingId={reusingHistoryId}
@@ -1271,8 +1271,8 @@ export default function ClientNutritionPage() {
       )}
 
       {/* ─── Rezeptvorschläge ─────────────────────────────────────────────── */}
-      <div className="border-t border-gray-100 pt-4">
-        <p className="text-[11px] text-gray-500 mb-1.5">Rezepte dienen nur als Inspiration.</p>
+      <div className="border-t border-white/[0.04] pt-4">
+        <p className="text-[11px] text-[#797D83] mb-1.5">Rezepte dienen nur als Inspiration.</p>
         <RecipeSuggestions targetCalories={plan.target_calories} />
       </div>
 
@@ -1282,7 +1282,7 @@ export default function ClientNutritionPage() {
           <div
             key={t.id}
             className={`px-4 py-2.5 rounded-2xl text-sm font-semibold text-white shadow-lg transition-all duration-300 pointer-events-none
-              ${t.type === 'success' ? 'bg-green-500' : t.type === 'info' ? 'bg-blue-500' : 'bg-red-500'}`}
+              ${t.type === 'success' ? 'bg-[#A78BFA]/100' : t.type === 'info' ? 'bg-[#111111] border border-white/[0.06]0' : 'bg-red-500/100'}`}
           >
             {t.message}
           </div>

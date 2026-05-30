@@ -81,14 +81,14 @@ export default function DrinksSection({ logs, onAdd, onDelete }: Props) {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
 
       {/* Header — always visible */}
       <div className="flex items-center justify-between px-5 py-4">
         <div>
-          <h2 className="font-bold text-gray-900">Getränke</h2>
+          <h2 className="font-bold text-[#EDECEA]">Getränke</h2>
           {totalCal > 0 && (
-            <p className="text-xs text-gray-400 mt-0.5">{totalCal} kcal heute</p>
+            <p className="text-xs text-[#797D83] mt-0.5">{totalCal} kcal heute</p>
           )}
         </div>
 
@@ -98,7 +98,7 @@ export default function DrinksSection({ logs, onAdd, onDelete }: Props) {
           role="switch"
           aria-checked={enabled}
           className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none ${
-            enabled ? 'bg-green-500' : 'bg-gray-200'
+            enabled ? 'bg-[#A78BFA]/100' : 'bg-white/[0.15]'
           }`}
         >
           <span
@@ -115,11 +115,11 @@ export default function DrinksSection({ logs, onAdd, onDelete }: Props) {
           enabled ? 'opacity-100' : 'max-h-0 overflow-hidden opacity-0'
         }`}
       >
-        <div className="border-t border-gray-100 px-5 pb-5 pt-4 space-y-3">
+        <div className="border-t border-white/[0.04] px-5 pb-5 pt-4 space-y-3">
 
           {/* Error */}
           {error && (
-            <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <p className="text-xs text-red-500 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
               {error}
             </p>
           )}
@@ -132,7 +132,7 @@ export default function DrinksSection({ logs, onAdd, onDelete }: Props) {
               onChange={e => setName(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="z.B. Kaffee, Protein Shake, Saft…"
-              className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+              className="flex-1 min-w-0 px-3 py-2 border border-white/[0.1] rounded-xl text-sm focus:border-[#A78BFA]/40 focus:outline-none transition"
             />
             <div className="relative flex-shrink-0">
               <input
@@ -142,16 +142,16 @@ export default function DrinksSection({ logs, onAdd, onDelete }: Props) {
                 onKeyDown={handleKeyDown}
                 placeholder="0"
                 min="0"
-                className="w-[72px] px-3 py-2 pr-8 border border-gray-200 rounded-xl text-sm text-right focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+                className="w-[72px] px-3 py-2 pr-8 border border-white/[0.1] rounded-xl text-sm text-right focus:border-[#A78BFA]/40 focus:outline-none transition"
               />
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 pointer-events-none">
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-[#797D83] pointer-events-none">
                 kcal
               </span>
             </div>
             <button
               onClick={handleAdd}
               disabled={saving || !name.trim()}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors flex-shrink-0"
+              className="px-4 py-2 bg-[#A78BFA] hover:bg-[#B79FFB] disabled:opacity-40 text-[#050504] text-sm font-semibold rounded-xl transition-colors flex-shrink-0"
             >
               {saving ? '…' : 'Hinzufügen'}
             </button>
@@ -159,22 +159,22 @@ export default function DrinksSection({ logs, onAdd, onDelete }: Props) {
 
           {/* Drink list */}
           {logs.length > 0 && (
-            <ul className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+            <ul className="divide-y divide-white/[0.04] border border-white/[0.06] rounded-xl overflow-hidden">
               {logs.map(log => (
                 <li key={log.id} className="flex items-center gap-3 px-4 py-2.5">
                   <span className="text-base leading-none flex-shrink-0">🥤</span>
                   <div className="flex-1 min-w-0">
-                    <span className="text-sm text-gray-800 truncate block">{log.drink_name}</span>
+                    <span className="text-sm text-[#EDECEA] truncate block">{log.drink_name}</span>
                   </div>
                   {log.calories != null && (
-                    <span className="text-xs font-semibold text-gray-500 tabular-nums flex-shrink-0">
+                    <span className="text-xs font-semibold text-[#797D83] tabular-nums flex-shrink-0">
                       {log.calories} kcal
                     </span>
                   )}
                   <button
                     onClick={() => handleDelete(log.id)}
                     disabled={deletingId === log.id}
-                    className="text-gray-300 hover:text-red-400 flex-shrink-0 transition-colors disabled:opacity-40"
+                    className="text-[#797D83]/60 hover:text-red-400 flex-shrink-0 transition-colors disabled:opacity-40"
                     title="Entfernen"
                   >
                     {deletingId === log.id ? (
@@ -194,7 +194,7 @@ export default function DrinksSection({ logs, onAdd, onDelete }: Props) {
           )}
 
           {logs.length === 0 && (
-            <p className="text-xs text-gray-400 text-center py-2">
+            <p className="text-xs text-[#797D83] text-center py-2">
               Noch keine Getränke heute eingetragen.
             </p>
           )}
