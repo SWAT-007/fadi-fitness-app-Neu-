@@ -337,7 +337,6 @@ clientsRouter.get("/messages/clients", requireAuth, async (req: AuthenticatedReq
 
     const clients = await prisma.clientProfile.findMany({
       where: { trainerId: trainerProfile.id },
-      orderBy: { fullName: "asc" },
       select: {
         id: true,
         trainerId: true,
@@ -352,25 +351,50 @@ clientsRouter.get("/messages/clients", requireAuth, async (req: AuthenticatedReq
 
     const clientUserIds = clients.map((client) => client.userId).filter(Boolean) as string[];
     const unreadBySenderId = new Map<string, number>();
+    const latestMessageAt = new Map<string, Date>();
 
     if (clientUserIds.length > 0) {
-      const unreadMessages = await prisma.message.findMany({
-        where: {
-          senderId: { in: clientUserIds },
-          receiverId: req.user.userId,
-          readAt: null,
-        },
-        select: { senderId: true },
-      });
+      const [unreadMessages, latestMessages] = await Promise.all([
+        prisma.message.findMany({
+          where: {
+            senderId: { in: clientUserIds },
+            receiverId: req.user.userId,
+            readAt: null,
+          },
+          select: { senderId: true },
+        }),
+        prisma.message.findMany({
+          where: {
+            senderId: { in: clientUserIds },
+            receiverId: req.user.userId,
+          },
+          orderBy: { createdAt: "desc" },
+          distinct: ["senderId"],
+          select: { senderId: true, createdAt: true },
+        }),
+      ]);
 
       for (const message of unreadMessages) {
         unreadBySenderId.set(message.senderId, (unreadBySenderId.get(message.senderId) ?? 0) + 1);
       }
+      for (const message of latestMessages) {
+        latestMessageAt.set(message.senderId, message.createdAt);
+      }
     }
+
+    // Sort: clients with the most recent inbound message appear first; ties broken by profile createdAt desc
+    const sortedClients = [...clients].sort((a, b) => {
+      const aDate = a.userId ? (latestMessageAt.get(a.userId) ?? null) : null;
+      const bDate = b.userId ? (latestMessageAt.get(b.userId) ?? null) : null;
+      if (aDate && bDate) return bDate.getTime() - aDate.getTime();
+      if (aDate) return -1;
+      if (bDate) return 1;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
 
     return res.json({
       trainerUserId: req.user.userId,
-      clients: clients.map((client) => ({
+      clients: sortedClients.map((client) => ({
         id: client.id,
         trainerId: client.trainerId,
         userId: client.userId,
@@ -379,6 +403,7 @@ clientsRouter.get("/messages/clients", requireAuth, async (req: AuthenticatedReq
         phone: client.phone,
         notes: client.notes,
         createdAt: client.createdAt,
+        latestMessageAt: client.userId ? (latestMessageAt.get(client.userId)?.toISOString() ?? null) : null,
         unreadCount: client.userId ? unreadBySenderId.get(client.userId) ?? 0 : 0,
         messagingEnabled: client.userId !== null,
       })),

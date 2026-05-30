@@ -886,7 +886,7 @@ meRouter.patch("/workout-logs/:logId", requireAuth, async (req: AuthenticatedReq
             userId: clientProfile.trainer.userId,
             type: NotificationType.WORKOUT,
             title: "Workout abgeschlossen",
-            body: `${clientProfile.fullName} hat ${workoutLog.day.name} abgeschlossen.`,
+            body: `${clientProfile.fullName} hat ${workoutLog.day.name} abgeschlossen.||cid:${clientProfile.id}`,
           },
         });
         notificationCreated = true;
@@ -977,6 +977,20 @@ meRouter.post("/exercise-change-requests", requireAuth, async (req: Authenticate
     });
     if (!exercise) return res.status(404).json({ message: "Not found" });
 
+    // Return existing pending request if one already exists for the same exercise+day
+    const pendingDuplicate = await prisma.exerciseChangeRequest.findFirst({
+      where: {
+        clientId: clientProfile.id,
+        dayId,
+        exerciseId,
+        status: { equals: "pending", mode: "insensitive" as const },
+      },
+      select: { id: true, clientId: true, dayId: true, exerciseId: true, reason: true, status: true, createdAt: true },
+    });
+    if (pendingDuplicate) {
+      return res.json({ request: pendingDuplicate, notificationCreated: false });
+    }
+
     const request = await prisma.exerciseChangeRequest.create({
       data: {
         clientId: clientProfile.id,
@@ -994,7 +1008,7 @@ meRouter.post("/exercise-change-requests", requireAuth, async (req: Authenticate
             userId: clientProfile.trainer.userId,
             type: NotificationType.REQUEST,
             title: "Übungswechsel angefragt",
-            body: `${clientProfile.fullName} möchte eine Übung wechseln.`,
+            body: `${clientProfile.fullName} möchte eine Übung wechseln.||cid:${clientProfile.id}`,
           },
         });
         notificationCreated = true;
@@ -1739,7 +1753,7 @@ meRouter.post("/checkins", requireAuth, async (req: AuthenticatedRequest, res) =
             userId: clientProfile.trainer.userId,
             type: NotificationType.CHECKIN,
             title: "Check-in eingereicht",
-            body: `${clientProfile.fullName} hat einen Check-in eingereicht.`,
+            body: `${clientProfile.fullName} hat einen Check-in eingereicht.||cid:${clientProfile.id}`,
           },
         });
         notificationCreated = true;
@@ -2008,7 +2022,7 @@ meRouter.post("/messages", requireAuth, async (req: AuthenticatedRequest, res) =
           userId: clientProfile.trainer.userId,
           type: NotificationType.MESSAGE,
           title: "Neue Nachricht von deinem Client",
-          body: shortBody,
+          body: `${shortBody}||cid:${clientProfile.id}`,
         },
       });
       notificationCreated = true;

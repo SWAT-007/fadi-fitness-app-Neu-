@@ -126,7 +126,7 @@ function mapMessage(message: BackendMessage): Message {
 export default function TrainerMessagesPage() {
   const searchParams = useSearchParams()
   const { showToast } = useToast()
-  const initialClientId = searchParams.get('client')
+  const initialClientId = searchParams.get('clientId')
 
   const [clients, setClients] = useState<Client[]>([])
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
@@ -141,7 +141,7 @@ export default function TrainerMessagesPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const sendingRef = useRef(false)
   const prevMessageCountRef = useRef(0)
-  const didApplyInitialClientRef = useRef(false)
+  const appliedInitialClientRef = useRef<string | null>(null)
 
   const appendMessage = useCallback((message: Message) => {
     setMessages(prev => {
@@ -172,12 +172,21 @@ export default function TrainerMessagesPage() {
       setMyUserId(data?.trainerUserId ?? '')
       setClients(nextClients)
       setUnreadByClientId(nextUnread)
-      setSelectedClient(prev => {
-        const targetId = prev?.id ?? (!didApplyInitialClientRef.current ? initialClientId : null)
-        didApplyInitialClientRef.current = true
-        if (!targetId) return prev
-        return nextClients.find(client => client.id === targetId) ?? null
-      })
+
+      const shouldApplyParam = initialClientId && appliedInitialClientRef.current !== initialClientId
+      if (shouldApplyParam) {
+        appliedInitialClientRef.current = initialClientId
+        const found = nextClients.find(c => c.id === initialClientId) ?? null
+        if (!found) {
+          console.warn('[Admin Messages] clientId from URL not found in list:', initialClientId, nextClients.map(c => c.id))
+        }
+        setSelectedClient(found)
+      } else {
+        setSelectedClient(prev => {
+          if (!prev) return null
+          return nextClients.find(c => c.id === prev.id) ?? null
+        })
+      }
     } catch (error) {
       console.error('[Admin Messages] load clients failed:', error)
     } finally {

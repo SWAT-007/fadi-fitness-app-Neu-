@@ -109,6 +109,14 @@ const TypeHref: Record<TrainerBellType, string> = {
   system:         '/admin',
 }
 
+function parseNotifBody(raw: string | null | undefined): { text: string; cid: string | null } {
+  if (!raw) return { text: '', cid: null }
+  const sep = raw.indexOf('||cid:')
+  if (sep === -1) return { text: raw, cid: null }
+  return { text: raw.slice(0, sep), cid: raw.slice(sep + 6) }
+}
+
+
 function timeAgo(value: string) {
   const diff = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000))
   if (diff < 60) return 'gerade eben'
@@ -203,18 +211,31 @@ export default function TrainerNotificationBell({
 
   const handleClick = async (n: BellNotification & { type: TrainerBellType }) => {
     setOpen(false)
+
+    // Mark as read — fire-and-forget, optimistic update
     if (!n.is_read) {
       setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x))
-
-      try {
-        const response = await fetch(`/api/backend/notifications/${n.id}/read`, { method: 'PATCH' })
-        if (!response.ok) {
+      fetch(`/api/backend/notifications/${n.id}/read`, { method: 'PATCH' })
+        .then(res => {
+          if (!res.ok) setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: false } : x))
+        })
+        .catch(() => {
           setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: false } : x))
-        }
-      } catch {
-        setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: false } : x))
-      }
+        })
     }
+
+    // Resolve destination from backend (handles both new ||cid: and old notifications via DB lookup)
+    try {
+      const res = await fetch(`/api/backend/notifications/${n.id}/target`)
+      const data = await res.json().catch(() => null) as { href?: string } | null
+      if (data?.href) {
+        router.push(data.href)
+        return
+      }
+    } catch {
+      // fallthrough to static fallback
+    }
+
     router.push(TypeHref[n.type])
   }
 
@@ -294,9 +315,7 @@ export default function TrainerNotificationBell({
                     <span className={`block text-[13px] leading-snug truncate ${n.is_read ? 'text-gray-400' : 'text-white font-medium'}`}>
                       {n.title}
                     </span>
-                    {n.body && (
-                      <span className="block truncate text-[11.5px] text-gray-500 mt-0.5">{n.body}</span>
-                    )}
+                    {(() => { const { text } = parseNotifBody(n.body); return text ? <span className="block truncate text-[11.5px] text-gray-500 mt-0.5">{text}</span> : null })()}
                     <span className="block text-[11px] text-gray-600 mt-1 tabular-nums">{timeAgo(n.created_at)}</span>
                   </span>
 
