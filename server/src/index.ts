@@ -12,13 +12,24 @@ import { exercisesRouter, plansRouter, workoutDaysRouter } from "./routes/plans"
 
 const app = express();
 
+const LOCAL_ORIGINS = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "capacitor://localhost",
+  "http://localhost",
+];
+
+const extraOrigins: string[] = [
+  process.env.FRONTEND_ORIGIN,
+  ...(process.env.ADDITIONAL_CORS_ORIGINS ?? "").split(","),
+]
+  .map((o) => o?.trim())
+  .filter((o): o is string => Boolean(o));
+
+const allowedOrigins = Array.from(new Set([...LOCAL_ORIGINS, ...extraOrigins]));
+
 app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "capacitor://localhost",
-    "http://localhost"
-  ],
+  origin: allowedOrigins,
   credentials: true
 }));
 
