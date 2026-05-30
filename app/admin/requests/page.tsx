@@ -75,7 +75,7 @@ export default function RequestsPage() {
 
       setRequests(prev => prev.filter(r => r.id !== id))
       showToast(
-        status === 'resolved' ? 'Anfrage erledigt âœ“' : 'Anfrage abgelehnt',
+        status === 'resolved' ? 'Anfrage erledigt ✓' : 'Anfrage abgelehnt',
         status === 'resolved' ? 'success' : 'danger',
       )
     } catch {
@@ -88,7 +88,7 @@ export default function RequestsPage() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-[#EDECEA]">Ãœbungswechsel-Anfragen</h1>
+        <h1 className="text-2xl font-bold text-[#EDECEA]">Übungswechsel-Anfragen</h1>
         <p className="text-[#797D83] text-sm mt-1">
           {loading ? '…' : `${requests.length} offene Anfrage${requests.length !== 1 ? 'n' : ''}`}
         </p>
@@ -104,7 +104,11 @@ export default function RequestsPage() {
         </div>
       ) : requests.length === 0 ? (
         <div className="bg-[#111111] rounded-2xl border border-white/[0.06] py-16 text-center shadow-sm">
-          <div className="text-5xl mb-3">âœ…</div>
+          <div className="mx-auto w-12 h-12 rounded-2xl bg-[#A78BFA]/10 flex items-center justify-center mb-4">
+            <svg className="w-6 h-6 text-[#A78BFA]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
           <p className="text-[#797D83]">Keine offenen Anfragen.</p>
         </div>
       ) : (
