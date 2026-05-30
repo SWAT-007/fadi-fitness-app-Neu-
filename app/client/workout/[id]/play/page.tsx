@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/components/Motion'
+import { resolveImageUrl } from '@/lib/exercises'
 
 type SetLog = {
   weight: string
@@ -483,9 +484,9 @@ export default function WorkoutPlayerPage() {
                           : 'border-white/[0.08] opacity-60 hover:opacity-100'
                     }`}
                   >
-                    {ex.imageUrl ? (
+                    {resolveImageUrl(ex.imageUrl) ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={ex.imageUrl} alt="" className="w-full h-full object-cover" />
+                      <img src={resolveImageUrl(ex.imageUrl)!} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-[#1a1a1a] flex items-center justify-center text-[#797D83] text-[9px] font-bold uppercase px-1 text-center leading-tight">
                         {ex.name.slice(0, 8)}

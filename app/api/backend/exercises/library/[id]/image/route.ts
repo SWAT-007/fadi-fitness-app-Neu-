@@ -1,0 +1,48 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+
+const BACKEND_TOKEN_COOKIE = 'backend_token'
+const BACKEND_API_URL = process.env.BACKEND_API_URL ?? 'http://localhost:4000'
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const token = (await cookies()).get(BACKEND_TOKEN_COOKIE)?.value
+  if (!token) {
+    return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { id } = await params
+  if (!id) {
+    return NextResponse.json({ ok: false, message: 'Not found' }, { status: 404 })
+  }
+
+  let formData: FormData
+  try {
+    formData = await request.formData()
+  } catch {
+    return NextResponse.json({ ok: false, message: 'Ungültige Formulardaten' }, { status: 400 })
+  }
+
+  try {
+    const backendResponse = await fetch(
+      `${BACKEND_API_URL}/api/v1/exercises/library/${id}/image`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+        cache: 'no-store',
+      },
+    )
+
+    const payload = await backendResponse.json().catch(() => null)
+    return NextResponse.json(
+      payload ?? { ok: false, message: 'Invalid backend response' },
+      { status: backendResponse.status },
+    )
+  } catch (error) {
+    console.error('[bridge:exercises:library:image:post]', error instanceof Error ? error.message : String(error))
+    return NextResponse.json({ ok: false, message: 'Backend unavailable' }, { status: 502 })
+  }
+}

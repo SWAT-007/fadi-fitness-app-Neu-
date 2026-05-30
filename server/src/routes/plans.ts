@@ -1,4 +1,7 @@
-import { Router } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { prisma } from "../db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 
@@ -898,7 +901,9 @@ workoutDaysRouter.post("/:dayId/exercises", requireAuth, async (req: Authenticat
   const noteInput = req.body?.note;
   const note = noteInput === null ? null : typeof noteInput === "string" ? noteInput : null;
   const imageUrlInput = req.body?.imageUrl;
-  const imageUrl = imageUrlInput === null ? null : typeof imageUrlInput === "string" ? imageUrlInput : null;
+  const clientImageUrl = imageUrlInput === null ? null : typeof imageUrlInput === "string" ? imageUrlInput : null;
+  const libraryItemIdInput = req.body?.libraryItemId;
+  const libraryItemId = typeof libraryItemIdInput === "string" && libraryItemIdInput ? libraryItemIdInput : null;
 
   if (!name) {
     return res.status(400).json({ message: "Invalid request" });
@@ -912,6 +917,18 @@ workoutDaysRouter.post("/:dayId/exercises", requireAuth, async (req: Authenticat
 
     if (!trainerProfile) {
       return res.status(500).json({ message: "Internal server error" });
+    }
+
+    // Prefer DB-trusted imageUrl from ExerciseLibrary over client-sent value
+    let imageUrl = clientImageUrl;
+    if (libraryItemId) {
+      const libraryItem = await prisma.exerciseLibrary.findUnique({
+        where: { id: libraryItemId },
+        select: { imageUrl: true },
+      });
+      if (libraryItem) {
+        imageUrl = libraryItem.imageUrl ?? null;
+      }
     }
 
     const existingDay = await prisma.workoutDay.findFirst({
@@ -1075,6 +1092,97 @@ exercisesRouter.post("/library", requireAuth, async (req: AuthenticatedRequest, 
     return res.status(500).json({ message: "Internal server error" });
   }
 });
+
+// ─── Exercise library image upload ───────────────────────────────────────────
+
+const EXERCISE_UPLOADS_DIR = path.join(process.cwd(), "uploads", "exercises");
+const ALLOWED_EXERCISE_IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
+
+const exerciseImageStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    fs.mkdirSync(EXERCISE_UPLOADS_DIR, { recursive: true });
+    cb(null, EXERCISE_UPLOADS_DIR);
+  },
+  filename: (req, file, cb) => {
+    const id = (req as unknown as { params: Record<string, string> }).params?.id ?? "unknown";
+    const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
+    cb(null, `${id}-${Date.now()}${ext}`);
+  },
+});
+
+const exerciseImageUpload = multer({
+  storage: exerciseImageStorage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    ALLOWED_EXERCISE_IMAGE_MIME.has(file.mimetype)
+      ? cb(null, true)
+      : cb(new Error("Ungültiger Dateityp"));
+  },
+});
+
+const exerciseImageUploadMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  exerciseImageUpload.single("image")(req, res, (err: unknown) => {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ message: `Upload-Fehler: ${err.message}` });
+    }
+    if (err instanceof Error) {
+      return res.status(400).json({ message: err.message });
+    }
+    next();
+  });
+};
+
+exercisesRouter.post(
+  "/library/:id/image",
+  requireAuth,
+  exerciseImageUploadMiddleware,
+  async (req: AuthenticatedRequest, res) => {
+    if (req.user?.role !== "trainer") {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
+    if (!id) return res.status(404).json({ message: "Not found" });
+
+    const file = req.file as Express.Multer.File | undefined;
+    if (!file) return res.status(400).json({ message: "Keine Datei hochgeladen" });
+
+    const cleanup = () => { try { fs.unlinkSync(file.path); } catch { /* ignore */ } };
+
+    try {
+      const existing = await prisma.exerciseLibrary.findUnique({
+        where: { id },
+        select: { id: true },
+      });
+      if (!existing) {
+        cleanup();
+        return res.status(404).json({ message: "Not found" });
+      }
+
+      const imageUrl = `/uploads/exercises/${file.filename}`;
+      const updated = await prisma.exerciseLibrary.update({
+        where: { id },
+        data: { imageUrl },
+        select: {
+          id: true,
+          name: true,
+          muscleGroup: true,
+          equipment: true,
+          imageUrl: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      return res.json({ exercise: updated });
+    } catch (error) {
+      cleanup();
+      console.error("[exercises:library:image:upload] error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
 
 exercisesRouter.patch("/library/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {

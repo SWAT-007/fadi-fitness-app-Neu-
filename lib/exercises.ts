@@ -1,6 +1,18 @@
 import type { ExerciseLibraryItem } from '@/lib/types'
 
 export type LibraryExercise = ExerciseLibraryItem
+
+const BACKEND_URL =
+  typeof process !== 'undefined'
+    ? (process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000')
+    : 'http://localhost:4000'
+
+export function resolveImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  if (url.startsWith('http')) return url
+  if (url.startsWith('/uploads')) return `${BACKEND_URL}${url}`
+  return null
+}
 export type ExerciseCategory = 'Beine' | 'Bizeps' | 'Brust' | 'Gesäß' | 'Rücken' | 'Schultern' | 'Trizeps'
 
 type BackendExerciseLibraryItem = {

@@ -279,6 +279,7 @@ export default function PlanBuilderPage() {
         restSeconds: 60,
         targetWeightKg: null,
         note: null,
+        libraryItemId: exercise.id,
         imageUrl: exercise.image_url ?? null,
       }),
     })
@@ -292,7 +293,7 @@ export default function PlanBuilderPage() {
       return
     }
     setPickerDayId(null)
-    showToast('Uebung hinzugefuegt ✓', 'success')
+    showToast('Übung hinzugefügt ✓', 'success')
     await load()
   }
 

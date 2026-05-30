@@ -6,6 +6,7 @@ import {
   EXERCISE_CATEGORIES,
   fetchExerciseLibrary,
   getExerciseCategory,
+  resolveImageUrl,
   type ExerciseCategory,
   type LibraryExercise,
 } from '@/lib/exercises'
@@ -137,9 +138,9 @@ export default function ExercisePicker({ open, onClose, onSelect }: ExercisePick
                   className="w-full flex items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-gray-50 active:bg-gray-100"
                 >
                   <div className="w-14 h-14 rounded-xl bg-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                    {exercise.image_url ? (
+                    {resolveImageUrl(exercise.image_url) ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={exercise.image_url} alt="" className="w-full h-full object-cover" />
+                      <img src={resolveImageUrl(exercise.image_url)!} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-gray-300 text-xs">—</span>
                     )}

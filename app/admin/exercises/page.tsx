@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { ExerciseLibraryItem } from '@/lib/types'
+import { resolveImageUrl } from '@/lib/exercises'
 
 type LibForm = {
   name: string
@@ -69,6 +70,7 @@ export default function ExerciseLibraryPage() {
   const [editItem, setEditItem] = useState<ExerciseLibraryItem | null>(null)
   const [form, setForm] = useState<LibForm>(emptyForm())
   const [saving, setSaving] = useState(false)
+  const [imageUploading, setImageUploading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -131,6 +133,35 @@ export default function ExerciseLibraryPage() {
     })
     setError(null)
     setShowForm(true)
+  }
+
+  const handleImageUpload = async (id: string, file: File | null) => {
+    if (!file) return
+    setImageUploading(id)
+    setError(null)
+    const fd = new FormData()
+    fd.append('image', file)
+    try {
+      const response = await fetch(`/api/backend/exercises/library/${id}/image`, {
+        method: 'POST',
+        body: fd,
+      })
+      const payload = await response.json().catch(() => null) as { exercise?: BackendExerciseLibraryItem; message?: string } | null
+      if (!response.ok) {
+        setError(payload?.message ?? 'Bild-Upload fehlgeschlagen.')
+        return
+      }
+      if (payload?.exercise) {
+        const updated = mapBackendItem(payload.exercise)
+        setItems(prev => prev.map(i => i.id === id ? updated : i))
+        setEditItem(updated)
+        setForm(prev => ({ ...prev, image_url: updated.image_url ?? '' }))
+      }
+    } catch {
+      setError('Backend nicht erreichbar.')
+    } finally {
+      setImageUploading(null)
+    }
   }
 
   const handleSave = async (e: React.FormEvent) => {
@@ -270,15 +301,55 @@ export default function ExerciseLibraryPage() {
               </select>
             </div>
 
+            {editItem && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Bild hochladen</label>
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 rounded-xl bg-gray-100 border border-gray-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                    {resolveImageUrl(editItem.image_url) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={resolveImageUrl(editItem.image_url)!} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-gray-300 text-xs">—</span>
+                    )}
+                  </div>
+                  <label className="flex flex-col gap-1 cursor-pointer">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl border transition-colors select-none ${
+                      imageUploading === editItem.id
+                        ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-wait'
+                        : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 cursor-pointer'
+                    }`}>
+                      {imageUploading === editItem.id ? (
+                        <>
+                          <span className="w-3 h-3 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
+                          Wird hochgeladen…
+                        </>
+                      ) : (
+                        'Bild hochladen / ändern'
+                      )}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                      className="sr-only"
+                      disabled={imageUploading === editItem.id}
+                      onChange={(e) => { void handleImageUpload(editItem.id, e.target.files?.[0] ?? null) }}
+                    />
+                    <span className="text-xs text-gray-400">Max. 10 MB · JPG, PNG, WebP, HEIC</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1.5">Bild-URL</label>
               <input
                 value={form.image_url}
                 onChange={(e) => setForm((p) => ({ ...p, image_url: e.target.value }))}
-                placeholder="https://... (Upload folgt später)"
+                placeholder="https://... oder /uploads/exercises/..."
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               />
-              <p className="text-xs text-gray-500 mt-1">Datei-Upload ist in dieser Migrationsphase deaktiviert.</p>
+              <p className="text-xs text-gray-500 mt-1">Oder URL manuell eingeben / korrigieren.</p>
             </div>
 
             {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">⚠️ {error}</p>}
@@ -337,9 +408,9 @@ export default function ExerciseLibraryPage() {
           {filtered.map((item) => (
             <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
               <div className="aspect-square bg-gray-100 overflow-hidden">
-                {item.image_url ? (
+                {resolveImageUrl(item.image_url) ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                  <img src={resolveImageUrl(item.image_url)!} alt={item.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-300 text-xs">Kein Bild</div>
                 )}
