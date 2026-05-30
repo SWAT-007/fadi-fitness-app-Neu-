@@ -7,13 +7,13 @@ import { FOOD_CATEGORY_LABEL, type FoodCategory } from '@/lib/types'
 const CATEGORIES: FoodCategory[] = ['protein', 'carbs', 'fat', 'vegetable', 'fruit', 'dairy', 'other']
 
 const CAT_COLOR: Record<FoodCategory, string> = {
-  protein: 'bg-blue-50 text-blue-700',
-  carbs: 'bg-orange-50 text-orange-700',
-  fat: 'bg-yellow-50 text-yellow-700',
-  vegetable: 'bg-green-50 text-green-700',
-  fruit: 'bg-pink-50 text-pink-700',
-  dairy: 'bg-purple-50 text-purple-700',
-  other: 'bg-gray-100 text-gray-600',
+  protein:   'bg-blue-500/10 text-blue-400',
+  carbs:     'bg-amber-500/10 text-amber-400',
+  fat:       'bg-yellow-500/10 text-yellow-300',
+  vegetable: 'bg-emerald-500/10 text-emerald-400',
+  fruit:     'bg-pink-500/10 text-pink-400',
+  dairy:     'bg-violet-500/10 text-violet-400',
+  other:     'bg-white/[0.06] text-[#797D83]',
 }
 
 type BackendFood = {
@@ -72,6 +72,13 @@ const mapFormToBackendPayload = (form: FoodForm) => ({
   defaultServingG: form.defaultServingG.trim() ? Number(form.defaultServingG) || null : null,
   source: form.source.trim() || null,
 })
+
+const inputCls = 'w-full px-3 py-2.5 bg-[#0b0c0f] border border-white/[0.08] text-[#EDECEA] rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent transition placeholder:text-[#555A61]'
+const labelCls = 'block text-xs font-medium text-[#797D83] mb-1.5'
+
+function macroVal(v: number | null): string {
+  return v != null ? `${v}g` : '–'
+}
 
 export default function FoodsDatabasePage() {
   const [foods, setFoods] = useState<BackendFood[]>([])
@@ -210,14 +217,14 @@ export default function FoodsDatabasePage() {
   if (loading) {
     return (
       <div className="p-8 flex justify-center">
-        <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <Link href="/admin/nutrition" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-5">
+      <Link href="/admin/nutrition" className="inline-flex items-center gap-1.5 text-sm text-[#797D83] hover:text-[#EDECEA] mb-5 transition-colors">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
@@ -226,40 +233,40 @@ export default function FoodsDatabasePage() {
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Lebensmittel-Datenbank</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{foods.length} Lebensmittel - Naehrwerte pro 100 g</p>
+          <h1 className="text-2xl font-bold text-[#EDECEA]">Lebensmittel-Datenbank</h1>
+          <p className="text-sm text-[#797D83] mt-0.5">{foods.length} Lebensmittel · Naehrwerte pro 100 g</p>
         </div>
         <button
           onClick={openAdd}
-          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
+          className="press flex items-center gap-2 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
         >
           + Lebensmittel hinzufuegen
         </button>
       </div>
 
       {showForm && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-5">
-          <h2 className="font-semibold text-gray-900 mb-4">
+        <div className="bg-[#111318] rounded-2xl border border-white/[0.08] shadow-lg p-6 mb-5">
+          <h2 className="font-semibold text-[#EDECEA] mb-4">
             {editFood ? `"${editFood.name}" bearbeiten` : 'Neues Lebensmittel'}
           </h2>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Name *</label>
+                <label className={labelCls}>Name *</label>
                 <input
                   autoFocus
                   value={form.name}
                   onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                   placeholder="z.B. Haehnchenbrust"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className={inputCls}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Kategorie</label>
+                <label className={labelCls}>Kategorie</label>
                 <select
                   value={form.category}
                   onChange={(e) => setForm((p) => ({ ...p, category: e.target.value as FoodCategory }))}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className={inputCls}
                 >
                   {CATEGORIES.map((c) => (
                     <option key={c} value={c}>
@@ -271,7 +278,7 @@ export default function FoodsDatabasePage() {
             </div>
 
             <div>
-              <p className="text-xs font-medium text-gray-600 mb-2">Naehrwerte pro 100 g</p>
+              <p className="text-xs font-medium text-[#797D83] mb-2">Naehrwerte pro 100 g</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
                   { label: 'Kalorien (kcal)', key: 'kcal' as const },
@@ -280,20 +287,20 @@ export default function FoodsDatabasePage() {
                   { label: 'Fett (g)', key: 'fat' as const },
                 ].map((f) => (
                   <div key={f.key}>
-                    <label className="block text-xs text-gray-500 mb-1">{f.label}</label>
+                    <label className={labelCls}>{f.label}</label>
                     <input
                       type="number"
                       min={0}
                       step={0.1}
                       value={form[f.key]}
                       onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className={inputCls}
                     />
                   </div>
                 ))}
               </div>
               {(Number(form.protein) || Number(form.carbs) || Number(form.fat)) > 0 && (
-                <p className={`text-xs mt-2 ${Math.abs(macroKcal - Number(form.kcal)) > 30 ? 'text-amber-600' : 'text-green-600'}`}>
+                <p className={`text-xs mt-2 ${Math.abs(macroKcal - Number(form.kcal)) > 30 ? 'text-amber-400' : 'text-[#A78BFA]'}`}>
                   Aus Makros berechnet: {macroKcal} kcal
                   {Math.abs(macroKcal - Number(form.kcal)) > 30 && (
                     <button
@@ -310,28 +317,28 @@ export default function FoodsDatabasePage() {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Marke</label>
+                <label className={labelCls}>Marke</label>
                 <input
                   value={form.brand}
                   onChange={(e) => setForm((p) => ({ ...p, brand: e.target.value }))}
                   placeholder="z.B. Rewe, Lidl"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className={inputCls}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Barcode (EAN)</label>
+                <label className={labelCls}>Barcode (EAN)</label>
                 <input
                   value={form.barcode}
                   onChange={(e) => setForm((p) => ({ ...p, barcode: e.target.value }))}
                   placeholder="z.B. 4001234567890"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className={inputCls}
                 />
               </div>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Portionsgroesse (g)</label>
+                <label className={labelCls}>Portionsgroesse (g)</label>
                 <input
                   type="number"
                   min={0}
@@ -339,34 +346,38 @@ export default function FoodsDatabasePage() {
                   value={form.defaultServingG}
                   onChange={(e) => setForm((p) => ({ ...p, defaultServingG: e.target.value }))}
                   placeholder="z.B. 100"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className={inputCls}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Quelle</label>
+                <label className={labelCls}>Quelle</label>
                 <input
                   value={form.source}
                   onChange={(e) => setForm((p) => ({ ...p, source: e.target.value }))}
                   placeholder="z.B. USDA, Hersteller"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className={inputCls}
                 />
               </div>
             </div>
 
-            {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">&#9888; {error}</p>}
+            {error && (
+              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-lg">
+                &#9888; {error}
+              </p>
+            )}
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 pt-1">
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="flex-1 py-2.5 border border-gray-200 text-gray-600 text-sm rounded-xl hover:bg-gray-50"
+                className="press flex-1 py-2.5 border border-white/[0.08] text-[#797D83] hover:text-[#EDECEA] hover:bg-white/[0.04] text-sm rounded-xl transition-colors"
               >
                 Abbrechen
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl disabled:opacity-60 transition-colors"
+                className="press flex-1 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl disabled:opacity-60 transition-colors"
               >
                 {saving ? 'Speichern...' : editFood ? 'Aktualisieren' : 'Hinzufuegen'}
               </button>
@@ -380,12 +391,12 @@ export default function FoodsDatabasePage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Suchen..."
-          className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+          className="flex-1 px-4 py-2.5 bg-[#0b0c0f] border border-white/[0.08] text-[#EDECEA] rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent transition placeholder:text-[#555A61]"
         />
         <select
           value={filterCat}
           onChange={(e) => setFilterCat(e.target.value as FoodCategory | 'all')}
-          className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+          className="px-3 py-2.5 bg-[#0b0c0f] border border-white/[0.08] text-[#EDECEA] rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent transition"
         >
           <option value="all">Alle Kategorien</option>
           {CATEGORIES.map((c) => (
@@ -396,8 +407,8 @@ export default function FoodsDatabasePage() {
         </select>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="grid grid-cols-[1fr_auto_5rem_4rem_4rem_4rem_5rem] gap-2 px-5 py-2.5 text-xs font-medium text-gray-400 uppercase tracking-wide bg-gray-50 border-b border-gray-100">
+      <div className="bg-[#111318] rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div className="grid grid-cols-[1fr_auto_5rem_4rem_4rem_4rem_6rem] gap-2 px-5 py-2.5 text-xs font-medium text-[#555A61] uppercase tracking-wide border-b border-white/[0.06]">
           <span>Name</span>
           <span>Kategorie</span>
           <span className="text-right">kcal</span>
@@ -408,9 +419,9 @@ export default function FoodsDatabasePage() {
         </div>
 
         {filtered.length === 0 ? (
-          <div className="py-12 text-center text-gray-400 text-sm">Keine Lebensmittel gefunden.</div>
+          <div className="py-12 text-center text-[#555A61] text-sm">Keine Lebensmittel gefunden.</div>
         ) : (
-          <ul className="divide-y divide-gray-50">
+          <ul className="divide-y divide-white/[0.04]">
             {filtered.map((food) => {
               const catKey = (food.category && CATEGORIES.includes(food.category as FoodCategory)
                 ? food.category
@@ -426,29 +437,29 @@ export default function FoodsDatabasePage() {
               return (
                 <li
                   key={food.id}
-                  className="grid grid-cols-[1fr_auto_5rem_4rem_4rem_4rem_5rem] gap-2 items-center px-5 py-3 hover:bg-gray-50 text-sm"
+                  className="grid grid-cols-[1fr_auto_5rem_4rem_4rem_4rem_6rem] gap-2 items-center px-5 py-3 hover:bg-white/[0.02] text-sm transition-colors"
                 >
                   <div>
-                    <p className="font-medium text-gray-900">{food.name}</p>
-                    {meta && <p className="text-xs text-gray-400 mt-0.5">{meta}</p>}
+                    <p className="font-medium text-[#EDECEA]">{food.name}</p>
+                    {meta && <p className="text-xs text-[#555A61] mt-0.5">{meta}</p>}
                   </div>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CAT_COLOR[catKey]}`}>
                     {FOOD_CATEGORY_LABEL[catKey]}
                   </span>
-                  <span className="text-right text-orange-600 font-medium">{food.caloriesPer100g ?? '–'}</span>
-                  <span className="text-right text-blue-600">{food.proteinPer100g ?? '–'}g</span>
-                  <span className="text-right text-green-600">{food.carbsPer100g ?? '–'}g</span>
-                  <span className="text-right text-yellow-600">{food.fatPer100g ?? '–'}g</span>
+                  <span className="text-right text-[#EDECEA] font-medium tabular-nums">{food.caloriesPer100g ?? '–'}</span>
+                  <span className="text-right text-blue-400 tabular-nums">{macroVal(food.proteinPer100g)}</span>
+                  <span className="text-right text-amber-400 tabular-nums">{macroVal(food.carbsPer100g)}</span>
+                  <span className="text-right text-yellow-300 tabular-nums">{macroVal(food.fatPer100g)}</span>
                   <div className="flex gap-1 justify-end">
                     <button
                       onClick={() => openEdit(food)}
-                      className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                      className="press px-2 py-1 text-xs text-[#797D83] hover:text-[#EDECEA] hover:bg-white/[0.06] rounded-lg transition-colors"
                     >
                       Bearbeiten
                     </button>
                     <button
                       onClick={() => handleDelete(food)}
-                      className="px-2 py-1 text-xs text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      className="press px-2 py-1 text-xs text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                     >
                       Loeschen
                     </button>

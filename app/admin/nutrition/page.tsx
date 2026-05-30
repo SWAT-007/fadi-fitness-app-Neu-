@@ -114,13 +114,25 @@ export default function NutritionListPage() {
           <h1 className="text-2xl font-bold text-[#EDECEA]">Ernährungspläne</h1>
           <p className="text-sm text-[#797D83] mt-0.5">Erstelle und verwalte Ernährungspläne für deine Kunden</p>
         </div>
-        <Link
-          href="/admin/nutrition/new"
-          className="flex items-center gap-2 bg-[#A78BFA] hover:bg-[#B79FFB] text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
-        >
-          <span className="text-base leading-none">+</span>
-          Neuer Plan
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/nutrition/foods"
+            className="press flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.09] text-[#A78BFA] text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors border border-[#A78BFA]/20"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M4 6h16M4 10h16M4 14h10" />
+            </svg>
+            <span className="hidden sm:inline">Lebensmittel-Datenbank</span>
+            <span className="sm:hidden">Lebensmittel</span>
+          </Link>
+          <Link
+            href="/admin/nutrition/new"
+            className="press flex items-center gap-2 bg-[#A78BFA] hover:bg-[#B79FFB] text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
+          >
+            <span className="text-base leading-none">+</span>
+            Neuer Plan
+          </Link>
+        </div>
       </div>
 
       {error && (
