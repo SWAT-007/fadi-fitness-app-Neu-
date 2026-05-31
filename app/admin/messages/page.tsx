@@ -126,7 +126,7 @@ function mapMessage(message: BackendMessage): Message {
 export default function TrainerMessagesPage() {
   const searchParams = useSearchParams()
   const { showToast } = useToast()
-  const initialClientId = searchParams.get('clientId')
+  const requestedClientId = searchParams.get('clientId')
 
   const [clients, setClients] = useState<Client[]>([])
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
@@ -141,7 +141,8 @@ export default function TrainerMessagesPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const sendingRef = useRef(false)
   const prevMessageCountRef = useRef(0)
-  const appliedInitialClientRef = useRef<string | null>(null)
+  const lastAppliedClientIdRef = useRef<string | null>(null)
+  const lastWarnedMissingClientIdRef = useRef<string | null>(null)
 
   const appendMessage = useCallback((message: Message) => {
     setMessages(prev => {
@@ -172,27 +173,32 @@ export default function TrainerMessagesPage() {
       setMyUserId(data?.trainerUserId ?? '')
       setClients(nextClients)
       setUnreadByClientId(nextUnread)
-
-      const shouldApplyParam = initialClientId && appliedInitialClientRef.current !== initialClientId
-      if (shouldApplyParam) {
-        appliedInitialClientRef.current = initialClientId
-        const found = nextClients.find(c => c.id === initialClientId) ?? null
-        if (!found) {
-          console.warn('[Admin Messages] clientId from URL not found in list:', initialClientId, nextClients.map(c => c.id))
-        }
-        setSelectedClient(found)
-      } else {
-        setSelectedClient(prev => {
-          if (!prev) return null
-          return nextClients.find(c => c.id === prev.id) ?? null
-        })
-      }
+      setSelectedClient(prev => {
+        if (!prev) return null
+        return nextClients.find(c => c.id === prev.id) ?? null
+      })
     } catch (error) {
       console.error('[Admin Messages] load clients failed:', error)
     } finally {
       setLoading(false)
     }
-  }, [initialClientId])
+  }, [])
+
+  const logClientIdNotFound = useCallback((clientId: string, availableClients: Client[]) => {
+    if (lastWarnedMissingClientIdRef.current === clientId) return
+    lastWarnedMissingClientIdRef.current = clientId
+
+    console.warn('[Admin Messages] clientId from URL not found in list', {
+      clientId,
+      availableClientIds: availableClients.map(item => item.id),
+      compactClients: availableClients.map(item => ({
+        id: item.id,
+        full_name: item.full_name,
+        email: item.email,
+        user_id: item.user_id ?? null,
+      })),
+    })
+  }, [])
 
   const markConversationRead = useCallback(async (client: Client, currentUserId: string) => {
     if (!client.user_id) return
@@ -248,6 +254,27 @@ export default function TrainerMessagesPage() {
   useEffect(() => {
     void loadClients()
   }, [loadClients])
+
+  useEffect(() => {
+    if (requestedClientId) return
+    lastAppliedClientIdRef.current = null
+    lastWarnedMissingClientIdRef.current = null
+  }, [requestedClientId])
+
+  useEffect(() => {
+    if (!requestedClientId || loading) return
+    if (lastAppliedClientIdRef.current === requestedClientId) return
+
+    const found = clients.find(item => item.id === requestedClientId) ?? null
+    if (!found) {
+      logClientIdNotFound(requestedClientId, clients)
+      return
+    }
+
+    lastAppliedClientIdRef.current = requestedClientId
+    lastWarnedMissingClientIdRef.current = null
+    setSelectedClient(found)
+  }, [clients, loading, logClientIdNotFound, requestedClientId])
 
   useEffect(() => {
     if (!selectedClient?.user_id || !myUserId) {

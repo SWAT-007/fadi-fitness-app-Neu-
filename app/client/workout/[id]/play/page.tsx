@@ -312,6 +312,26 @@ export default function WorkoutPlayerPage() {
         return
       }
 
+      const payload = await res.json().catch(() => null) as
+        | {
+          request?: {
+            id?: string
+            planId?: string
+            dayId?: string
+            exerciseId?: string
+            clientId?: string
+          }
+        }
+        | null
+
+      console.log('[client/workout] exercise change request created', {
+        requestId: payload?.request?.id ?? null,
+        planId: payload?.request?.planId ?? null,
+        dayId: payload?.request?.dayId ?? null,
+        exerciseId: payload?.request?.exerciseId ?? null,
+        clientId: payload?.request?.clientId ?? null,
+      })
+
       setSwapSending(false)
       setSwapModalOpen(false)
       setSwapReason('')

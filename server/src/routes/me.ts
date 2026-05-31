@@ -702,7 +702,7 @@ meRouter.post("/workout-logs", requireAuth, async (req: AuthenticatedRequest, re
 
     const day = await prisma.workoutDay.findFirst({
       where: { id: dayId, planId: assignment.planId },
-      select: { id: true },
+      select: { id: true, planId: true },
     });
     if (!day) return res.status(404).json({ message: "Not found" });
 
@@ -973,7 +973,7 @@ meRouter.post("/exercise-change-requests", requireAuth, async (req: Authenticate
 
     const exercise = await prisma.exercise.findFirst({
       where: { id: exerciseId, dayId },
-      select: { id: true },
+      select: { id: true, name: true },
     });
     if (!exercise) return res.status(404).json({ message: "Not found" });
 
@@ -985,10 +985,39 @@ meRouter.post("/exercise-change-requests", requireAuth, async (req: Authenticate
         exerciseId,
         status: { equals: "pending", mode: "insensitive" as const },
       },
-      select: { id: true, clientId: true, dayId: true, exerciseId: true, reason: true, status: true, createdAt: true },
+      select: {
+        id: true,
+        clientId: true,
+        dayId: true,
+        exerciseId: true,
+        reason: true,
+        status: true,
+        createdAt: true,
+        day: {
+          select: {
+            planId: true,
+          },
+        },
+      },
     });
     if (pendingDuplicate) {
-      return res.json({ request: pendingDuplicate, notificationCreated: false });
+      return res.json({
+        request: {
+          id: pendingDuplicate.id,
+          clientId: pendingDuplicate.clientId,
+          client_id: pendingDuplicate.clientId,
+          dayId: pendingDuplicate.dayId,
+          day_id: pendingDuplicate.dayId,
+          exerciseId: pendingDuplicate.exerciseId,
+          exercise_id: pendingDuplicate.exerciseId,
+          planId: pendingDuplicate.day.planId,
+          plan_id: pendingDuplicate.day.planId,
+          reason: pendingDuplicate.reason,
+          status: pendingDuplicate.status,
+          createdAt: pendingDuplicate.createdAt,
+        },
+        notificationCreated: false,
+      });
     }
 
     const request = await prisma.exerciseChangeRequest.create({
@@ -997,6 +1026,20 @@ meRouter.post("/exercise-change-requests", requireAuth, async (req: Authenticate
         dayId,
         exerciseId,
         reason: reason.trim(),
+      },
+      select: {
+        id: true,
+        clientId: true,
+        dayId: true,
+        exerciseId: true,
+        reason: true,
+        status: true,
+        createdAt: true,
+        day: {
+          select: {
+            planId: true,
+          },
+        },
       },
     });
 
@@ -1008,7 +1051,7 @@ meRouter.post("/exercise-change-requests", requireAuth, async (req: Authenticate
             userId: clientProfile.trainer.userId,
             type: NotificationType.REQUEST,
             title: "Übungswechsel angefragt",
-            body: `${clientProfile.fullName} möchte eine Übung wechseln.||cid:${clientProfile.id}`,
+            body: `${clientProfile.fullName} möchte tauschen: ${exercise.name}||cid:${clientProfile.id}`,
           },
         });
         notificationCreated = true;
@@ -1017,7 +1060,23 @@ meRouter.post("/exercise-change-requests", requireAuth, async (req: Authenticate
       }
     }
 
-    return res.status(201).json({ request, notificationCreated });
+    return res.status(201).json({
+      request: {
+        id: request.id,
+        clientId: request.clientId,
+        client_id: request.clientId,
+        dayId: request.dayId,
+        day_id: request.dayId,
+        exerciseId: request.exerciseId,
+        exercise_id: request.exerciseId,
+        planId: request.day.planId,
+        plan_id: request.day.planId,
+        reason: request.reason,
+        status: request.status,
+        createdAt: request.createdAt,
+      },
+      notificationCreated,
+    });
   } catch (error) {
         return unexpectedErrorResponse(res, "me:exercise-change-requests:create", error);
   }

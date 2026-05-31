@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import type { Profile } from '@/lib/types'
@@ -68,6 +68,18 @@ interface AuthMeResponse {
   message?: string
 }
 
+type MessageClientUnreadItem = {
+  unreadCount?: number | null
+}
+
+type MessagesClientsResponse = {
+  clients?: MessageClientUnreadItem[]
+}
+
+type ExerciseChangeRequestsResponse = {
+  requests?: Array<{ id?: string }>
+}
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -75,6 +87,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [loading, setLoading] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [navBadgeCounts, setNavBadgeCounts] = useState<Record<NavBadgeKey, number>>({
+    messages: 0,
+    requests: 0,
+  })
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -122,6 +138,66 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     checkAuth()
   }, [router])
+
+  const loadSidebarBadgeCounts = useCallback(async () => {
+    let unreadMessages: number | null = null
+    let openRequests: number | null = null
+
+    const [messagesResult, requestsResult] = await Promise.allSettled([
+      fetch('/api/backend/messages/clients', {
+        method: 'GET',
+        cache: 'no-store',
+      }),
+      fetch('/api/backend/clients/exercise-change-requests?status=pending', {
+        method: 'GET',
+        cache: 'no-store',
+      }),
+    ])
+
+    if (messagesResult.status === 'fulfilled' && messagesResult.value.ok) {
+      const payload = await messagesResult.value.json().catch(() => null) as MessagesClientsResponse | null
+      unreadMessages = (payload?.clients ?? []).reduce((sum, item) => {
+        const value = typeof item.unreadCount === 'number' ? item.unreadCount : 0
+        return sum + Math.max(0, value)
+      }, 0)
+    }
+
+    if (requestsResult.status === 'fulfilled' && requestsResult.value.ok) {
+      const payload = await requestsResult.value.json().catch(() => null) as ExerciseChangeRequestsResponse | null
+      openRequests = Array.isArray(payload?.requests) ? payload.requests.length : 0
+    }
+
+    if (unreadMessages === null && openRequests === null) {
+      return
+    }
+
+    setNavBadgeCounts(prev => ({
+      ...prev,
+      ...(unreadMessages !== null ? { messages: unreadMessages } : {}),
+      ...(openRequests !== null ? { requests: openRequests } : {}),
+    }))
+  }, [])
+
+  useEffect(() => {
+    if (!profile) return
+
+    void loadSidebarBadgeCounts()
+
+    const interval = setInterval(() => void loadSidebarBadgeCounts(), 30_000)
+    const onFocus = () => { void loadSidebarBadgeCounts() }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void loadSidebarBadgeCounts()
+    }
+
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [loadSidebarBadgeCounts, profile, pathname])
 
   const handleLogout = async () => {
     try {
@@ -195,7 +271,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               const active = item.href === '/admin'
                 ? pathname === '/admin'
                 : pathname.startsWith(item.href)
-              const badgeCount = 0
+              const badgeCount = item.badgeKey ? navBadgeCounts[item.badgeKey] : 0
               return (
                 <Link
                   key={item.href}
@@ -215,7 +291,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   </span>
                   <span className="flex-1 truncate">{item.label}</span>
                   {badgeCount > 0 && (
-                    <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-[#A78BFA] text-[#050504] text-[11px] font-bold leading-none flex items-center justify-center tabular-nums">
+                    <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-[#A78BFA] text-[#050504] text-[11px] font-bold leading-none flex items-center justify-center tabular-nums ring-1 ring-white/20">
                       {badgeCount > 99 ? '99+' : badgeCount}
                     </span>
                   )}

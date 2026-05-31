@@ -12,6 +12,122 @@ import {
 
 const notificationsRouter = Router();
 
+const CID_MARKER_REGEX = /\|\|cid:([^|:\s]+):?/i;
+const CLIENT_ID_QUERY_REGEX = /(?:[?&]clientId=)([^&#\s]+)/i;
+
+const normalizeText = (value: string | null | undefined): string => {
+  if (!value) return "";
+  return value.replace(/\s+/g, " ").trim();
+};
+
+const stripClientMarker = (value: string | null | undefined): string => {
+  if (!value) return "";
+  return value.replace(/\|\|cid:[^|:\s]+:?/gi, "").trim();
+};
+
+const parseClientIdFromText = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+  const fromMarker = value.match(CID_MARKER_REGEX)?.[1];
+  if (fromMarker) return fromMarker.trim();
+
+  const fromQuery = value.match(CLIENT_ID_QUERY_REGEX)?.[1];
+  if (fromQuery) {
+    try {
+      return decodeURIComponent(fromQuery).trim();
+    } catch {
+      return fromQuery.trim();
+    }
+  }
+
+  return null;
+};
+
+const parseClientIdFromUnknown = (value: unknown): string | null => {
+  if (!value) return null;
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const parsedFromText = parseClientIdFromText(trimmed);
+    if (parsedFromText) return parsedFromText;
+
+    // Legacy payloads may be serialized JSON in `body`.
+    if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+      try {
+        return parseClientIdFromUnknown(JSON.parse(trimmed));
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const parsed = parseClientIdFromUnknown(item);
+      if (parsed) return parsed;
+    }
+    return null;
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const directKeys = [
+      "clientId",
+      "client_id",
+      "entityId",
+      "entity_id",
+      "relatedId",
+      "related_id",
+      "href",
+      "link",
+      "url",
+    ];
+    for (const key of directKeys) {
+      const parsed = parseClientIdFromUnknown(record[key]);
+      if (parsed) return parsed;
+    }
+
+    const nestedKeys = ["metadata", "meta", "data", "payload", "target"];
+    for (const key of nestedKeys) {
+      const parsed = parseClientIdFromUnknown(record[key]);
+      if (parsed) return parsed;
+    }
+  }
+
+  return null;
+};
+
+const contentSimilarityScore = (notificationBody: string, messageContent: string): number => {
+  if (!notificationBody || !messageContent) return 0;
+  if (notificationBody === messageContent) return 100_000;
+  if (messageContent.includes(notificationBody)) return 60_000;
+  if (notificationBody.includes(messageContent)) return 40_000;
+
+  const maxPrefix = Math.min(notificationBody.length, messageContent.length, 40);
+  let prefixLen = 0;
+  while (prefixLen < maxPrefix && notificationBody[prefixLen] === messageContent[prefixLen]) {
+    prefixLen += 1;
+  }
+  return prefixLen * 600;
+};
+
+const pickClosestByTime = <T>(
+  items: T[],
+  targetDate: Date,
+  getTimestamp: (item: T) => number,
+): T | null => {
+  if (items.length === 0) return null;
+  const targetMs = targetDate.getTime();
+  return items.reduce((best, current) => (
+    Math.abs(getTimestamp(current) - targetMs) < Math.abs(getTimestamp(best) - targetMs)
+      ? current
+      : best
+  ));
+};
+
 notificationsRouter.use(requireAuth);
 
 notificationsRouter.use((req: AuthenticatedRequest, res, next) => {
@@ -47,7 +163,14 @@ notificationsRouter.get("/:id/target", async (req: AuthenticatedRequest, res) =>
 
     const notification = await prisma.notification.findFirst({
       where: { id: notificationId, userId: trainerUserId },
-      select: { id: true, type: true, body: true, createdAt: true },
+      select: {
+        id: true,
+        userId: true,
+        type: true,
+        title: true,
+        body: true,
+        createdAt: true,
+      },
     });
     if (!notification) {
       return res.status(404).json({ message: "Not found" });
@@ -58,12 +181,6 @@ notificationsRouter.get("/:id/target", async (req: AuthenticatedRequest, res) =>
       select: { id: true },
     });
 
-    const parseCid = (body: string | null | undefined): string | null => {
-      if (!body) return null;
-      const sep = body.indexOf("||cid:");
-      return sep === -1 ? null : body.slice(sep + 6);
-    };
-
     const verifyClient = async (clientProfileId: string): Promise<boolean> => {
       if (!trainerProfile) return false;
       const cp = await prisma.clientProfile.findFirst({
@@ -73,56 +190,146 @@ notificationsRouter.get("/:id/target", async (req: AuthenticatedRequest, res) =>
       return cp !== null;
     };
 
+    const parseClientIdFromNotification = (): string | null => {
+      return (
+        parseClientIdFromUnknown(notification as unknown as Record<string, unknown>) ??
+        parseClientIdFromUnknown(notification.body) ??
+        parseClientIdFromUnknown(notification.title)
+      );
+    };
+
+    const resolveMessageClientId = async (): Promise<string | null> => {
+      if (!trainerProfile) return null;
+
+      const parsedClientId = parseClientIdFromNotification();
+      if (parsedClientId && (await verifyClient(parsedClientId))) {
+        return parsedClientId;
+      }
+
+      const notificationBodyText = normalizeText(stripClientMarker(notification.body)).toLowerCase();
+      const notifMs = notification.createdAt.getTime();
+      const nearWindowMs = 30 * 60 * 1000;
+
+      const nearby = await prisma.message.findMany({
+        where: {
+          receiverId: trainerUserId,
+          createdAt: {
+            gte: new Date(notifMs - nearWindowMs),
+            lte: new Date(notifMs + nearWindowMs),
+          },
+          sender: { clientProfile: { trainerId: trainerProfile.id } },
+        },
+        select: {
+          content: true,
+          createdAt: true,
+          sender: { select: { clientProfile: { select: { id: true } } } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      });
+
+      let bestClientId: string | null = null;
+      let bestScore = Number.NEGATIVE_INFINITY;
+      for (const message of nearby) {
+        const cpId = message.sender?.clientProfile?.id;
+        if (!cpId) continue;
+
+        const messageText = normalizeText(message.content).toLowerCase();
+        const timeDistanceMs = Math.abs(message.createdAt.getTime() - notifMs);
+        const timeScore = -Math.floor(timeDistanceMs / 1000);
+        const textScore = contentSimilarityScore(notificationBodyText, messageText);
+        const score = timeScore + textScore;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestClientId = cpId;
+        }
+      }
+
+      if (bestClientId && (await verifyClient(bestClientId))) {
+        return bestClientId;
+      }
+
+      return null;
+    };
+
+    const resolveActivityClientId = async (
+      type: "WORKOUT" | "CHECKIN",
+    ): Promise<string | null> => {
+      if (!trainerProfile) return null;
+
+      const parsedClientId = parseClientIdFromNotification();
+      if (parsedClientId && (await verifyClient(parsedClientId))) {
+        return parsedClientId;
+      }
+
+      const notifMs = notification.createdAt.getTime();
+      const windowMs = 12 * 60 * 60 * 1000;
+
+      if (type === NotificationType.WORKOUT) {
+        const workoutLogs = await prisma.workoutLog.findMany({
+          where: {
+            completedAt: {
+              gte: new Date(notifMs - windowMs),
+              lte: new Date(notifMs + windowMs),
+            },
+            client: { trainerId: trainerProfile.id },
+          },
+          select: {
+            completedAt: true,
+            client: { select: { id: true } },
+          },
+          orderBy: { completedAt: "desc" },
+          take: 25,
+        });
+        const closest = pickClosestByTime(
+          workoutLogs,
+          notification.createdAt,
+          (item) => item.completedAt?.getTime() ?? Number.POSITIVE_INFINITY,
+        );
+        const closestClientId = closest?.client.id ?? null;
+        if (closestClientId && (await verifyClient(closestClientId))) {
+          return closestClientId;
+        }
+        return null;
+      }
+
+      const checkins = await prisma.weeklyCheckin.findMany({
+        where: {
+          createdAt: {
+            gte: new Date(notifMs - windowMs),
+            lte: new Date(notifMs + windowMs),
+          },
+          client: { trainerId: trainerProfile.id },
+        },
+        select: {
+          createdAt: true,
+          client: { select: { id: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 25,
+      });
+      const closest = pickClosestByTime(
+        checkins,
+        notification.createdAt,
+        (item) => item.createdAt.getTime(),
+      );
+      const closestClientId = closest?.client.id ?? null;
+      if (closestClientId && (await verifyClient(closestClientId))) {
+        return closestClientId;
+      }
+      return null;
+    };
+
     let href: string;
     let clientId: string | undefined;
 
     switch (notification.type) {
       case NotificationType.MESSAGE: {
-        // 1. Try embedded marker
-        const cidFromBody = parseCid(notification.body);
-        if (cidFromBody && (await verifyClient(cidFromBody))) {
-          clientId = cidFromBody;
-          href = `/admin/messages?clientId=${clientId}`;
-          break;
-        }
-
-        // 2. Fallback: closest inbound Message within ±10 min
-        if (trainerProfile) {
-          const windowMs = 10 * 60 * 1000;
-          const notifMs = notification.createdAt.getTime();
-
-          const nearby = await prisma.message.findMany({
-            where: {
-              receiverId: trainerUserId,
-              createdAt: {
-                gte: new Date(notifMs - windowMs),
-                lte: new Date(notifMs + windowMs),
-              },
-              sender: { clientProfile: { trainerId: trainerProfile.id } },
-            },
-            select: {
-              createdAt: true,
-              sender: { select: { clientProfile: { select: { id: true } } } },
-            },
-            orderBy: { createdAt: "desc" },
-            take: 5,
-          });
-
-          if (nearby.length > 0) {
-            const closest = nearby.reduce((best, msg) =>
-              Math.abs(msg.createdAt.getTime() - notifMs) < Math.abs(best.createdAt.getTime() - notifMs)
-                ? msg : best
-            );
-            const cpId = closest.sender?.clientProfile?.id;
-            if (cpId) {
-              clientId = cpId;
-              href = `/admin/messages?clientId=${clientId}`;
-              break;
-            }
-          }
-        }
-
-        href = "/admin/messages";
+        clientId = await resolveMessageClientId() ?? undefined;
+        href = clientId
+          ? `/admin/messages?clientId=${encodeURIComponent(clientId)}`
+          : "/admin/messages";
         break;
       }
 
@@ -132,9 +339,9 @@ notificationsRouter.get("/:id/target", async (req: AuthenticatedRequest, res) =>
 
       case NotificationType.WORKOUT:
       case NotificationType.CHECKIN: {
-        const cid = parseCid(notification.body);
-        if (cid && (await verifyClient(cid))) {
-          clientId = cid;
+        const resolvedActivityClientId = await resolveActivityClientId(notification.type);
+        if (resolvedActivityClientId) {
+          clientId = resolvedActivityClientId;
           href = `/admin/clients/${clientId}`;
         } else {
           href = "/admin/clients";
@@ -152,7 +359,7 @@ notificationsRouter.get("/:id/target", async (req: AuthenticatedRequest, res) =>
         break;
 
       default:
-        href = "/admin";
+        href = "/admin/dashboard";
         break;
     }
 

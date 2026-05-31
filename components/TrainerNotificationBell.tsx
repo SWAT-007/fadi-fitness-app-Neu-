@@ -116,7 +116,6 @@ function parseNotifBody(raw: string | null | undefined): { text: string; cid: st
   return { text: raw.slice(0, sep), cid: raw.slice(sep + 6) }
 }
 
-
 function timeAgo(value: string) {
   const diff = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000))
   if (diff < 60) return 'gerade eben'
@@ -160,7 +159,7 @@ export default function TrainerNotificationBell({
 
       setNotifications((payload?.notifications ?? []).filter(isTrainerBellNotification))
     } catch {
-      // network error — keep existing list
+      // network error - keep existing list
     }
   }, [])
 
@@ -210,36 +209,43 @@ export default function TrainerNotificationBell({
   }
 
   const handleClick = async (n: BellNotification & { type: TrainerBellType }) => {
-    setOpen(false)
+    let href = TypeHref[n.type]
 
-    // Mark as read — fire-and-forget, optimistic update
-    if (!n.is_read) {
-      setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x))
-      fetch(`/api/backend/notifications/${n.id}/read`, { method: 'PATCH' })
-        .then(res => {
-          if (!res.ok) setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: false } : x))
-        })
-        .catch(() => {
-          setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: false } : x))
-        })
-    }
-
-    // Resolve destination from backend (handles both new ||cid: and old notifications via DB lookup)
+    // 1) Resolve deep-link from backend.
     try {
-      const res = await fetch(`/api/backend/notifications/${n.id}/target`)
-      const data = await res.json().catch(() => null) as { href?: string } | null
-      if (data?.href) {
-        router.push(data.href)
-        return
+      const targetResponse = await fetch(`/api/backend/notifications/${n.id}/target`)
+      const target = await targetResponse.json().catch(() => null) as { href?: string; clientId?: string } | null
+      if (target?.href) {
+        href = target.href
       }
     } catch {
-      // fallthrough to static fallback
+      // fall back to static href
     }
 
-    router.push(TypeHref[n.type])
+    // 2) Mark notification as read.
+    if (!n.is_read) {
+      setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x))
+      try {
+        const readResponse = await fetch(`/api/backend/notifications/${n.id}/read`, { method: 'PATCH' })
+        if (!readResponse.ok) {
+          setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: false } : x))
+        }
+      } catch {
+        setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: false } : x))
+      }
+    }
+
+    // 3) Close popup.
+    setOpen(false)
+
+    // 4) Refresh badge/list.
+    await loadNotifications()
+
+    // 5) Navigate to target.
+    router.push(href)
   }
 
-  // Popup rendered via portal — fixed below the top header, never clipped by sidebar
+  // Popup rendered via portal - fixed below the top header, never clipped by sidebar
   const popup = open && mounted
     ? createPortal(
         <div
@@ -279,7 +285,7 @@ export default function TrainerNotificationBell({
                 type="button"
                 onClick={() => setOpen(false)}
                 className="press p-1.5 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-white/[0.06] transition-colors"
-                aria-label="Schließen"
+                aria-label="Schliessen"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                   <path d="M6 18L18 6M6 6l12 12" />

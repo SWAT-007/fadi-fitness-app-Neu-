@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import ExercisePicker from '@/components/ExercisePicker'
 import type { WorkoutPlan, WorkoutDay, Exercise } from '@/lib/types'
@@ -48,7 +48,25 @@ type BackendPlanDetailResponse = {
 
 export default function PlanBuilderPage() {
   const { id } = useParams<{ id: string }>()
+  const searchParams = useSearchParams()
   const { showToast } = useToast()
+
+  const deepLinkPlanId = useMemo(() => {
+    const value = searchParams.get('planId')
+    return value && value.trim() ? value.trim() : null
+  }, [searchParams])
+  const deepLinkDayId = useMemo(() => {
+    const value = searchParams.get('dayId')
+    return value && value.trim() ? value.trim() : null
+  }, [searchParams])
+  const deepLinkExerciseId = useMemo(() => {
+    const value = searchParams.get('exerciseId')
+    return value && value.trim() ? value.trim() : null
+  }, [searchParams])
+  const deepLinkRequestId = useMemo(() => {
+    const value = searchParams.get('requestId')
+    return value && value.trim() ? value.trim() : null
+  }, [searchParams])
 
   const [plan, setPlan] = useState<WorkoutPlan | null>(null)
   const [days, setDays] = useState<WorkoutDay[]>([])
@@ -73,6 +91,12 @@ export default function PlanBuilderPage() {
 
   // Expanded day (single open accordion behavior)
   const [expandedDayId, setExpandedDayId] = useState<string | null>(null)
+  const [highlightExerciseId, setHighlightExerciseId] = useState<string | null>(null)
+  const [linkedRequestResolved, setLinkedRequestResolved] = useState(false)
+  const deepLinkNoticeShownRef = useRef(false)
+  const deepLinkExerciseKeyRef = useRef<string | null>(null)
+  const deepLinkMissingTargetKeyRef = useRef<string | null>(null)
+  const exerciseRefs = useRef<Record<string, HTMLLIElement | null>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -147,7 +171,12 @@ export default function PlanBuilderPage() {
       setPlanDesc(mappedPlan.description ?? '')
       setDays(mappedDays)
       setExercises(mappedExercises)
-      setExpandedDayId(prev => (prev && mappedDays.some(d => d.id === prev) ? prev : null))
+      setExpandedDayId(prev => {
+        if (deepLinkDayId && mappedDays.some(d => d.id === deepLinkDayId)) {
+          return deepLinkDayId
+        }
+        return prev && mappedDays.some(d => d.id === prev) ? prev : null
+      })
     } catch {
       setLoadError('Plan konnte nicht geladen werden.')
       setPlan(null)
@@ -157,9 +186,122 @@ export default function PlanBuilderPage() {
     } finally {
       setLoading(false)
     }
-  }, [id])
+  }, [deepLinkDayId, id])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    setLinkedRequestResolved(false)
+  }, [deepLinkRequestId])
+
+  useEffect(() => {
+    deepLinkExerciseKeyRef.current = null
+    deepLinkMissingTargetKeyRef.current = null
+  }, [deepLinkDayId, deepLinkExerciseId, deepLinkRequestId, id])
+
+  useEffect(() => {
+    if (!deepLinkPlanId || deepLinkPlanId === id || deepLinkNoticeShownRef.current) return
+    deepLinkNoticeShownRef.current = true
+    showToast('Hinweis: Plan-ID aus Link passt nicht zur geöffneten Seite.', 'info')
+  }, [deepLinkPlanId, id, showToast])
+
+  useEffect(() => {
+    if (!deepLinkDayId || !deepLinkExerciseId || loading) return
+
+    const dayExists = days.some(day => day.id === deepLinkDayId)
+    if (!dayExists) {
+      const missingDayKey = `day:${id}:${deepLinkDayId}:${deepLinkExerciseId}:${deepLinkRequestId ?? ''}`
+      if (deepLinkMissingTargetKeyRef.current !== missingDayKey) {
+        deepLinkMissingTargetKeyRef.current = missingDayKey
+        console.warn('[admin/plans] deep link day not found', {
+          planId: id,
+          dayId: deepLinkDayId,
+          exerciseId: deepLinkExerciseId,
+          requestId: deepLinkRequestId,
+          availableDayIds: days.map(day => day.id),
+        })
+      }
+      return
+    }
+
+    if (expandedDayId !== deepLinkDayId) {
+      setExpandedDayId(deepLinkDayId)
+      return
+    }
+
+    const dayExercises = exercises[deepLinkDayId] ?? []
+    const targetExercise = dayExercises.find(exercise => exercise.id === deepLinkExerciseId) ?? null
+    if (!targetExercise) {
+      const missingExerciseKey = `exercise:${id}:${deepLinkDayId}:${deepLinkExerciseId}:${deepLinkRequestId ?? ''}`
+      if (deepLinkMissingTargetKeyRef.current !== missingExerciseKey) {
+        deepLinkMissingTargetKeyRef.current = missingExerciseKey
+        console.warn('[admin/plans] deep link exercise not found', {
+          planId: id,
+          dayId: deepLinkDayId,
+          exerciseId: deepLinkExerciseId,
+          requestId: deepLinkRequestId,
+          availableExercises: dayExercises.map(exercise => ({ id: exercise.id, name: exercise.name })),
+        })
+      }
+      return
+    }
+
+    setHighlightExerciseId(deepLinkExerciseId)
+    const deepLinkKey = `${id}:${deepLinkDayId}:${deepLinkExerciseId}:${deepLinkRequestId ?? ''}`
+    const scrollTimer = window.setTimeout(() => {
+      const node = exerciseRefs.current[deepLinkExerciseId]
+      node?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 50)
+
+    let openModalTimer: number | undefined
+    if (
+      deepLinkExerciseKeyRef.current !== deepLinkKey &&
+      (!exModal.open || exModal.editing?.id !== targetExercise.id)
+    ) {
+      deepLinkExerciseKeyRef.current = deepLinkKey
+      openModalTimer = window.setTimeout(() => {
+        openEditEx(targetExercise)
+      }, 180)
+    }
+
+    return () => {
+      window.clearTimeout(scrollTimer)
+      if (openModalTimer) window.clearTimeout(openModalTimer)
+    }
+  }, [days, deepLinkDayId, deepLinkExerciseId, deepLinkRequestId, exercises, exModal.editing?.id, exModal.open, expandedDayId, id, loading])
+
+  useEffect(() => {
+    if (!highlightExerciseId) return
+    const timer = window.setTimeout(() => setHighlightExerciseId(null), 2400)
+    return () => window.clearTimeout(timer)
+  }, [highlightExerciseId])
+
+  const markLinkedRequestResolved = useCallback(async () => {
+    if (!deepLinkRequestId || linkedRequestResolved) return true
+
+    try {
+      const response = await fetch(`/api/backend/clients/exercise-change-requests/${deepLinkRequestId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'resolved' }),
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { message?: string } | null
+        const msg =
+          response.status === 401
+            ? 'Backend-Login erforderlich.'
+            : payload?.message ?? 'Anfrage konnte nicht als erledigt markiert werden.'
+        showToast(msg, 'danger')
+        return false
+      }
+
+      setLinkedRequestResolved(true)
+      return true
+    } catch {
+      showToast('Anfrage konnte nicht als erledigt markiert werden.', 'danger')
+      return false
+    }
+  }, [deepLinkRequestId, linkedRequestResolved, showToast])
 
   const savePlan = async () => {
     const response = await fetch(`/api/backend/plans/${id}`, {
@@ -295,6 +437,14 @@ export default function PlanBuilderPage() {
     setPickerDayId(null)
     showToast('Übung hinzugefügt ✓', 'success')
     await load()
+    if (deepLinkRequestId) {
+      const requestResolved = await markLinkedRequestResolved()
+      if (requestResolved) {
+        showToast('Anfrage automatisch als erledigt markiert.', 'success')
+      } else {
+        showToast('Änderung gespeichert, Anfrage bitte manuell prüfen.', 'info')
+      }
+    }
   }
 
   const saveEx = async (e: React.FormEvent) => {
@@ -343,6 +493,14 @@ export default function PlanBuilderPage() {
     setExModal({ open: false, dayId: '', editing: null })
     showToast(exModal.editing ? 'Uebung gespeichert ✓' : 'Uebung erstellt ✓', 'success')
     await load()
+    if (deepLinkRequestId) {
+      const requestResolved = await markLinkedRequestResolved()
+      if (requestResolved) {
+        showToast('Anfrage automatisch als erledigt markiert.', 'success')
+      } else {
+        showToast('Änderung gespeichert, Anfrage bitte manuell prüfen.', 'info')
+      }
+    }
   }
 
   const deleteEx = async (exId: string) => {
@@ -361,6 +519,14 @@ export default function PlanBuilderPage() {
     }
     showToast('Uebung geloescht', 'danger')
     await load()
+    if (deepLinkRequestId) {
+      const requestResolved = await markLinkedRequestResolved()
+      if (requestResolved) {
+        showToast('Anfrage automatisch als erledigt markiert.', 'success')
+      } else {
+        showToast('Änderung gespeichert, Anfrage bitte manuell prüfen.', 'info')
+      }
+    }
   }
 
   const toggleDay = (dayId: string) => {
@@ -428,6 +594,11 @@ export default function PlanBuilderPage() {
               <h1 className="text-xl font-bold text-white">{plan?.name}</h1>
               {plan?.description && <p className="text-sm text-[#797D83] mt-1">{plan.description}</p>}
               <p className="text-xs text-[#555A61] mt-2">{days.length} Trainingstag{days.length !== 1 ? 'e' : ''}</p>
+              {deepLinkRequestId && (
+                <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#A78BFA]/10 px-2.5 py-1 text-[11px] font-medium text-[#A78BFA] ring-1 ring-[#A78BFA]/25">
+                  Anfrage-Kontext aktiv
+                </p>
+              )}
             </div>
             <button onClick={() => setEditingPlan(true)} className="text-sm text-[#A78BFA] hover:text-[#B79FFB] px-3 py-1.5 rounded-lg hover:bg-[#A78BFA]/10 flex-shrink-0 transition-colors">Bearbeiten</button>
           </div>
@@ -470,7 +641,11 @@ export default function PlanBuilderPage() {
                 ) : (
                   <ul className="divide-y divide-white/[0.04]">
                     {(exercises[day.id] ?? []).map((ex, ei) => (
-                      <li key={ex.id}>
+                      <li
+                        key={ex.id}
+                        ref={(node) => { exerciseRefs.current[ex.id] = node }}
+                        className={highlightExerciseId === ex.id ? 'bg-[#A78BFA]/10 ring-1 ring-inset ring-[#A78BFA]/35 transition-colors duration-500' : ''}
+                      >
                         <StaggerItem index={ei} className="px-5 py-3 flex items-start gap-3">
                         <div className="w-6 h-6 rounded-md bg-white/[0.04] text-[#797D83] flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
                           {ei + 1}

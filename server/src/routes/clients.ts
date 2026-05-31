@@ -105,9 +105,17 @@ clientsRouter.get("/exercise-change-requests", requireAuth, async (req: Authenti
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
+        clientId: true,
+        dayId: true,
+        exerciseId: true,
         reason: true,
         status: true,
         createdAt: true,
+        day: {
+          select: {
+            planId: true,
+          },
+        },
         client: {
           select: {
             fullName: true,
@@ -116,6 +124,7 @@ clientsRouter.get("/exercise-change-requests", requireAuth, async (req: Authenti
         },
         exercise: {
           select: {
+            id: true,
             name: true,
           },
         },
@@ -125,6 +134,14 @@ clientsRouter.get("/exercise-change-requests", requireAuth, async (req: Authenti
     return res.json({
       requests: requests.map((request) => ({
         id: request.id,
+        client_id: request.clientId,
+        day_id: request.dayId,
+        exercise_id: request.exerciseId,
+        plan_id: request.day.planId,
+        clientId: request.clientId,
+        dayId: request.dayId,
+        exerciseId: request.exerciseId,
+        planId: request.day.planId,
         reason: request.reason,
         status: request.status,
         created_at: request.createdAt.toISOString(),
@@ -133,6 +150,7 @@ clientsRouter.get("/exercise-change-requests", requireAuth, async (req: Authenti
           user_id: request.client.userId,
         },
         exercises: {
+          id: request.exercise.id,
           name: request.exercise.name,
         },
       })),
