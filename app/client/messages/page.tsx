@@ -262,7 +262,7 @@ export default function ClientMessagesPage() {
   const trainerInitial = (trainer.fullName ?? trainer.email ?? 'T').charAt(0).toUpperCase()
 
   return (
-    <div className="max-w-[480px] mx-auto flex flex-col" style={{ height: 'calc(100dvh - 4rem)' }}>
+    <div className="max-w-[480px] mx-auto flex flex-col" style={{ height: 'calc(100dvh - 4rem - 7rem)' }}>
 
       {/* Trainer info bar */}
       <div className="flex-none px-4 py-3 border-b border-white/[0.06] flex items-center gap-3 bg-[#0b0c0f]/80 backdrop-blur-sm">

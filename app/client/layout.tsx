@@ -121,6 +121,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     if (pathname.startsWith('/client/messages')) setUnreadMessageCount(0)
   }, [pathname])
 
+
+
   const handleLogout = async () => {
     try {
       await fetch('/api/backend/auth/logout', { method: 'POST' })
@@ -137,7 +139,12 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     )
   }
 
-  const isMessages = pathname.startsWith('/client/messages')
+  // Training is active on /client/plan/* AND /client/workout/* (active workout play)
+  const getIsActive = (itemHref: string): boolean => {
+    if (itemHref === '/client') return pathname === '/client'
+    if (itemHref === '/client/plan') return pathname.startsWith('/client/plan') || pathname.startsWith('/client/workout')
+    return pathname.startsWith(itemHref)
+  }
 
   return (
     <ToastProvider>
@@ -171,42 +178,54 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           </div>
         </div>
 
-        {/* Page content */}
-        <main className={isMessages ? 'pb-0' : 'pb-28'}>
+        {/* Page content — pb-28 reserves space above the fixed nav */}
+        <main className="pb-28">
           <PageFade key={pathname}>
             {children}
           </PageFade>
         </main>
 
-        {/* Floating pill bottom nav */}
-        {!isMessages && (
-          <div className="fixed bottom-4 inset-x-0 z-30 px-4">
-            <div className="max-w-[480px] mx-auto">
-              <nav className="bg-[#111111]/95 backdrop-blur-xl border border-white/[0.08] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,255,255,0.04)] overflow-hidden">
-                <div className="flex items-stretch">
+        {/* Floating pill bottom nav — always visible, all routes */}
+        <div
+          className="fixed bottom-0 inset-x-0 z-30 px-4"
+          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="max-w-[480px] mx-auto">
+            {/* pt-6: headroom so the raised active circle isn't clipped */}
+            <div className="pt-6">
+              <nav className="bg-[#0f0f12]/[0.97] backdrop-blur-2xl border border-white/[0.07] rounded-[28px] shadow-[0_-1px_0_0_rgba(255,255,255,0.04)_inset,0_12px_48px_-8px_rgba(0,0,0,0.72)]">
+                <div className="flex">
                   {navItems.map(item => {
-                    const active = item.href === '/client'
-                      ? pathname === '/client'
-                      : pathname.startsWith(item.href)
+                    const active = getIsActive(item.href)
                     return (
                       <Link
                         key={item.href}
                         href={item.href}
-                        className={`relative flex-1 flex flex-col items-center gap-1 pt-3 pb-2.5 transition-colors ${
-                          active ? 'text-[#A78BFA]' : 'text-[#797D83] hover:text-[#EDECEA]'
-                        }`}
+                        className="relative flex-1 flex flex-col items-center pt-3 pb-2.5 transition-colors"
                       >
                         {active && (
-                          <span className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-b-full bg-[#A78BFA] shadow-[0_0_8px_rgba(167,139,250,0.8)]" />
+                          <>
+                            {/* Bar-background hump — makes bar surface appear to arch up behind the circle */}
+                            <span className="absolute -top-[20px] left-1/2 -translate-x-1/2 w-[52px] h-[52px] rounded-full bg-[#0f0f12] ring-1 ring-white/[0.07] z-[9]" />
+                            {/* Gradient active circle */}
+                            <span className="absolute -top-[18px] left-1/2 -translate-x-1/2 w-12 h-12 rounded-full bg-gradient-to-br from-[#A78BFA] to-[#7C3AED] flex items-center justify-center text-white z-10 shadow-[0_0_0_1px_rgba(255,255,255,0.16)_inset,0_4px_24px_-2px_rgba(124,58,237,0.65),0_2px_8px_rgba(0,0,0,0.35)]">
+                              <span className="w-[18px] h-[18px] block">{item.icon}</span>
+                            </span>
+                          </>
                         )}
-                        <span className={`w-5 h-5 block transition-transform ${active ? 'scale-110' : ''}`}>
+                        {/* Icon placeholder — invisible when active so layout height stays constant */}
+                        <span className={`w-[18px] h-[18px] block ${active ? 'invisible' : 'text-[#52565e]'}`}>
                           {item.icon}
                         </span>
-                        <span className={`text-[9.5px] font-semibold tracking-wide ${active ? 'text-[#A78BFA]' : 'text-[#797D83]'}`}>
+                        {/* Label */}
+                        <span className={`text-[9.5px] font-semibold tracking-wide mt-[5px] ${active ? 'text-[#A78BFA]' : 'text-[#52565e]'}`}>
                           {item.label}
                         </span>
+                        {/* Unread badge */}
                         {item.href === '/client/messages' && unreadMessageCount > 0 && (
-                          <span className="absolute right-[18%] top-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-[#111111]">
+                          <span className={`absolute min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-[#0f0f12] ${
+                            active ? 'right-[21%] -top-2' : 'right-[15%] top-1.5'
+                          }`}>
                             {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
                           </span>
                         )}
@@ -217,7 +236,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               </nav>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </ToastProvider>
   )
