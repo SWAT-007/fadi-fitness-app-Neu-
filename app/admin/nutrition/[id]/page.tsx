@@ -245,6 +245,11 @@ export default function NutritionEditorPage() {
               name: string
               description: string | null
               sortOrder: number
+              targetProtein: number | null
+              targetCarbs: number | null
+              targetFat: number | null
+              targetVegetableG: number | null
+              allowedCategories: FoodCategory[] | null
               createdAt: string
             }>
             assignments?: Array<{
@@ -309,19 +314,25 @@ export default function NutritionEditorPage() {
       setTK('200')
       setTF('70')
 
-      const mappedMeals: NutritionMeal[] = (payload.meals ?? []).map((meal) => ({
-        id: meal.id,
-        plan_id: meal.planId,
-        name: meal.name,
-        sort_order: meal.sortOrder,
-        target_kcal: 0,
-        target_protein: 0,
-        target_carbs: 0,
-        target_fat: 0,
-        target_vegetable_g: 0,
-        allowed_categories: ['protein', 'carbs', 'fat', 'vegetable'],
-        created_at: meal.createdAt,
-      }))
+      const mappedMeals: NutritionMeal[] = (payload.meals ?? []).map((meal) => {
+        const target_protein = meal.targetProtein ?? 0
+        const target_carbs = meal.targetCarbs ?? 0
+        const target_fat = meal.targetFat ?? 0
+        return {
+          id: meal.id,
+          plan_id: meal.planId,
+          name: meal.name,
+          sort_order: meal.sortOrder,
+          // kcal is derived from macros (4/4/9), never stored
+          target_kcal: target_protein * 4 + target_carbs * 4 + target_fat * 9,
+          target_protein,
+          target_carbs,
+          target_fat,
+          target_vegetable_g: meal.targetVegetableG ?? 0,
+          allowed_categories: meal.allowedCategories ?? ['protein', 'carbs', 'fat', 'vegetable'],
+          created_at: meal.createdAt,
+        }
+      })
       setMeals(mappedMeals)
 
       const mappedClients: Client[] = (payload.clients ?? []).map((client) => ({
@@ -445,12 +456,17 @@ export default function NutritionEditorPage() {
   }
 
   const updateMeal = async (mealId: string, patch: Partial<NutritionMeal>) => {
-    // Fields supported by backend
+    // Map internal snake_case patch fields to the backend camelCase body.
     const backendBody: Record<string, unknown> = {}
     if (patch.name !== undefined) backendBody.name = patch.name
     if (patch.sort_order !== undefined) backendBody.sortOrder = patch.sort_order
+    if (patch.target_protein !== undefined) backendBody.targetProtein = patch.target_protein ?? null
+    if (patch.target_carbs !== undefined) backendBody.targetCarbs = patch.target_carbs ?? null
+    if (patch.target_fat !== undefined) backendBody.targetFat = patch.target_fat ?? null
+    if (patch.target_vegetable_g !== undefined) backendBody.targetVegetableG = patch.target_vegetable_g ?? null
+    if (patch.allowed_categories !== undefined) backendBody.allowedCategories = patch.allowed_categories
 
-    // Update local state immediately (UI-only fields like target_protein are display-only)
+    // Update local state immediately (kcal stays derived from macros)
     setMeals((prev) => prev.map((m) => m.id === mealId ? { ...m, ...patch } : m))
 
     if (Object.keys(backendBody).length === 0) return
