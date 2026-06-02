@@ -141,7 +141,7 @@ export default function NotificationBell({
       <button
         type="button"
         onClick={() => setOpen(value => !value)}
-        className="relative w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-lg transition-colors"
+        className="relative w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center text-lg text-[#EDECEA] hover:text-[#A78BFA] transition-colors"
         aria-label="Benachrichtigungen"
         aria-expanded={open}
       >
@@ -150,24 +150,24 @@ export default function NotificationBell({
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white">
+          <span className="absolute -right-1 -top-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#0b0c0f]">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="fixed right-3 top-16 z-50 w-80 max-w-[90vw] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl sm:absolute sm:right-0 sm:top-11">
-          <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
+        <div className="fixed right-3 top-16 z-50 w-80 max-w-[90vw] overflow-hidden rounded-2xl border border-white/[0.07] bg-[#13131a] shadow-[0_16px_48px_-12px_rgba(0,0,0,0.8)] sm:absolute sm:right-0 sm:top-11">
+          <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-3">
             <div>
-              <div className="text-sm font-semibold text-gray-900">Benachrichtigungen</div>
-              <div className="text-xs text-gray-400">{unreadCount} ungelesen</div>
+              <div className="text-sm font-semibold text-[#EDECEA]">Benachrichtigungen</div>
+              <div className="text-xs text-[#797D83]">{unreadCount} ungelesen</div>
             </div>
             <button
               type="button"
               onClick={markAllRead}
               disabled={unreadCount === 0}
-              className="text-xs font-medium text-emerald-600 disabled:text-gray-300"
+              className="text-xs font-medium text-[#A78BFA] disabled:text-white/20"
             >
               Alle als gelesen markieren
             </button>
@@ -175,7 +175,7 @@ export default function NotificationBell({
 
           <div className="max-h-[min(24rem,calc(100vh-8rem))] overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-gray-400">
+              <div className="px-4 py-8 text-center text-sm text-[#797D83]">
                 Keine Benachrichtigungen.
               </div>
             ) : (
@@ -184,23 +184,23 @@ export default function NotificationBell({
                   key={notification.id}
                   type="button"
                   onClick={() => openNotification(notification)}
-                  className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 ${
-                    notification.is_read ? 'bg-white' : 'bg-emerald-50/60'
+                  className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.04] ${
+                    notification.is_read ? 'bg-transparent' : 'bg-[rgba(167,139,250,0.08)]'
                   }`}
                 >
-                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white text-[10px] font-semibold text-indigo-600 shadow-sm ring-1 ring-gray-100">
+                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[rgba(167,139,250,0.12)] text-[10px] font-semibold text-[#A78BFA]">
                     {typeIcon[notification.type]}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className={`block text-sm leading-snug ${notification.is_read ? 'font-medium text-gray-700' : 'font-semibold text-gray-900'}`}>
+                    <span className={`block text-sm leading-snug ${notification.is_read ? 'font-medium text-[#EDECEA]/70' : 'font-semibold text-[#EDECEA]'}`}>
                       {notification.title}
                     </span>
                     {notification.body && (
-                      <span className="mt-0.5 block text-xs leading-snug text-gray-400">{notification.body}</span>
+                      <span className="mt-0.5 block text-xs leading-snug text-[#797D83]">{notification.body}</span>
                     )}
-                    <span className="mt-1 block text-xs text-gray-400">{timeAgo(notification.created_at)}</span>
+                    <span className="mt-1 block text-xs text-[#797D83]">{timeAgo(notification.created_at)}</span>
                   </span>
-                  {!notification.is_read && <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />}
+                  {!notification.is_read && <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-[#A78BFA]" />}
                 </button>
               ))
             )}
