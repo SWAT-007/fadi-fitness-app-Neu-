@@ -1095,6 +1095,7 @@ const cmfSelect = {
   foodId: true,
   category: true,
   amountG: true,
+  isExtra: true,
   createdAt: true,
   updatedAt: true,
   food: {
@@ -1115,6 +1116,8 @@ const drinkLogSelect = {
   clientId: true,
   drinkType: true,
   amountMl: true,
+  calories: true,
+  mealId: true,
   loggedAt: true,
 } as const;
 
@@ -1148,7 +1151,7 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
 
-    const [activeNutritionPlan, foods, clientMealFoods, mealHistory, drinkLogs] = await Promise.all([
+    const [activeNutritionPlan, foods, clientMealFoods, mealHistory, drinkLogs, drinks] = await Promise.all([
       prisma.assignedNutritionPlan.findFirst({
         where: { clientId: clientProfile.id, active: true },
         orderBy: { assignedAt: "desc" },
@@ -1171,6 +1174,11 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
                   name: true,
                   description: true,
                   sortOrder: true,
+                  targetProtein: true,
+                  targetCarbs: true,
+                  targetFat: true,
+                  targetVegetableG: true,
+                  allowedCategories: true,
                 },
               },
             },
@@ -1193,6 +1201,7 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
           carbsPer100g: true,
           fatPer100g: true,
           unit: true,
+          category: true,
         },
       }),
       prisma.clientMealFood.findMany({
@@ -1218,6 +1227,11 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
         take: 100,
         select: drinkLogSelect,
       }),
+      prisma.drink.findMany({
+        where: { OR: [{ trainerId: clientProfile.trainerId }, { trainerId: null }] },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, kcalPer100ml: true, unit: true },
+      }),
     ]);
 
     return res.json({
@@ -1228,6 +1242,7 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
       },
       activeNutritionPlan: activeNutritionPlan ?? null,
       foods,
+      drinks,
       clientMealFoods,
       mealHistory,
       drinkLogs,
@@ -1242,11 +1257,12 @@ meRouter.post("/nutrition/client-meal-foods", requireAuth, async (req: Authentic
     return res.status(403).json({ message: "Forbidden" });
   }
 
-  const { mealId, foodId, category, amountG } = req.body as {
+  const { mealId, foodId, category, amountG, isExtra } = req.body as {
     mealId?: string;
     foodId?: string;
     category?: string;
     amountG?: number;
+    isExtra?: boolean;
   };
   if (!foodId) {
     return res.status(400).json({ message: "foodId required" });
@@ -1292,6 +1308,7 @@ meRouter.post("/nutrition/client-meal-foods", requireAuth, async (req: Authentic
         foodId,
         category: category ?? null,
         amountG: typeof amountG === "number" ? amountG : null,
+        isExtra: typeof isExtra === "boolean" ? isExtra : false,
       },
       select: cmfSelect,
     });
@@ -1358,6 +1375,7 @@ meRouter.patch("/nutrition/client-meal-foods/:id", requireAuth, async (req: Auth
     if (Object.prototype.hasOwnProperty.call(body, "foodId")) data.foodId = body.foodId ?? null;
     if (Object.prototype.hasOwnProperty.call(body, "category")) data.category = body.category ?? null;
     if (Object.prototype.hasOwnProperty.call(body, "amountG")) data.amountG = typeof body.amountG === "number" ? body.amountG : null;
+    if (Object.prototype.hasOwnProperty.call(body, "isExtra")) data.isExtra = body.isExtra === true;
 
     const cmf = await prisma.clientMealFood.update({
       where: { id: cmfId },
@@ -1440,6 +1458,12 @@ meRouter.post("/nutrition/drink-logs", requireAuth, async (req: AuthenticatedReq
     return res.status(400).json({ message: "amountMl must be a number or null" });
   }
   const amountMl = typeof rawAmount === "number" ? (rawAmount >= 0 ? rawAmount : null) : null;
+  const rawCalories = body.calories;
+  if (rawCalories !== undefined && rawCalories !== null && typeof rawCalories !== "number") {
+    return res.status(400).json({ message: "calories must be a number or null" });
+  }
+  const calories = typeof rawCalories === "number" ? (rawCalories >= 0 ? rawCalories : null) : null;
+  const mealId = typeof body.mealId === "string" && body.mealId ? body.mealId : null;
 
   try {
     const clientProfile = await prisma.clientProfile.findFirst({
@@ -1453,6 +1477,8 @@ meRouter.post("/nutrition/drink-logs", requireAuth, async (req: AuthenticatedReq
         clientId: clientProfile.id,
         drinkType,
         amountMl,
+        calories,
+        mealId,
       },
       select: drinkLogSelect,
     });

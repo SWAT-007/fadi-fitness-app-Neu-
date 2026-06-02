@@ -53,6 +53,7 @@ model TrainerProfile {
   linkTokens  ClientLinkToken[]
   workoutPlans WorkoutPlan[]
   foods       Food[]
+  drinks      Drink[]
   recipes     Recipe[]
   nutritionPlans NutritionPlan[]
   createdAt   DateTime      @default(now())
@@ -260,10 +261,16 @@ model NutritionMeal {
   name                           String
   description                    String?
   sortOrder                      Int               @default(0)
+  targetProtein                  Float?
+  targetCarbs                    Float?
+  targetFat                      Float?
+  targetVegetableG               Float?
+  allowedCategories              Json?
   createdAt                      DateTime          @default(now())
   updatedAt                      DateTime          @updatedAt
   legacySupabaseNutritionMealId  String?           @unique
   clientMealFoods                ClientMealFood[]
+  drinkLogs                      DrinkLog[]
 
   @@index([planId, sortOrder])
 }
@@ -293,6 +300,7 @@ model ClientMealFood {
   food                              Food?           @relation(fields: [foodId], references: [id], onDelete: SetNull)
   category                          String?
   amountG                           Float?
+  isExtra                           Boolean         @default(false)
   createdAt                         DateTime        @default(now())
   updatedAt                         DateTime        @updatedAt
   legacySupabaseClientMealFoodId    String?         @unique
@@ -339,10 +347,29 @@ model DrinkLog {
   client                    ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
   drinkType                 String?
   amountMl                  Float?
+  calories                  Float?
+  mealId                    String?
+  meal                      NutritionMeal? @relation(fields: [mealId], references: [id], onDelete: SetNull)
   loggedAt                  DateTime      @default(now())
   legacySupabaseDrinkLogId  String?       @unique
 
   @@index([clientId, loggedAt])
+  @@index([mealId])
+}
+
+// Trainer-managed drink catalog (kcal only, per 100 ml). Global when trainerId is null.
+model Drink {
+  id           String          @id @default(cuid())
+  trainerId    String?
+  trainer      TrainerProfile? @relation(fields: [trainerId], references: [id], onDelete: SetNull)
+  name         String
+  kcalPer100ml Float?
+  unit         String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([trainerId])
+  @@index([name])
 }
 
 model Notification {
@@ -352,6 +379,7 @@ model Notification {
   type      NotificationType
   title     String
   body      String?
+  link      String?
   isRead    Boolean          @default(false)
   createdAt DateTime         @default(now())
   readAt    DateTime?

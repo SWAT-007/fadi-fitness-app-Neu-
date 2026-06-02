@@ -53,6 +53,28 @@ const mapNutritionPlanDetail = (plan: {
   updatedAt: plan.updatedAt,
 });
 
+// Per-meal macro target select fields (shared across meal endpoints)
+const mealTargetSelect = {
+  targetProtein: true,
+  targetCarbs: true,
+  targetFat: true,
+  targetVegetableG: true,
+  allowedCategories: true,
+} as const;
+
+const toNullableNumber = (value: unknown): number | null =>
+  value === null || value === undefined || value === ""
+    ? null
+    : typeof value === "number" && Number.isFinite(value)
+      ? value
+      : null;
+
+// allowedCategories: accept a string array (stored as JSON), else null.
+const toAllowedCategories = (value: unknown): string[] | null =>
+  Array.isArray(value) && value.every((v) => typeof v === "string")
+    ? (value as string[])
+    : null;
+
 nutritionRouter.get("/foods", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });
@@ -388,6 +410,191 @@ nutritionRouter.delete("/foods/:id", requireAuth, async (req: AuthenticatedReque
   }
 });
 
+// ─── Drinks catalog (kcal only, per 100 ml) — analog zu Foods ────────────────
+
+const drinkSelect = {
+  id: true,
+  name: true,
+  kcalPer100ml: true,
+  unit: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+nutritionRouter.get("/drinks", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const drinks = await prisma.drink.findMany({
+      where: { OR: [{ trainerId: trainerProfile.id }, { trainerId: null }] },
+      orderBy: { name: "asc" },
+      select: drinkSelect,
+    });
+
+    return res.json({ drinks });
+  } catch (error) {
+    console.error("[nutrition:drinks:list] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+nutritionRouter.post("/drinks", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  if (!name) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  const kcalInput = req.body?.kcalPer100ml;
+  const kcalValid =
+    kcalInput === undefined || kcalInput === null || kcalInput === "" ||
+    (typeof kcalInput === "number" && Number.isFinite(kcalInput));
+  if (!kcalValid) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+  const kcalPer100ml = normalizeOptionalNumber(kcalInput);
+  const unit = normalizeOptionalString(req.body?.unit);
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const drink = await prisma.drink.create({
+      data: { trainerId: trainerProfile.id, name, kcalPer100ml, unit },
+      select: drinkSelect,
+    });
+
+    return res.status(201).json({ drink });
+  } catch (error) {
+    console.error("[nutrition:drinks:create] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+nutritionRouter.patch("/drinks/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const idParam = req.params.id;
+  const drinkId = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!drinkId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const data: { name?: string; kcalPer100ml?: number | null; unit?: string | null } = {};
+
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "name")) {
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    if (!name) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.name = name;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "kcalPer100ml")) {
+    const value = req.body?.kcalPer100ml;
+    if (
+      !(value === null || value === undefined || value === "" ||
+        (typeof value === "number" && Number.isFinite(value)))
+    ) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.kcalPer100ml = normalizeOptionalNumber(value);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "unit")) {
+    const value = req.body?.unit;
+    if (!(value === null || value === undefined || typeof value === "string")) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.unit = normalizeOptionalString(value);
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existing = await prisma.drink.findFirst({
+      where: { id: drinkId, trainerId: trainerProfile.id },
+      select: { id: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const drink = await prisma.drink.update({
+      where: { id: existing.id },
+      data,
+      select: drinkSelect,
+    });
+
+    return res.json({ drink });
+  } catch (error) {
+    console.error("[nutrition:drinks:update] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+nutritionRouter.delete("/drinks/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const idParam = req.params.id;
+  const drinkId = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!drinkId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const existing = await prisma.drink.findFirst({
+      where: { id: drinkId, trainerId: trainerProfile.id },
+      select: { id: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await prisma.drink.delete({ where: { id: existing.id } });
+    return res.json({ deleted: true, id: existing.id });
+  } catch (error) {
+    console.error("[nutrition:drinks:delete] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 nutritionRouter.get("/plans", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });
@@ -577,6 +784,7 @@ nutritionRouter.get("/plans/:id", requireAuth, async (req: AuthenticatedRequest,
           name: true,
           description: true,
           sortOrder: true,
+          ...mealTargetSelect,
           createdAt: true,
           updatedAt: true,
         },
@@ -743,10 +951,20 @@ nutritionRouter.post("/plans/:id/meals", requireAuth, async (req: AuthenticatedR
     const sortOrder = lastMeal ? lastMeal.sortOrder + 1 : 0;
 
     const meal = await prisma.nutritionMeal.create({
-      data: { planId: plan.id, name, description, sortOrder },
+      data: {
+        planId: plan.id,
+        name,
+        description,
+        sortOrder,
+        targetProtein: toNullableNumber(req.body?.targetProtein),
+        targetCarbs: toNullableNumber(req.body?.targetCarbs),
+        targetFat: toNullableNumber(req.body?.targetFat),
+        targetVegetableG: toNullableNumber(req.body?.targetVegetableG),
+        allowedCategories: toAllowedCategories(req.body?.allowedCategories) ?? undefined,
+      },
       select: {
         id: true, planId: true, name: true, description: true,
-        sortOrder: true, createdAt: true, updatedAt: true,
+        sortOrder: true, ...mealTargetSelect, createdAt: true, updatedAt: true,
       },
     });
 
@@ -768,7 +986,16 @@ nutritionRouter.patch("/meals/:mealId", requireAuth, async (req: AuthenticatedRe
     return res.status(404).json({ message: "Not found" });
   }
 
-  const data: { name?: string; description?: string | null; sortOrder?: number } = {};
+  const data: {
+    name?: string;
+    description?: string | null;
+    sortOrder?: number;
+    targetProtein?: number | null;
+    targetCarbs?: number | null;
+    targetFat?: number | null;
+    targetVegetableG?: number | null;
+    allowedCategories?: string[];
+  } = {};
 
   if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "name")) {
     const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
@@ -776,6 +1003,16 @@ nutritionRouter.patch("/meals/:mealId", requireAuth, async (req: AuthenticatedRe
       return res.status(400).json({ message: "Invalid request" });
     }
     data.name = name;
+  }
+
+  for (const field of ["targetProtein", "targetCarbs", "targetFat", "targetVegetableG"] as const) {
+    if (Object.prototype.hasOwnProperty.call(req.body ?? {}, field)) {
+      data[field] = toNullableNumber(req.body?.[field]);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "allowedCategories")) {
+    const parsed = toAllowedCategories(req.body?.allowedCategories);
+    if (parsed) data.allowedCategories = parsed;
   }
 
   if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "description")) {
@@ -816,7 +1053,7 @@ nutritionRouter.patch("/meals/:mealId", requireAuth, async (req: AuthenticatedRe
       data,
       select: {
         id: true, planId: true, name: true, description: true,
-        sortOrder: true, createdAt: true, updatedAt: true,
+        sortOrder: true, ...mealTargetSelect, createdAt: true, updatedAt: true,
       },
     });
 

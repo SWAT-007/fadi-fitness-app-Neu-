@@ -39,164 +39,6 @@ const SLOT_COLOR: Record<FoodCategory, { dot: string; text: string; bar: string 
 
 type CmfWithFood = ClientMealFood & { food: Food }
 
-// ─── Lineares Gleichungssystem für Gramm-Berechnung ──────────────────────────
-
-/**
- * Gauss-Elimination für n×n.
- * Gibt null zurück, wenn singulär.
- */
-function gaussianSolve(A: number[][], b: number[]): number[] | null {
-  const n = A.length
-  const M = A.map((row, i) => [...row, b[i]])
-  for (let i = 0; i < n; i++) {
-    let pivot = i
-    for (let r = i + 1; r < n; r++) {
-      if (Math.abs(M[r][i]) > Math.abs(M[pivot][i])) pivot = r
-    }
-    if (Math.abs(M[pivot][i]) < 1e-9) return null
-    if (pivot !== i) { const tmp = M[i]; M[i] = M[pivot]; M[pivot] = tmp }
-    for (let r = i + 1; r < n; r++) {
-      const factor = M[r][i] / M[i][i]
-      for (let c = i; c <= n; c++) M[r][c] -= factor * M[i][c]
-    }
-  }
-  const x = Array(n).fill(0)
-  for (let i = n - 1; i >= 0; i--) {
-    let s = M[i][n]
-    for (let c = i + 1; c < n; c++) s -= M[i][c] * x[c]
-    x[i] = s / M[i][i]
-  }
-  return x
-}
-
-/**
- * Linear Least Squares über Normalform: AᵀA · x = Aᵀb.
- */
-function lsq(A: number[][], b: number[]): number[] | null {
-  const n = A[0]?.length ?? 0
-  if (n === 0) return []
-  const At: number[][] = Array.from({ length: n }, (_, i) => A.map(row => row[i]))
-  const AtA = Array.from({ length: n }, (_, i) =>
-    Array.from({ length: n }, (_, j) =>
-      At[i].reduce((s, _v, r) => s + At[i][r] * At[j][r], 0)
-    )
-  )
-  const Atb = At.map(col => col.reduce((s, v, r) => s + v * b[r], 0))
-  return gaussianSolve(AtA, Atb)
-}
-
-/**
- * Lineares Least-Squares mit Untergrenze: x_j ≥ minGrams für alle j.
- * Iteratives Pinning — wenn ein Wert die Schranke unterschreitet, wird er
- * fixiert und das Restsystem neu gelöst. Damit bekommt JEDES ausgewählte
- * Lebensmittel mindestens minGrams (z.B. 5g), auch wenn das Ziel dadurch
- * weiter danebenliegt — der Warnhinweis im UI zeigt das.
- */
-function constrainedLSQ(A: number[][], b: number[], minGrams = 5): number[] {
-  const n = A[0]?.length ?? 0
-  const x = Array<number>(n).fill(0)
-  const pinned = Array<boolean>(n).fill(false)
-
-  for (let iter = 0; iter < n + 1; iter++) {
-    const free: number[] = []
-    for (let j = 0; j < n; j++) if (!pinned[j]) free.push(j)
-    if (free.length === 0) break
-
-    // b' = b − Σ_{pinned j} A_j · minGrams
-    const bReduced = b.map((bi, row) => {
-      let s = bi
-      for (let j = 0; j < n; j++) if (pinned[j]) s -= A[row][j] * minGrams
-      return s
-    })
-    const Aprime = A.map(row => free.map(j => row[j]))
-
-    const xFree = lsq(Aprime, bReduced)
-    if (!xFree) {
-      for (const j of free) { pinned[j] = true; x[j] = minGrams }
-      continue
-    }
-
-    for (let j = 0; j < n; j++) x[j] = pinned[j] ? minGrams : 0
-    free.forEach((j, k) => { x[j] = xFree[k] })
-
-    let toPin = -1
-    let worst = minGrams
-    for (const j of free) {
-      if (x[j] < worst) { worst = x[j]; toPin = j }
-    }
-    if (toPin === -1) break
-    pinned[toPin] = true
-  }
-
-  for (let j = 0; j < n; j++) if (x[j] < minGrams) x[j] = minGrams
-  return x
-}
-
-/**
- * Berechnet Gramm pro Lebensmittel so, dass die Ziel-Makros der Mahlzeit
- * möglichst genau getroffen werden, unter der Bedingung Gramm ≥ 0.
- *
- * Gibt Map (food.id → grams) UND Residuum ‖Ax − b‖ zurück. Wenn das Residuum
- * deutlich > 0 ist, kann die Auswahl das Ziel nicht erreichen — der UI-Layer
- * zeigt dann einen Hinweis.
- */
-function solveGrams(meal: NutritionMeal, picked: Food[]): { grams: Map<string, number>; residual: number } {
-  const grams = new Map<string, number>()
-  if (picked.length === 0) return { grams, residual: 0 }
-
-  const targets = [meal.target_protein, meal.target_carbs, meal.target_fat]
-  const macroIdxOf = (cat: FoodCategory): number =>
-    cat === 'protein' ? 0 : cat === 'carbs' ? 1 : cat === 'fat' ? 2 : -1
-
-  const ordered = [...picked].sort((a, b) => macroIdxOf(a.category) - macroIdxOf(b.category))
-  const indices = ordered.map(f => macroIdxOf(f.category)).filter(i => i >= 0)
-  const valid = ordered.filter(f => macroIdxOf(f.category) >= 0)
-  if (valid.length === 0) return { grams, residual: 0 }
-
-  const macroPer100 = (f: Food, mIdx: number) =>
-    mIdx === 0 ? f.protein_per_100g : mIdx === 1 ? f.carbs_per_100g : f.fat_per_100g
-
-  // Bei 1 Slot: simple Division (entspricht NNLS für n=1)
-  if (valid.length === 1) {
-    const f = valid[0]
-    const mIdx = indices[0]
-    const per100 = macroPer100(f, mIdx)
-    const g = per100 > 0 ? Math.max(0, Math.round(targets[mIdx] / per100 * 100)) : 100
-    grams.set(f.id, g)
-    // Residuum: andere Ziele werden nicht getroffen
-    let sq = 0
-    for (let i = 0; i < 3; i++) {
-      const got = macroPer100(f, i) * g / 100
-      sq += (got - targets[i]) ** 2
-    }
-    return { grams, residual: Math.sqrt(sq) }
-  }
-
-  // Vollsystem über alle 3 Makros — auch wenn nur 2 Slots gewählt sind:
-  // so werden Nebenmakros (z.B. Fett im Hähnchen) korrekt berücksichtigt.
-  const A: number[][] = []
-  const b: number[] = []
-  for (let mIdx = 0; mIdx < 3; mIdx++) {
-    const row = valid.map(f => macroPer100(f, mIdx) / 100)
-    A.push(row)
-    b.push(targets[mIdx])
-  }
-
-  // Constrained LSQ: jedes Lebensmittel bekommt mindestens 5g.
-  const x = constrainedLSQ(A, b, 5)
-
-  // Residuum ‖A·x − b‖ berechnen (für Mismatch-Hinweis im UI).
-  let sq = 0
-  for (let i = 0; i < 3; i++) {
-    const ax = A[i].reduce((s, v, j) => s + v * x[j], 0)
-    sq += (ax - b[i]) ** 2
-  }
-  const residual = Math.sqrt(sq)
-
-  valid.forEach((f, i) => grams.set(f.id, Math.max(5, Math.round(x[i]))))
-  return { grams, residual }
-}
-
 function macrosFor(cmf: CmfWithFood) {
   return calcMacros(cmf.food, cmf.amount_g)
 }
@@ -290,10 +132,10 @@ function CalorieRing({ current, target }: { current: number; target: number }) {
   return (
     <div className="relative w-24 h-24">
       <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
-        <circle cx="60" cy="60" r={r} fill="none" stroke="#fff" strokeOpacity="0.5" strokeWidth="8" />
+        <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(167,139,250,0.12)" strokeWidth="8" />
         <circle
           cx="60" cy="60" r={r} fill="none"
-          stroke={over > 0 ? '#ef4444' : '#22c55e'}
+          stroke={over > 0 ? '#ef4444' : '#A78BFA'}
           strokeWidth="8"
           strokeDasharray={`${dash} ${circ - dash}`}
           strokeLinecap="round"
@@ -309,7 +151,9 @@ function CalorieRing({ current, target }: { current: number; target: number }) {
 }
 
 function MiniBar({ current, target, color }: { current: number; target: number; color: string }) {
-  const pct = target > 0 ? Math.min(100, (current / target) * 100) : 0
+  const rawPct = target > 0 ? Math.min(100, (current / target) * 100) : 0
+  // When something is consumed against a real target, keep the bar visible.
+  const pct = target > 0 && current > 0 ? Math.max(rawPct, 4) : rawPct
   const over = target > 0 && current > target
   return (
     <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
@@ -342,7 +186,7 @@ function SlotPicker({
   }
 
   return (
-    <div className="border-t border-white/[0.04] bg-white/[0.02] p-2">
+    <div className="card-tertiary p-2 mx-2 mb-2">
       {list.length > 0 ? (
         <ul className="bg-[#181818] rounded-lg border border-white/[0.08] overflow-hidden shadow-2xl max-h-64 overflow-y-auto">
           {list.map(f => (
@@ -371,7 +215,7 @@ function SlotPicker({
 
 type BackendCmf = {
   id: string; clientId: string; mealId: string | null; foodId: string | null
-  category: string | null; amountG: number | null; createdAt: string; updatedAt: string
+  category: string | null; amountG: number | null; isExtra: boolean; createdAt: string; updatedAt: string
   food: {
     id: string; name: string; caloriesPer100g: number | null; proteinPer100g: number | null
     carbsPer100g: number | null; fatPer100g: number | null; unit: string | null
@@ -429,19 +273,25 @@ function mapMealHistory(h: BackendMealHistory): MealHistoryEntry {
 
 type BackendDrinkLog = {
   id: string; clientId: string; drinkType: string | null
-  amountMl: number | null; loggedAt: string
+  amountMl: number | null; calories: number | null; mealId: string | null; loggedAt: string
 }
 
-function mapDrinkLog(d: BackendDrinkLog): DrinkLog {
+// Local extension of the shared DrinkLog with the persisted meal reference.
+type DrinkLogWithMeal = DrinkLog & { meal_id: string | null }
+
+function mapDrinkLog(d: BackendDrinkLog): DrinkLogWithMeal {
   return {
     id: d.id,
     client_id: d.clientId,
     drink_name: d.drinkType ?? '',
-    calories: null,
+    calories: d.calories ?? null,
     meal_number: null,
+    meal_id: d.mealId ?? null,
     logged_at: d.loggedAt,
   }
 }
+
+type DrinkCatalogItem = { id: string; name: string; kcalPer100ml: number | null; unit: string | null }
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
@@ -454,8 +304,9 @@ export default function ClientNutritionPage() {
   const [openPicker, setOpenPicker] = useState<{ mealId: string; cat: FoodCategory } | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Drink logs (today only)
-  const [drinkLogs, setDrinkLogs] = useState<DrinkLog[]>([])
+  // Drink logs (today only) + trainer-managed drink catalog
+  const [drinkLogs, setDrinkLogs] = useState<DrinkLogWithMeal[]>([])
+  const [drinksCatalog, setDrinksCatalog] = useState<DrinkCatalogItem[]>([])
 
   // Meal history state
   const [mealHistory, setMealHistory]       = useState<MealHistoryEntry[]>([])
@@ -468,7 +319,7 @@ export default function ClientNutritionPage() {
 
   // Extra (Zusatz) food slots — picked from the same food DB, grams set by user
   // { [mealId]: { protein?: { food, grams }, carbs?: ..., fat?: ... } }
-  interface ExtraSlot { food: Food; grams: string }
+  interface ExtraSlot { id: string; food: Food; grams: string }
   type ExtraSlotMap = Record<string, Partial<Record<FoodCategory, ExtraSlot>>>
   const [extraSlots, setExtraSlots] = useState<ExtraSlotMap>({})
 
@@ -509,6 +360,62 @@ export default function ClientNutritionPage() {
     return cat === 'protein' ? m.protein : cat === 'carbs' ? m.carbs : m.fat
   }
 
+  // ─── Zusatzquellen-Persistenz (ClientMealFood mit isExtra=true) ────────────
+  // Neue Zusatzquelle anlegen (max. 1 pro Makro — ersetzt vorhandene serverseitig).
+  const addExtra = async (mealId: string, cat: FoodCategory, food: Food) => {
+    const existing = extraSlots[mealId]?.[cat]
+    if (existing) { await replaceExtraFood(mealId, cat, food); return }
+    try {
+      const res = await fetch('/api/backend/me/nutrition/client-meal-foods', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mealId, foodId: food.id, category: cat, amountG: 30, isExtra: true }),
+      })
+      const data = await res.json().catch(() => null) as { clientMealFood?: { id: string } } | null
+      if (!res.ok || !data?.clientMealFood) { showToast('error', 'Fehler beim Hinzufügen'); return }
+      setExtraSlot(mealId, cat, { id: data.clientMealFood.id, food, grams: '30' })
+    } catch { showToast('error', 'Fehler beim Hinzufügen') }
+  }
+
+  // Food der bestehenden Zusatzquelle tauschen (Gramm bleiben).
+  const replaceExtraFood = async (mealId: string, cat: FoodCategory, food: Food) => {
+    const existing = extraSlots[mealId]?.[cat]
+    if (!existing) return
+    try {
+      const res = await fetch(`/api/backend/me/nutrition/client-meal-foods/${existing.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ foodId: food.id, category: cat }),
+      })
+      if (!res.ok) { showToast('error', 'Fehler beim Ändern'); return }
+      setExtraSlot(mealId, cat, { ...existing, food })
+    } catch { showToast('error', 'Fehler beim Ändern') }
+  }
+
+  // Eingegebene Gramm persistieren (on blur).
+  const persistExtraGrams = async (mealId: string, cat: FoodCategory) => {
+    const existing = extraSlots[mealId]?.[cat]
+    if (!existing) return
+    const grams = Math.max(0, parseFloat(existing.grams) || 0)
+    try {
+      await fetch(`/api/backend/me/nutrition/client-meal-foods/${existing.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amountG: grams }),
+      })
+    } catch { showToast('error', 'Fehler beim Speichern') }
+  }
+
+  // Zusatzquelle entfernen (DB-Zeile löschen + aus State).
+  const removeExtra = async (mealId: string, cat: FoodCategory) => {
+    const existing = extraSlots[mealId]?.[cat]
+    setExtraSlot(mealId, cat, null)
+    if (!existing) return
+    try {
+      await fetch(`/api/backend/me/nutrition/client-meal-foods/${existing.id}`, { method: 'DELETE' })
+    } catch { showToast('error', 'Fehler beim Entfernen') }
+  }
+
   // Collapsible state — Set of open meal IDs (plan meals + history entries)
   const [openCards, setOpenCards] = useState<Set<string>>(new Set())
   const toggleCard = (id: string) =>
@@ -536,7 +443,14 @@ export default function ClientNutritionPage() {
             id: string
             name: string
             description: string | null
-            meals: Array<{ id: string; planId: string; name: string; sortOrder: number }>
+            meals: Array<{
+              id: string; planId: string; name: string; sortOrder: number
+              targetProtein: number | null
+              targetCarbs: number | null
+              targetFat: number | null
+              targetVegetableG: number | null
+              allowedCategories: FoodCategory[] | null
+            }>
           }
         } | null
         foods?: Array<{
@@ -547,7 +461,9 @@ export default function ClientNutritionPage() {
           carbsPer100g: number | null
           fatPer100g: number | null
           unit: string | null
+          category: string | null
         }>
+        drinks?: DrinkCatalogItem[]
         clientMealFoods?: BackendCmf[]
         mealHistory?: BackendMealHistory[]
         drinkLogs?: BackendDrinkLog[]
@@ -564,30 +480,43 @@ export default function ClientNutritionPage() {
         return
       }
 
+      const mappedMeals: NutritionMeal[] = (anp.plan.meals ?? []).map((m) => {
+        const target_protein = m.targetProtein ?? 0
+        const target_carbs = m.targetCarbs ?? 0
+        const target_fat = m.targetFat ?? 0
+        return {
+          id: m.id,
+          plan_id: m.planId,
+          name: m.name,
+          sort_order: m.sortOrder,
+          // kcal is derived from macros (4/4/9), never stored
+          target_kcal: target_protein * 4 + target_carbs * 4 + target_fat * 9,
+          target_protein,
+          target_carbs,
+          target_fat,
+          target_vegetable_g: m.targetVegetableG ?? 0,
+          allowed_categories: (m.allowedCategories ?? ['protein', 'carbs', 'fat', 'vegetable']) as FoodCategory[],
+          created_at: '',
+        }
+      })
+
+      // Daily targets = sum of per-meal targets (no plan-level field)
+      const dayTargetProtein = mappedMeals.reduce((s, m) => s + m.target_protein, 0)
+      const dayTargetCarbs = mappedMeals.reduce((s, m) => s + m.target_carbs, 0)
+      const dayTargetFat = mappedMeals.reduce((s, m) => s + m.target_fat, 0)
+
       const mappedPlan: FullPlan = {
         id: anp.plan.id,
         trainer_id: '',
         name: anp.plan.name,
         description: anp.plan.description,
         goal: 'maintain',
-        target_calories: 2000,
-        target_protein: 150,
-        target_carbs: 200,
-        target_fat: 70,
+        target_calories: dayTargetProtein * 4 + dayTargetCarbs * 4 + dayTargetFat * 9,
+        target_protein: dayTargetProtein,
+        target_carbs: dayTargetCarbs,
+        target_fat: dayTargetFat,
         created_at: anp.assignedAt,
-        nutrition_meals: (anp.plan.meals ?? []).map((m) => ({
-          id: m.id,
-          plan_id: m.planId,
-          name: m.name,
-          sort_order: m.sortOrder,
-          target_kcal: 0,
-          target_protein: 0,
-          target_carbs: 0,
-          target_fat: 0,
-          target_vegetable_g: 0,
-          allowed_categories: ['protein', 'carbs', 'fat', 'vegetable'] as FoodCategory[],
-          created_at: '',
-        })),
+        nutrition_meals: mappedMeals,
       }
       setPlan(mappedPlan)
 
@@ -598,16 +527,28 @@ export default function ClientNutritionPage() {
         protein_per_100g: f.proteinPer100g ?? 0,
         carbs_per_100g: f.carbsPer100g ?? 0,
         fat_per_100g: f.fatPer100g ?? 0,
-        category: 'other' as FoodCategory,
+        category: (f.category ?? 'other') as FoodCategory,
         unit: f.unit ?? 'g',
         trainer_id: null,
         created_at: '',
       } as Food))
       setFoods(mappedFoods)
 
-      setCmf((payload.clientMealFoods ?? []).filter(c => c.food !== null).map(mapCmf))
+      // Split persisted ClientMealFood into main sources (isExtra=false → cmf)
+      // and extra sources (isExtra=true → extraSlots, hydrated with their id).
+      const allCmf = (payload.clientMealFoods ?? []).filter(c => c.food !== null)
+      setCmf(allCmf.filter(c => !c.isExtra).map(mapCmf))
+      const hydratedExtras: ExtraSlotMap = {}
+      for (const c of allCmf) {
+        if (!c.isExtra || !c.mealId) continue
+        const cat = (c.category ?? 'other') as FoodCategory
+        if (!hydratedExtras[c.mealId]) hydratedExtras[c.mealId] = {}
+        hydratedExtras[c.mealId]![cat] = { id: c.id, food: mapCmf(c).food, grams: String(c.amountG ?? 0) }
+      }
+      setExtraSlots(hydratedExtras)
       setMealHistory((payload.mealHistory ?? []).map(mapMealHistory))
       setDrinkLogs((payload.drinkLogs ?? []).map(mapDrinkLog))
+      setDrinksCatalog(payload.drinks ?? [])
     } catch {
       // network or parse error — leave plan=null
     } finally {
@@ -687,10 +628,54 @@ export default function ClientNutritionPage() {
     }
   }
 
-  // ─── „Berechnen": löst NNLS für alle Slots einer Mahlzeit ────────────────
+  // ─── „Berechnen" (Modell A) ──────────────────────────────────────────────
+  // Pro Makro: rest = max(0, mealTarget − Zusatzquellen-Beitrag);
+  // Hauptquellen-Gramm = round(rest / (foodMakroPer100 / 100)). Gemüse zählt nicht.
+  const calcMeal = async (mealId: string) => {
+    if (!plan) return
+    const meal = plan.nutrition_meals.find(m => m.id === mealId)
+    if (!meal) return
+    const slots = slotsByMeal[mealId] ?? {}
 
-  const calcMeal = async (_mealId: string) => {
-    showToast('info', DEFERRED_WRITE_MESSAGE)
+    const macroDefs = [
+      { cat: 'protein' as FoodCategory, target: meal.target_protein, per100: (f: Food) => f.protein_per_100g },
+      { cat: 'carbs'   as FoodCategory, target: meal.target_carbs,   per100: (f: Food) => f.carbs_per_100g },
+      { cat: 'fat'     as FoodCategory, target: meal.target_fat,     per100: (f: Food) => f.fat_per_100g },
+    ]
+
+    const updates: { id: string; amountG: number }[] = []
+    for (const { cat, target, per100 } of macroDefs) {
+      const main = slots[cat]                 // Hauptquelle (max. 1 pro Kategorie)
+      if (!main) continue
+      const zusatzBeitrag = getExtraG(mealId, cat)         // Makro-Gramm der Zusatzquelle
+      const rest = Math.max(0, target - zusatzBeitrag)
+      const perG = per100(main.food) / 100
+      const grams = perG > 0 ? Math.round(rest / perG) : 0  // keine Division durch 0
+      updates.push({ id: main.id, amountG: grams })
+    }
+
+    if (updates.length === 0) {
+      showToast('info', 'Keine Hauptquelle gewählt.')
+      return
+    }
+
+    try {
+      await Promise.all(updates.map(u =>
+        fetch(`/api/backend/me/nutrition/client-meal-foods/${u.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amountG: u.amountG }),
+        }),
+      ))
+      // Lokalen State aktualisieren → dayTotals, Makro-Bars und kcal-Ring rechnen neu.
+      setCmf(prev => prev.map(c => {
+        const u = updates.find(x => x.id === c.id)
+        return u ? { ...c, amount_g: u.amountG } : c
+      }))
+      showToast('success', 'Berechnet ✓')
+    } catch {
+      showToast('error', 'Fehler beim Berechnen')
+    }
   }
 
   // ─── Meal History: save ───────────────────────────────────────────────────
@@ -823,7 +808,7 @@ export default function ClientNutritionPage() {
   return (
     <div className="p-4 max-w-[480px] mx-auto space-y-4">
       {/* ─── Header: Plan + Tagesübersicht ───────────────────────────────── */}
-      <div className={`${goalMeta.bg} rounded-3xl p-4`}>
+      <div className="card-secondary p-4">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-section">{goalMeta.label}</p>
@@ -876,9 +861,10 @@ export default function ClientNutritionPage() {
             const em = calcMacros(slot.food, g)
             mEP += em.protein; mEK += em.carbs; mEF += em.fat; mECal += em.calories
           }
-          // Add this meal's drink calories to the per-meal total
+          // Add this meal's drink calories to the per-meal total (matched by mealId
+          // so it stays correct after reload).
           const mealDrinkCal = drinkLogs
-            .filter(d => d.meal_number === i)
+            .filter(d => d.meal_id === meal.id)
             .reduce((s, d) => s + Number(d.calories ?? 0), 0)
           const tAdj = { p: t.p + mEP, k: t.k + mEK, f: t.f + mEF, cal: t.cal + mECal + mealDrinkCal }
 
@@ -894,7 +880,7 @@ export default function ClientNutritionPage() {
           const isFlashing = saveFlash.has(meal.id)
 
           return (
-            <div key={meal.id} className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
+            <div key={meal.id} className="card-secondary overflow-hidden">
               {/* Mahlzeit-Header — always visible, click to expand/collapse */}
               <button
                 onClick={() => toggleCard(meal.id)}
@@ -1038,7 +1024,7 @@ export default function ClientNutritionPage() {
                                   category={cat}
                                   foods={foods}
                                   onPick={food => {
-                                    setExtraSlot(meal.id, cat, { food, grams: '30' })
+                                    void addExtra(meal.id, cat, food)
                                     setOpenExtraPicker(null)
                                   }}
                                 />
@@ -1068,6 +1054,7 @@ export default function ClientNutritionPage() {
                                   type="number"
                                   value={extraSlot.grams}
                                   onChange={e => setExtraSlot(meal.id, cat, { ...extraSlot, grams: e.target.value })}
+                                  onBlur={() => void persistExtraGrams(meal.id, cat)}
                                   min="0"
                                   className="w-16 px-2 py-1 pr-5 text-xs border border-white/[0.1] rounded-lg bg-white/[0.06] text-[#EDECEA] focus:ring-1 focus:ring-[#A78BFA] focus:outline-none text-right"
                                 />
@@ -1084,7 +1071,7 @@ export default function ClientNutritionPage() {
                                 Ändern
                               </button>
                               <button
-                                onClick={() => setExtraSlot(meal.id, cat, null)}
+                                onClick={() => void removeExtra(meal.id, cat)}
                                 className="text-[#797D83]/60 hover:text-red-500 flex-shrink-0 transition-colors"
                                 title="Entfernen"
                               >
@@ -1098,7 +1085,7 @@ export default function ClientNutritionPage() {
                                 category={cat}
                                 foods={foods}
                                 onPick={food => {
-                                  setExtraSlot(meal.id, cat, { food, grams: extraSlot.grams })
+                                  void replaceExtraFood(meal.id, cat, food)
                                   setOpenExtraPicker(null)
                                 }}
                               />
@@ -1203,7 +1190,8 @@ export default function ClientNutritionPage() {
               {/* ── Getränke ─────────────────────────────────────────────────── */}
               {clientId && (
                 <MealDrinks
-                  mealIndex={i}
+                  mealId={meal.id}
+                  drinksCatalog={drinksCatalog}
                   logs={drinkLogs}
                   onAdd={log => { setDrinkLogs(prev => [...prev, log]); showToast('info', 'Getränk hinzugefügt ✓') }}
                   onDelete={id => setDrinkLogs(prev => prev.filter(d => d.id !== id))}
