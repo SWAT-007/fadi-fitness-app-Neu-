@@ -126,6 +126,17 @@ export default function NutritionListPage() {
             <span className="sm:hidden">Lebensmittel</span>
           </Link>
           <Link
+            href="/admin/nutrition/drinks"
+            className="press flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.09] text-[#A78BFA] text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors border border-[#A78BFA]/20"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M6 3h12l-1 7a5 5 0 01-10 0L6 3z" />
+              <path d="M9 21h6" />
+            </svg>
+            <span className="hidden sm:inline">Getränke-Datenbank</span>
+            <span className="sm:hidden">Getränke</span>
+          </Link>
+          <Link
             href="/admin/nutrition/new"
             className="press flex items-center gap-2 bg-[#A78BFA] hover:bg-[#B79FFB] text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
           >
