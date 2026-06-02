@@ -1,10 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import type { CheckinImage, ProgressLog, WeeklyCheckin } from '@/lib/types'
 import Lightbox from '@/components/Lightbox'
 import { AnimatedNumber, Collapsible, StaggerItem, useToast } from '@/components/Motion'
+import { EmptyState } from '@/components/ui/client-ui'
 
 // ─── Local types ─────────────────────────────────────────────────────────────
 
@@ -332,6 +334,7 @@ function RatingBadge({ value, label }: { value: number | null | undefined; label
 type Tab = 'overview' | 'checkin' | 'records'
 
 export default function ProgressPage() {
+  const router = useRouter()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [clientId, setClientId] = useState<string | null>(null)
@@ -556,14 +559,12 @@ export default function ProgressPage() {
   if (!clientId) {
     return (
       <div className="p-4 max-w-[480px] mx-auto">
-        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-10 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[#797D83] mx-auto mb-3">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M14.828 14.828a4 4 0 015.656 0l4-4a4 4 0 01-5.656-5.656l-1.1 1.1" />
-            </svg>
-          </div>
-          <p className="text-[#797D83] text-sm">Dein Konto ist noch nicht mit einem Trainer verknüpft.</p>
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06]">
+          <EmptyState
+            icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" /><path d="M14.828 14.828a4 4 0 015.656 0l4-4a4 4 0 01-5.656-5.656l-1.1 1.1" /></svg>}
+            title="Noch nicht verbunden"
+            subtext="Dein Konto ist noch nicht mit einem Trainer verknüpft."
+          />
         </div>
       </div>
     )
@@ -585,7 +586,7 @@ export default function ProgressPage() {
         />
       )}
 
-      <h1 className="text-[22px] font-bold text-[#EDECEA] tracking-tight mb-4">Fortschritt</h1>
+      <h1 className="text-display mb-4">Fortschritt</h1>
 
       {/* Tab switcher */}
       <div className="flex gap-1 bg-[#111111] border border-white/[0.06] p-1 rounded-xl mb-5">
@@ -644,7 +645,11 @@ export default function ProgressPage() {
             {chartData.length >= 2 ? (
               <SvgLineChart data={chartData} />
             ) : (
-              <p className="text-[13px] text-[#797D83] text-center py-6">Mindestens 2 Einträge für den Verlauf nötig.</p>
+              <EmptyState
+                icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="M7 14l3-3 3 3 4-5" /></svg>}
+                title="Zu wenig Daten"
+                subtext="Mindestens 2 Einträge für den Verlauf nötig."
+              />
             )}
           </div>
 
@@ -742,13 +747,14 @@ export default function ProgressPage() {
           )}
 
           {progressLogs.length === 0 && workoutLogs.length === 0 && (
-            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-10 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[#797D83] mx-auto mb-3">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 17l6-6 4 4 8-8M14 7h7v7" />
-                </svg>
-              </div>
-              <p className="text-[#797D83] text-[13px]">Noch keine Daten. Starte dein erstes Training!</p>
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06]">
+              <EmptyState
+                icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M3 17l6-6 4 4 8-8" /><path d="M14 7h7v7" /></svg>}
+                title="Noch keine Daten"
+                subtext="Starte dein erstes Training!"
+                ctaLabel="Training starten"
+                ctaOnClick={() => router.push('/client/plan')}
+              />
             </div>
           )}
         </div>
@@ -983,13 +989,12 @@ export default function ProgressPage() {
           )}
 
           {checkins.length === 0 && !showCheckinForm && (
-            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] py-10 text-center">
-              <div className="w-10 h-10 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[#797D83] mx-auto mb-3">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <p className="text-[#797D83] text-[13px]">Noch keine Check-ins vorhanden.</p>
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06]">
+              <EmptyState
+                icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}
+                title="Noch keine Check-ins"
+                subtext="Fülle deinen ersten wöchentlichen Check-in aus."
+              />
             </div>
           )}
         </div>
@@ -999,13 +1004,14 @@ export default function ProgressPage() {
       {tab === 'records' && (
         <div className="space-y-4">
           {prs.length === 0 ? (
-            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] py-14 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-[#A78BFA]/10 flex items-center justify-center mx-auto mb-3">
-                <svg className="w-6 h-6 text-[#A78BFA]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                </svg>
-              </div>
-              <p className="text-[#797D83] text-[13px]">Noch keine Rekorde. Starte ein Training!</p>
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06]">
+              <EmptyState
+                icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>}
+                title="Noch keine Rekorde"
+                subtext="Starte ein Training um deinen ersten Rekord zu setzen."
+                ctaLabel="Training starten"
+                ctaOnClick={() => router.push('/client/plan')}
+              />
             </div>
           ) : (
             <div className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">

@@ -83,11 +83,11 @@ export function StatCard({
     <DarkCard className="p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[26px] font-bold text-[#EDECEA] tracking-tight tabular-nums leading-none">
+          <div className="text-card-title tabular-nums leading-none">
             {value}
           </div>
           {sub && <div className="text-[11px] text-[#A78BFA] font-medium mt-0.5">{sub}</div>}
-          <div className="text-[12px] text-[#797D83] mt-1.5">{label}</div>
+          <div className="text-caption mt-1.5">{label}</div>
         </div>
         {icon && (
           <div className="shrink-0 w-9 h-9 rounded-xl bg-[#A78BFA]/10 flex items-center justify-center text-[#A78BFA]">
@@ -192,8 +192,47 @@ export function NeonButton({
 
 export function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#797D83] mb-2 px-1">
+    <p className="text-section mb-2 px-1">
       {children}
     </p>
+  )
+}
+
+// ─── EmptyState ───────────────────────────────────────────────────────────────
+// Unified premium empty state: purple-tinted icon, title, optional subtext + CTA.
+
+export function EmptyState({
+  icon,
+  title,
+  subtext,
+  ctaLabel,
+  ctaOnClick,
+  className = '',
+}: {
+  icon: ReactNode
+  title: string
+  subtext?: string
+  ctaLabel?: string
+  ctaOnClick?: () => void
+  className?: string
+}) {
+  return (
+    <div className="w-full py-12 flex flex-col items-center text-center gap-3">
+      <div className="w-14 h-14 rounded-2xl bg-[rgba(139,92,246,0.12)] border border-[rgba(139,92,246,0.2)] flex items-center justify-center mb-1 text-[#A78BFA]">
+        {icon}
+      </div>
+      <p className={`text-card-title ${className}`}>{title}</p>
+      {subtext && <p className="text-caption max-w-[220px]">{subtext}</p>}
+      {ctaLabel && (
+        <button
+          type="button"
+          onClick={ctaOnClick}
+          className="press mt-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white cursor-pointer"
+          style={{ background: 'linear-gradient(135deg, #6d28d9, #8b5cf6)', border: 'none' }}
+        >
+          {ctaLabel}
+        </button>
+      )}
+    </div>
   )
 }

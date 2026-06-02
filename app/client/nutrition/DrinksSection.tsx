@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { DrinkLog } from '@/lib/types'
+import { EmptyState } from '@/components/ui/client-ui'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -194,9 +195,11 @@ export default function DrinksSection({ logs, onAdd, onDelete }: Props) {
           )}
 
           {logs.length === 0 && (
-            <p className="text-xs text-[#797D83] text-center py-2">
-              Noch keine Getränke heute eingetragen.
-            </p>
+            <EmptyState
+              icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M12 3s6 5.5 6 10a6 6 0 01-12 0c0-4.5 6-10 6-10z" /></svg>}
+              title="Noch keine Getränke"
+              subtext="Trage heute dein erstes Getränk ein."
+            />
           )}
         </div>
       </div>

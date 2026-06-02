@@ -197,35 +197,39 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                 <div className="flex">
                   {navItems.map(item => {
                     const active = getIsActive(item.href)
+                    const isCenter = item.href === '/client/nutrition'
                     return (
                       <Link
                         key={item.href}
                         href={item.href}
                         className="relative flex-1 flex flex-col items-center pt-3 pb-2.5 transition-colors"
                       >
-                        {active && (
+                        {/* Center tab (Ernährung) only — floating circle, unchanged */}
+                        {isCenter && (
                           <>
-                            {/* Bar-background hump — makes bar surface appear to arch up behind the circle */}
                             <span className="absolute -top-[20px] left-1/2 -translate-x-1/2 w-[52px] h-[52px] rounded-full bg-[#0f0f12] ring-1 ring-white/[0.07] z-[9]" />
-                            {/* Gradient active circle */}
                             <span className="absolute -top-[18px] left-1/2 -translate-x-1/2 w-12 h-12 rounded-full bg-gradient-to-br from-[#A78BFA] to-[#7C3AED] flex items-center justify-center text-white z-10 shadow-[0_0_0_1px_rgba(255,255,255,0.16)_inset,0_4px_24px_-2px_rgba(124,58,237,0.65),0_2px_8px_rgba(0,0,0,0.35)]">
                               <span className="w-[18px] h-[18px] block">{item.icon}</span>
                             </span>
                           </>
                         )}
-                        {/* Icon placeholder — invisible when active so layout height stays constant */}
-                        <span className={`w-[18px] h-[18px] block ${active ? 'invisible' : 'text-[#52565e]'}`}>
+                        {/* Icon — invisible for center (inside circle), colored for the other 4 tabs */}
+                        <span className={`w-[18px] h-[18px] block ${
+                          isCenter ? 'invisible' : active ? 'text-[#A78BFA]' : 'text-[#52565e]'
+                        }`}>
                           {item.icon}
                         </span>
+                        {/* Pill indicator — non-center active tabs only, absolute so it doesn't shift layout */}
+                        {!isCenter && active && (
+                          <span className="absolute top-[30px] left-1/2 -translate-x-1/2 w-5 h-[3px] rounded-full bg-[#8b5cf6]" />
+                        )}
                         {/* Label */}
                         <span className={`text-[9.5px] font-semibold tracking-wide mt-[5px] ${active ? 'text-[#A78BFA]' : 'text-[#52565e]'}`}>
                           {item.label}
                         </span>
-                        {/* Unread badge */}
+                        {/* Unread badge — fixed position regardless of active state */}
                         {item.href === '/client/messages' && unreadMessageCount > 0 && (
-                          <span className={`absolute min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-[#0f0f12] ${
-                            active ? 'right-[21%] -top-2' : 'right-[15%] top-1.5'
-                          }`}>
+                          <span className="absolute right-[15%] top-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-[#0f0f12]">
                             {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
                           </span>
                         )}

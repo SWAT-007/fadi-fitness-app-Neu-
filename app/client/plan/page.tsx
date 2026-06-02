@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { StaggerItem } from '@/components/Motion'
+import { EmptyState } from '@/components/ui/client-ui'
 
 type PlanDay = {
   id: string
@@ -130,7 +131,7 @@ export default function ClientPlanPage() {
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-[#A78BFA]/0 via-[#A78BFA]/30 to-[#A78BFA]/0" />
         <div className="absolute inset-0 flex flex-col justify-end p-5">
           <p className="text-[11px] font-medium tracking-[0.18em] uppercase text-[#A78BFA] mb-1">Aktives Programm</p>
-          <h1 className="text-[22px] font-bold text-white tracking-tight leading-tight">Mein Training</h1>
+          <h1 className="text-display leading-tight">Mein Training</h1>
         </div>
       </div>
 
@@ -144,12 +145,12 @@ export default function ClientPlanPage() {
         {menuOpenDayId && <div className="fixed inset-0 z-10" onClick={() => setMenuOpenDayId(null)} />}
 
         {plans.length === 0 ? (
-          <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-10 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[#797D83] mx-auto mb-3">
-              <span className="w-6 h-6">{Icon.dumbbell}</span>
-            </div>
-            <p className="text-[#797D83] text-sm">Kein aktiver Trainingsplan vorhanden.</p>
-            <p className="text-[#797D83]/60 text-xs mt-1">Dein Trainer wird dir bald einen Plan zuweisen.</p>
+          <div className="bg-[#111111] rounded-2xl border border-white/[0.06]">
+            <EmptyState
+              icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12" /></svg>}
+              title="Kein aktiver Trainingsplan"
+              subtext="Dein Trainer wird dir bald einen Plan zuweisen."
+            />
           </div>
         ) : (
           plans.map((ap, planIndex) => {
@@ -164,8 +165,8 @@ export default function ClientPlanPage() {
                   <div className="px-5 pt-5 pb-4 border-b border-white/[0.04]">
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div>
-                        <p className="text-[11px] text-[#797D83] font-medium uppercase tracking-[0.12em]">Aktueller Plan</p>
-                        <h2 className="font-bold text-[#EDECEA] mt-0.5 text-[17px] tracking-tight">{ap.plan.name}</h2>
+                        <p className="text-section">Aktueller Plan</p>
+                        <h2 className="text-card-title mt-0.5">{ap.plan.name}</h2>
                       </div>
                       <div className="flex items-center gap-1.5 text-[#797D83] text-[11px] shrink-0 mt-0.5">
                         <span className="w-3.5 h-3.5">{Icon.calendar}</span>

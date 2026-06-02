@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { EmptyState } from '@/components/ui/client-ui'
 import type { MealLog } from '@/lib/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -214,9 +215,12 @@ export default function MealLogger() {
           <div className="w-7 h-7 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
         </div>
       ) : grouped.length === 0 ? (
-        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-8 text-center shadow-sm">
-          <div className="text-3xl mb-2">🍽️</div>
-          <p className="text-[#797D83] text-sm">Noch keine Mahlzeiten eingetragen.</p>
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] shadow-sm">
+          <EmptyState
+            icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M5 3v7a2 2 0 002 2 2 2 0 002-2V3M7 12v9" /><path d="M16 3c-1.4 1-2.2 3-2.2 5.5 0 1.9 1 3 2.2 3.2V21" /></svg>}
+            title="Noch keine Mahlzeiten"
+            subtext="Trage deine erste Mahlzeit ein."
+          />
         </div>
       ) : (
         <>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Message } from '@/lib/types'
+import { EmptyState } from '@/components/ui/client-ui'
 
 const stroke = {
   fill: 'none' as const,
@@ -279,10 +280,11 @@ export default function ClientMessagesPage() {
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center px-6">
-              <p className="text-[#797D83] text-[13px] font-medium">Noch keine Nachrichten</p>
-              <p className="text-[#797D83]/60 text-[12px] mt-1">Schreibe die erste Nachricht.</p>
-            </div>
+            <EmptyState
+              icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M4 6a2 2 0 012-2h12a2 2 0 012 2v9a2 2 0 01-2 2h-7l-4 3.5V17H6a2 2 0 01-2-2V6z" /></svg>}
+              title="Noch keine Nachrichten"
+              subtext="Schreibe die erste Nachricht an deinen Trainer."
+            />
           </div>
         ) : (
           <MessageList messages={messages} myId={myUserId} />

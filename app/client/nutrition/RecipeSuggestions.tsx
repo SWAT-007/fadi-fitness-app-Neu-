@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { EmptyState } from '@/components/ui/client-ui'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -162,7 +163,10 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
 
           {/* Cards */}
           {filtered.length === 0 ? (
-            <p className="text-sm text-[#797D83] text-center py-4">Keine Rezepte gefunden.</p>
+            <EmptyState
+              icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>}
+              title="Keine Rezepte gefunden"
+            />
           ) : (
             <div className="space-y-3">
               {filtered.map(r => {
@@ -282,7 +286,11 @@ export default function RecipeSuggestions({ targetCalories }: Props) {
 
                         {/* Fallback */}
                         {!hasDetails && (
-                          <p className="text-[#797D83] text-xs">Keine Details hinterlegt.</p>
+                          <EmptyState
+                            icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}
+                            title="Keine Details"
+                            subtext="Für dieses Rezept sind keine Details hinterlegt."
+                          />
                         )}
 
                       </div>

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Profile, Client, AssignedPlan, WorkoutPlan, WorkoutDay, ProgressLog } from '@/lib/types'
 import { AnimatedNumber, StaggerItem, SuccessButton, useToast } from '@/components/Motion'
+import { EmptyState } from '@/components/ui/client-ui'
 
 const stroke = {
   fill: 'none' as const,
@@ -214,14 +215,17 @@ export default function ClientDashboard() {
     <div className="px-4 pt-4 pb-8 max-w-lg mx-auto">
 
       {/* Hero greeting card */}
-      <div className="relative overflow-hidden rounded-3xl mb-4 p-5 bg-[#111111] border border-white/[0.06] shadow-[0_12px_40px_-16px_rgba(0,0,0,0.6)]">
-        <span className="pointer-events-none absolute -right-10 -top-10 w-44 h-44 rounded-full bg-[#A78BFA]/10 blur-3xl" />
-        <span className="pointer-events-none absolute right-12 bottom-0 w-28 h-28 rounded-full bg-[#A78BFA]/5 blur-3xl" />
+      <div className="card-primary relative overflow-hidden mb-4 p-5">
+        {/* Non-interactive lila gradient overlay — fades toward bottom-right */}
+        <span
+          className="pointer-events-none absolute inset-0"
+          style={{ background: 'linear-gradient(135deg, rgba(42,17,69,0.55) 0%, rgba(109,40,217,0.18) 45%, rgba(109,40,217,0) 80%)' }}
+        />
         <div className="relative flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium tracking-[0.16em] uppercase text-[#797D83]">{greeting}</p>
-            <h1 className="mt-1 text-[28px] font-bold tracking-tight leading-tight text-[#EDECEA]">{firstName}</h1>
-            <p className="text-[#797D83] text-[13px] mt-1.5">
+            <p className="text-section">{greeting}</p>
+            <h1 className="text-display mt-1">{firstName}</h1>
+            <p className="text-caption mt-1.5">
               {weeklyStats.workouts === 0
                 ? 'Bereit für dein erstes Training diese Woche?'
                 : `${weeklyStats.workouts} von ${weeklyGoal} Trainings diese Woche.`}
@@ -249,15 +253,27 @@ export default function ClientDashboard() {
 
       {/* Active plan */}
       {!client ? (
-        <DarkEmptyCard icon={Icon.dumbbell} text="Dein Kundenkonto ist noch nicht mit deinem Trainer verbunden." />
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] mb-4">
+          <EmptyState
+            icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="4" /><path d="M2 21c0-4 3.5-6 7-6" /><path d="M14 14l3 3M20 11l-3-3" /><path d="M16.5 9.5l1-1a2.12 2.12 0 013 3l-1 1M14.5 17.5l-1 1a2.12 2.12 0 01-3-3l1-1" /></svg>}
+            title="Noch nicht verbunden"
+            subtext="Dein Konto ist noch nicht mit deinem Trainer verbunden."
+          />
+        </div>
       ) : !activePlan ? (
-        <DarkEmptyCard icon={Icon.dumbbell} text="Dir wurde noch kein Trainingsplan zugewiesen." />
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] mb-4">
+          <EmptyState
+            icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12" /></svg>}
+            title="Kein Trainingsplan"
+            subtext="Dein Trainer wird dir bald einen Plan zuweisen."
+          />
+        </div>
       ) : (
-        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] mb-4 overflow-hidden">
+        <div className="card-secondary mb-4 overflow-hidden">
           <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-white/[0.04]">
             <div>
-              <p className="text-[11px] text-[#797D83] font-medium uppercase tracking-[0.12em]">Aktueller Plan</p>
-              <h2 className="font-bold text-[#EDECEA] mt-0.5 tracking-tight">{activePlan.name}</h2>
+              <p className="text-section">Aktueller Plan</p>
+              <h2 className="text-card-title mt-0.5">{activePlan.name}</h2>
             </div>
             <Link
               href="/client/plan"
@@ -351,7 +367,7 @@ export default function ClientDashboard() {
       )}
 
       {/* Analyse */}
-      <div className="bg-[#111111] rounded-2xl border border-white/[0.06] mb-4 overflow-hidden">
+      <div className="card-secondary mb-4 overflow-hidden">
         <div className="px-5 pt-4 pb-3 flex items-center gap-2 border-b border-white/[0.04]">
           <span className="w-4 h-4 text-[#797D83]">{Icon.trend}</span>
           <p className="text-[11px] text-[#797D83] font-medium uppercase tracking-[0.12em]">Fortschritt</p>
@@ -365,7 +381,7 @@ export default function ClientDashboard() {
       </div>
 
       {/* Diese Woche */}
-      <div className="bg-[#111111] rounded-2xl border border-white/[0.06] mb-4 overflow-hidden">
+      <div className="card-secondary mb-4 overflow-hidden">
         <div className="px-5 pt-4 pb-3 border-b border-white/[0.04]">
           <p className="text-[11px] text-[#797D83] font-medium uppercase tracking-[0.12em]">Diese Woche</p>
         </div>
@@ -387,18 +403,18 @@ export default function ClientDashboard() {
       <div className="grid grid-cols-2 gap-3">
         <button
           onClick={() => { setWeightInput(''); setWeightOpen(true) }}
-          className="lift press group relative overflow-hidden rounded-2xl p-4 text-left bg-[#A78BFA] shadow-[0_8px_32px_-12px_rgba(167,139,250,0.5)]"
+          className="btn-primary lift press group relative overflow-hidden p-4 text-left"
         >
           <span className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10 blur-2xl pointer-events-none" />
-          <div className="relative w-9 h-9 rounded-xl bg-black/15 flex items-center justify-center mb-3">
-            <span className="w-4 h-4 block text-[#050504]">{Icon.plus}</span>
+          <div className="relative w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center mb-3">
+            <span className="w-4 h-4 block text-white">{Icon.plus}</span>
           </div>
-          <div className="relative font-bold text-[14px] tracking-tight text-[#050504]">Gewicht eintragen</div>
-          <div className="relative text-[#050504]/60 text-[12px] mt-0.5">Heute, {new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}</div>
+          <div className="relative font-bold text-[14px] tracking-tight text-white">Gewicht eintragen</div>
+          <div className="relative text-white/70 text-[12px] mt-0.5">Heute, {new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}</div>
         </button>
         <Link
           href="/client/messages"
-          className="lift press group rounded-2xl p-4 bg-[#111111] border border-white/[0.06] hover:border-white/[0.1] hover:bg-[#181818] transition-colors"
+          className="card-tertiary lift press group p-4 hover:border-white/[0.1] hover:bg-[#181818] transition-colors"
         >
           <div className="w-9 h-9 rounded-xl bg-white/[0.06] flex items-center justify-center text-[#797D83] mb-3">
             <span className="w-5 h-5 block">{Icon.chat}</span>
@@ -463,22 +479,22 @@ export default function ClientDashboard() {
 }
 
 function ProgressRing({ pct }: { pct: number }) {
-  const r = 22
+  const r = 32
   const c = 2 * Math.PI * r
   const dash = (pct / 100) * c
   return (
-    <div className="relative shrink-0 w-14 h-14" aria-label={`${pct}% der Wochenziele`}>
-      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 56 56" width="56" height="56">
-        <circle cx="28" cy="28" r={r} fill="none" stroke="rgba(167,139,250,0.12)" strokeWidth="4" />
+    <div className="relative shrink-0 w-[72px] h-[72px]" aria-label={`${pct}% der Wochenziele`}>
+      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 72 72" width="72" height="72">
+        <circle cx="36" cy="36" r={r} fill="none" stroke="rgba(167,139,250,0.12)" strokeWidth="5" />
         <circle
-          cx="28" cy="28" r={r} fill="none"
-          stroke="#A78BFA" strokeWidth="4" strokeLinecap="round"
+          cx="36" cy="36" r={r} fill="none"
+          stroke="#A78BFA" strokeWidth="5" strokeLinecap="round"
           strokeDasharray={`${dash} ${c - dash}`}
-          style={{ transition: 'stroke-dasharray 600ms cubic-bezier(0.23, 1, 0.32, 1)', filter: 'drop-shadow(0 0 4px rgba(167,139,250,0.5))' }}
+          style={{ transition: 'stroke-dasharray 600ms cubic-bezier(0.23, 1, 0.32, 1)', filter: 'drop-shadow(0 0 8px rgba(167,139,250,0.7))' }}
         />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-[13px] font-bold tabular-nums text-[#A78BFA]">{pct}%</span>
+        <span className="text-[16px] font-bold tabular-nums text-[#A78BFA]">{pct}%</span>
       </div>
     </div>
   )
@@ -486,7 +502,7 @@ function ProgressRing({ pct }: { pct: number }) {
 
 function DarkStatCard({ label, value, icon }: { label: string; value: ReactNode; icon: ReactNode }) {
   return (
-    <div className="lift relative overflow-hidden bg-[#111111] rounded-2xl border border-white/[0.06] p-4">
+    <div className="card-tertiary lift relative overflow-hidden p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-[24px] font-bold text-[#EDECEA] tracking-tight tabular-nums leading-none">{value}</div>
@@ -502,7 +518,7 @@ function DarkStatCard({ label, value, icon }: { label: string; value: ReactNode;
 
 function AnalyseTile({ label, sub, icon, value }: { label: string; sub: string; icon: ReactNode; value: ReactNode }) {
   return (
-    <div className="relative overflow-hidden rounded-xl bg-white/[0.03] border border-white/[0.04] p-3">
+    <div className="card-tertiary relative overflow-hidden p-3">
       <div className="flex items-center gap-1.5 text-[#797D83]">
         <span className="w-3.5 h-3.5">{icon}</span>
         <span className="text-[10.5px] font-medium uppercase tracking-[0.1em]">{label}</span>
@@ -513,13 +529,3 @@ function AnalyseTile({ label, sub, icon, value }: { label: string; sub: string; 
   )
 }
 
-function DarkEmptyCard({ icon, text }: { icon: ReactNode; text: string }) {
-  return (
-    <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-6 text-center mb-4">
-      <div className="mx-auto w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[#797D83] mb-3">
-        <span className="w-6 h-6 block">{icon}</span>
-      </div>
-      <p className="text-[#797D83] text-[13px]">{text}</p>
-    </div>
-  )
-}

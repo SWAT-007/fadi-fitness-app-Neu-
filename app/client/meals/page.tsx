@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { MealLog } from '@/lib/types'
+import { EmptyState } from '@/components/ui/client-ui'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -193,14 +194,14 @@ export default function MealsPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="p-4 max-w-lg mx-auto pb-8">
-      <h1 className="text-xl font-bold text-gray-900">Freies Protokoll</h1>
+      <h1 className="text-display !text-gray-900">Freies Protokoll</h1>
       <p className="text-sm text-gray-500 mt-1 mb-5">
         Für freie Einträge. Dein Haupt-Ernährungsplan ist unter Ernährung.
       </p>
 
       {/* ── Log Form ────────────────────────────────────────────────────────── */}
       <div ref={formRef} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
-        <h2 className="font-semibold text-gray-900 mb-4">Neuer Eintrag</h2>
+        <h2 className="text-section mb-4">Neuer Eintrag</h2>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-3">
@@ -274,14 +275,17 @@ export default function MealsPage() {
           <div className="w-7 h-7 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : grouped.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center shadow-sm">
-          <div className="text-4xl mb-3">🍽️</div>
-          <p className="text-gray-500 text-sm">Noch keine Mahlzeiten eingetragen.</p>
-          <p className="text-gray-400 text-xs mt-1">Trage deine erste Mahlzeit oben ein.</p>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+          <EmptyState
+            icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M5 3v7a2 2 0 002 2 2 2 0 002-2V3M7 12v9" /><path d="M16 3c-1.4 1-2.2 3-2.2 5.5 0 1.9 1 3 2.2 3.2V21" /></svg>}
+            title="Noch keine Mahlzeiten"
+            subtext="Trage deine erste Mahlzeit oben ein."
+            className="!text-gray-900"
+          />
         </div>
       ) : (
         <div className="space-y-4">
-          <h2 className="font-semibold text-gray-900">Verlauf</h2>
+          <h2 className="text-section">Verlauf</h2>
 
           {grouped.map(group => {
             const total = group.items.reduce(

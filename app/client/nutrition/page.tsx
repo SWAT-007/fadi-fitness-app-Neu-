@@ -11,6 +11,7 @@ import MealHistorySection from './MealHistorySection'
 import RecipeSuggestions from './RecipeSuggestions'
 import MealDrinks from './MealDrinks'
 import type { MealHistoryEntry, HistoryIngredient, DrinkLog } from '@/lib/types'
+import { EmptyState } from '@/components/ui/client-ui'
 
 type FullPlan = NutritionPlan & { nutrition_meals: NutritionMeal[] }
 
@@ -806,9 +807,12 @@ export default function ClientNutritionPage() {
   if (!plan) {
     return (
       <div className="p-6 max-w-[480px] mx-auto">
-        <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-8 text-center">
-          <p className="text-[#797D83]">Kein aktiver Ernährungsplan.</p>
-          <p className="text-xs text-[#797D83] mt-2">Sobald dein Trainer dir einen Plan zugewiesen hat, erscheint er hier.</p>
+        <div className="bg-[#111111] rounded-2xl border border-white/[0.06]">
+          <EmptyState
+            icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M12 21c-4 0-7-3.5-7-8 0-3 2-5 4-5 1.2 0 1.8.5 3 .5s1.8-.5 3-.5c2 0 4 2 4 5 0 4.5-3 8-7 8z" /><path d="M12 8c0-2.5 1.5-4 4-4" /></svg>}
+            title="Kein Ernährungsplan"
+            subtext="Sobald dein Trainer dir einen Plan zuweist, erscheint er hier."
+          />
         </div>
       </div>
     )
@@ -822,8 +826,8 @@ export default function ClientNutritionPage() {
       <div className={`${goalMeta.bg} rounded-3xl p-4`}>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-[#797D83] font-medium">{goalMeta.label}</p>
-            <h1 className="text-lg font-bold text-[#EDECEA] mt-0.5">{plan.name}</h1>
+            <p className="text-section">{goalMeta.label}</p>
+            <h1 className="text-display mt-0.5">{plan.name}</h1>
           </div>
           <CalorieRing current={dayTotals.cal} target={plan.target_calories} />
         </div>
@@ -897,7 +901,7 @@ export default function ClientNutritionPage() {
                 className="w-full text-left px-5 py-3 border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors"
               >
                 <div className="flex items-center justify-between">
-                  <h2 className="font-semibold text-[#EDECEA]">
+                  <h2 className="text-card-title">
                     <span className="text-[#797D83] text-sm font-medium mr-2">#{i + 1}</span>
                     {meal.name}
                   </h2>
