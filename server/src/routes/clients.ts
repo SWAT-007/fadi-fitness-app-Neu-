@@ -5,6 +5,7 @@ import { prisma } from "../db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { unexpectedErrorResponse } from "../utils/errors";
 import { clampDuration } from "../utils/duration";
+import { buildExerciseChangeLink, createRequestAcceptedNotification } from "./notificationHelpers";
 
 const clientsRouter = Router();
 
@@ -191,6 +192,8 @@ clientsRouter.patch(
         },
         select: {
           id: true,
+          dayId: true,
+          exerciseId: true,
           client: {
             select: {
               userId: true,
@@ -198,6 +201,7 @@ clientsRouter.patch(
           },
           exercise: {
             select: {
+              id: true,
               name: true,
             },
           },
@@ -210,6 +214,8 @@ clientsRouter.patch(
       if (!existing) {
         return res.status(404).json({ message: "Not found" });
       }
+
+      const alreadyResolved = existing.status === 'resolved';
 
       const updated = await prisma.exerciseChangeRequest.update({
         where: { id: existing.id },
@@ -225,18 +231,28 @@ clientsRouter.patch(
       let notificationCreated = false;
       if (existing.client.userId) {
         try {
-          await prisma.notification.create({
-            data: {
-              userId: existing.client.userId,
-              type: NotificationType.REQUEST,
-              title:
-                statusInput === 'resolved'
-                  ? "Deine Anfrage wurde akzeptiert"
-                  : "Deine Anfrage wurde abgelehnt",
-              body: existing.exercise.name,
-            },
-          });
-          notificationCreated = true;
+          if (statusInput === 'resolved') {
+            // Idempotent: don't re-notify if it was already resolved.
+            if (!alreadyResolved) {
+              await createRequestAcceptedNotification(prisma, {
+                userId: existing.client.userId,
+                exerciseName: existing.exercise?.name ?? null,
+                link: buildExerciseChangeLink(existing.dayId, existing.exercise ? existing.exerciseId : null),
+              });
+              notificationCreated = true;
+            }
+          } else {
+            // rejected — unchanged behaviour (no deep link)
+            await prisma.notification.create({
+              data: {
+                userId: existing.client.userId,
+                type: NotificationType.REQUEST,
+                title: "Deine Anfrage wurde abgelehnt",
+                body: existing.exercise.name,
+              },
+            });
+            notificationCreated = true;
+          }
         } catch (notifError) {
           console.error("[clients:exercise-change-requests:update] notification error:", notifError);
         }

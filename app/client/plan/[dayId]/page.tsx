@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -66,6 +66,10 @@ function calc1RM(weight: string, reps: string): string {
 export default function WorkoutDayPage() {
   const { dayId } = useParams<{ dayId: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const highlightExId = searchParams.get('ex')
+  const exerciseRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [highlightedExId, setHighlightedExId] = useState<string | null>(null)
 
   // Data
   const [day, setDay] = useState<BackendDay | null>(null)
@@ -129,6 +133,25 @@ export default function WorkoutDayPage() {
     }
     load()
   }, [dayId, router])
+
+  // ── Deep-link: scroll to + briefly highlight the target exercise (?ex) ──────
+  useEffect(() => {
+    if (loading || !highlightExId) return
+    if (!exercises.some(ex => ex.id === highlightExId)) return
+    const node = exerciseRefs.current[highlightExId]
+    if (!node) return
+
+    const scrollTimer = window.setTimeout(() => {
+      node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 50)
+    setHighlightedExId(highlightExId)
+    const resetTimer = window.setTimeout(() => setHighlightedExId(null), 2400)
+
+    return () => {
+      window.clearTimeout(scrollTimer)
+      window.clearTimeout(resetTimer)
+    }
+  }, [loading, highlightExId, exercises])
 
   // ── Timer ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -224,7 +247,14 @@ export default function WorkoutDayPage() {
       {/* Exercise list preview */}
       <div className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden mb-8">
         {exercises.map((ex, i) => (
-          <div key={ex.id} className={`flex items-center gap-4 px-5 py-4 ${i > 0 ? 'border-t border-white/[0.06]' : ''}`}>
+          <div
+            key={ex.id}
+            id={`ex-${ex.id}`}
+            ref={(node) => { exerciseRefs.current[ex.id] = node }}
+            className={`flex items-center gap-4 px-5 py-4 ${i > 0 ? 'border-t border-white/[0.06]' : ''} ${
+              highlightedExId === ex.id ? 'bg-[#A78BFA]/10 ring-1 ring-inset ring-[#A78BFA]/35 transition-colors duration-500' : ''
+            }`}
+          >
             <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-xs font-bold text-[#797D83] flex-shrink-0">
               {i + 1}
             </div>

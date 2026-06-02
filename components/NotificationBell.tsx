@@ -12,6 +12,7 @@ interface BellNotification {
   type: string
   title: string
   body?: string | null
+  link?: string | null
   is_read: boolean
   created_at: string
 }
@@ -133,7 +134,13 @@ export default function NotificationBell({
       }
     }
 
-    router.push(typeHref[notification.type])
+    // Prefer the deep link when present and a safe internal client path.
+    const link = notification.link
+    if (typeof link === 'string' && link.startsWith('/client/')) {
+      router.push(link)
+    } else {
+      router.push(typeHref[notification.type])
+    }
   }
 
   return (

@@ -7,6 +7,7 @@ export const notificationSelect = {
   type: true,
   title: true,
   body: true,
+  link: true,
   isRead: true,
   createdAt: true,
 } satisfies Prisma.NotificationSelect;
@@ -22,9 +23,33 @@ export const mapNotification = (notification: NotificationRecord) => ({
   type: normalizeNotificationType(notification.type),
   title: notification.title,
   body: notification.body,
+  link: notification.link,
   is_read: notification.isRead,
   created_at: notification.createdAt.toISOString(),
 });
+
+// Builds the client deep-link for a resolved change-request. Falls back to the
+// day view (without ?ex) when the target exercise no longer exists.
+export const buildExerciseChangeLink = (dayId: string, exerciseId: string | null) =>
+  exerciseId
+    ? `/client/plan/${dayId}?ex=${exerciseId}`
+    : `/client/plan/${dayId}`;
+
+// Creates the "request accepted" client notification (with optional deep link).
+// Works with both the global client and a transaction client.
+export const createRequestAcceptedNotification = (
+  db: Prisma.TransactionClient,
+  args: { userId: string; exerciseName: string | null; link: string | null },
+) =>
+  db.notification.create({
+    data: {
+      userId: args.userId,
+      type: NotificationType.REQUEST,
+      title: "Deine Anfrage wurde akzeptiert",
+      body: args.exerciseName,
+      link: args.link,
+    },
+  });
 
 export const parseNotificationLimit = (value: unknown) => {
   const rawValue = Array.isArray(value) ? value[0] : value;

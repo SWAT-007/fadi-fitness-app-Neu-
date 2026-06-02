@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import { prisma } from "../db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
+import { buildExerciseChangeLink, createRequestAcceptedNotification } from "./notificationHelpers";
 
 const plansRouter = Router();
 const workoutDaysRouter = Router();
@@ -509,15 +510,31 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
             day: { planId },
             client: { trainerId: trainerProfile.id },
           },
-          select: { id: true },
+          select: {
+            id: true,
+            status: true,
+            dayId: true,
+            exerciseId: true,
+            exercise: { select: { id: true, name: true } },
+            client: { select: { userId: true } },
+          },
         });
         if (!request) {
           throw httpError(400, "requestId does not belong to this plan");
         }
+        const alreadyResolved = request.status === "resolved";
         await tx.exerciseChangeRequest.update({
           where: { id: requestId },
           data: { status: "resolved" },
         });
+        // Notify the client once (idempotent) with a deep link to the exercise.
+        if (!alreadyResolved && request.client.userId) {
+          await createRequestAcceptedNotification(tx, {
+            userId: request.client.userId,
+            exerciseName: request.exercise?.name ?? null,
+            link: buildExerciseChangeLink(request.dayId, request.exercise ? request.exerciseId : null),
+          });
+        }
       }
     });
 
