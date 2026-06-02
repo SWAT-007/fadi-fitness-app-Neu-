@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/components/Motion'
+import { EmptyState } from '@/components/ui/client-ui'
 import { resolveImageUrl } from '@/lib/exercises'
 
 type SetLog = {
@@ -394,8 +395,12 @@ export default function WorkoutPlayerPage() {
   if (!exercise && !complete) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center bg-[#050504] min-h-screen">
-        <p className="text-[#EDECEA] font-semibold mb-2">Keine Übungen gefunden</p>
-        <Link href="/client/plan" className="text-[#A78BFA] text-sm">Zurück zum Plan</Link>
+        <EmptyState
+          icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12" /></svg>}
+          title="Keine Übungen gefunden"
+          ctaLabel="Zurück zum Plan"
+          ctaOnClick={() => router.push('/client/plan')}
+        />
       </div>
     )
   }
