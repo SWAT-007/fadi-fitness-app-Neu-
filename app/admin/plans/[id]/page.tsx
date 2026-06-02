@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useSearchParams } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import ExercisePicker from '@/components/ExercisePicker'
 import type { WorkoutPlan, WorkoutDay, Exercise } from '@/lib/types'
@@ -14,6 +14,11 @@ type ExerciseForm = {
 }
 
 const emptyExForm: ExerciseForm = { name: '', description: '', sets: 3, reps: '10', target_weight: '', rest_seconds: '90', note: '' }
+
+// Temp id for draft-only items not yet persisted. Backend treats ids starting
+// with "tmp" as "create" in PUT /plans/:id/full.
+const tmpId = () => `tmp_${crypto.randomUUID()}`
+const isTmp = (id: string) => id.startsWith('tmp')
 
 type BackendPlanDetailResponse = {
   plan: {
@@ -48,6 +53,7 @@ type BackendPlanDetailResponse = {
 
 export default function PlanBuilderPage() {
   const { id } = useParams<{ id: string }>()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const { showToast } = useToast()
 
@@ -88,15 +94,70 @@ export default function PlanBuilderPage() {
   const [exModal, setExModal] = useState<{ open: boolean; dayId: string; editing: Exercise | null }>({ open: false, dayId: '', editing: null })
   const [exForm, setExForm] = useState<ExerciseForm>(emptyExForm)
   const [pickerDayId, setPickerDayId] = useState<string | null>(null)
+  const [replaceTarget, setReplaceTarget] = useState<Exercise | null>(null)
 
   // Expanded day (single open accordion behavior)
   const [expandedDayId, setExpandedDayId] = useState<string | null>(null)
   const [highlightExerciseId, setHighlightExerciseId] = useState<string | null>(null)
   const [linkedRequestResolved, setLinkedRequestResolved] = useState(false)
+  const [dirty, setDirty] = useState(false)   // unsaved draft changes
+  const [saving, setSaving] = useState(false)
   const deepLinkNoticeShownRef = useRef(false)
   const deepLinkExerciseKeyRef = useRef<string | null>(null)
   const deepLinkMissingTargetKeyRef = useRef<string | null>(null)
   const exerciseRefs = useRef<Record<string, HTMLLIElement | null>>({})
+
+  // Map a backend plan response into local state. Shared by load() and the
+  // batch-save response so tmp ids get replaced by real ids. Clears the dirty flag.
+  const applyPlanPayload = useCallback((payload: BackendPlanDetailResponse) => {
+    const mappedPlan = {
+      id: payload.plan.id,
+      trainer_id: '',
+      name: payload.plan.name,
+      description: payload.plan.description,
+      created_at: payload.plan.createdAt,
+      updated_at: payload.plan.updatedAt,
+    } as WorkoutPlan
+
+    const mappedDays = payload.days.map((day) => ({
+      id: day.id,
+      plan_id: day.planId,
+      name: day.name,
+      description: day.description,
+      sort_order: day.sortOrder,
+      created_at: payload.plan.createdAt,
+    })) as WorkoutDay[]
+
+    const mappedExercises: Record<string, Exercise[]> = {}
+    for (const day of payload.days) {
+      mappedExercises[day.id] = day.exercises.map((exercise) => ({
+        id: exercise.id,
+        day_id: exercise.dayId,
+        name: exercise.name,
+        description: exercise.description,
+        sets: exercise.sets,
+        reps: exercise.reps,
+        target_weight: exercise.targetWeightKg,
+        rest_seconds: exercise.restSeconds,
+        note: exercise.note,
+        sort_order: exercise.sortOrder,
+        image_url: exercise.imageUrl,
+        library_id: exercise.libraryId,
+        created_at: payload.plan.createdAt,
+      })) as Exercise[]
+    }
+
+    setPlan(mappedPlan)
+    setPlanName(mappedPlan.name)
+    setPlanDesc(mappedPlan.description ?? '')
+    setDays(mappedDays)
+    setExercises(mappedExercises)
+    setExpandedDayId(prev => {
+      if (deepLinkDayId && mappedDays.some(d => d.id === deepLinkDayId)) return deepLinkDayId
+      return prev && mappedDays.some(d => d.id === prev) ? prev : null
+    })
+    setDirty(false)
+  }, [deepLinkDayId])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -129,54 +190,7 @@ export default function PlanBuilderPage() {
         return
       }
 
-      const mappedPlan = {
-        id: payload.plan.id,
-        trainer_id: '',
-        name: payload.plan.name,
-        description: payload.plan.description,
-        created_at: payload.plan.createdAt,
-        updated_at: payload.plan.updatedAt,
-      } as WorkoutPlan
-
-      const mappedDays = payload.days.map((day) => ({
-        id: day.id,
-        plan_id: day.planId,
-        name: day.name,
-        description: day.description,
-        sort_order: day.sortOrder,
-        created_at: payload.plan.createdAt,
-      })) as WorkoutDay[]
-
-      const mappedExercises: Record<string, Exercise[]> = {}
-      for (const day of payload.days) {
-        mappedExercises[day.id] = day.exercises.map((exercise) => ({
-          id: exercise.id,
-          day_id: exercise.dayId,
-          name: exercise.name,
-          description: exercise.description,
-          sets: exercise.sets,
-          reps: exercise.reps,
-          target_weight: exercise.targetWeightKg,
-          rest_seconds: exercise.restSeconds,
-          note: exercise.note,
-          sort_order: exercise.sortOrder,
-          image_url: exercise.imageUrl,
-          library_id: exercise.libraryId,
-          created_at: payload.plan.createdAt,
-        })) as Exercise[]
-      }
-
-      setPlan(mappedPlan)
-      setPlanName(mappedPlan.name)
-      setPlanDesc(mappedPlan.description ?? '')
-      setDays(mappedDays)
-      setExercises(mappedExercises)
-      setExpandedDayId(prev => {
-        if (deepLinkDayId && mappedDays.some(d => d.id === deepLinkDayId)) {
-          return deepLinkDayId
-        }
-        return prev && mappedDays.some(d => d.id === prev) ? prev : null
-      })
+      applyPlanPayload(payload)
     } catch {
       setLoadError('Plan konnte nicht geladen werden.')
       setPlan(null)
@@ -186,7 +200,7 @@ export default function PlanBuilderPage() {
     } finally {
       setLoading(false)
     }
-  }, [deepLinkDayId, id])
+  }, [applyPlanPayload, id])
 
   useEffect(() => { load() }, [load])
 
@@ -276,122 +290,122 @@ export default function PlanBuilderPage() {
     return () => window.clearTimeout(timer)
   }, [highlightExerciseId])
 
-  const markLinkedRequestResolved = useCallback(async () => {
-    if (!deepLinkRequestId || linkedRequestResolved) return true
+  // Warn on browser/tab close when there are unsaved draft changes.
+  useEffect(() => {
+    if (!dirty) return
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
 
+  // Commit the whole local draft via the batch endpoint. Resolves the linked
+  // request (if any) in the same transaction. On success, remap from the response.
+  const commitSave = async () => {
+    if (saving) return
+    const requestIdToSend = deepLinkRequestId && !linkedRequestResolved ? deepLinkRequestId : undefined
+
+    const body = {
+      name: plan?.name ?? planName,
+      days: days.map(day => ({
+        id: isTmp(day.id) ? null : day.id,
+        name: day.name,
+        description: day.description ?? null,
+        exercises: (exercises[day.id] ?? []).map(ex => ({
+          id: isTmp(ex.id) ? null : ex.id,
+          name: ex.name,
+          description: ex.description ?? null,
+          sets: ex.sets,
+          reps: ex.reps,
+          targetWeightKg: ex.target_weight ?? null,
+          restSeconds: ex.rest_seconds ?? null,
+          note: ex.note ?? null,
+          imageUrl: ex.image_url ?? null,
+        })),
+      })),
+      ...(requestIdToSend ? { requestId: requestIdToSend } : {}),
+    }
+
+    setSaving(true)
     try {
-      const response = await fetch(`/api/backend/clients/exercise-change-requests/${deepLinkRequestId}`, {
-        method: 'PATCH',
+      const response = await fetch(`/api/backend/plans/${id}/full`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'resolved' }),
+        body: JSON.stringify(body),
       })
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { message?: string } | null
+      const payload = await response.json().catch(() => null) as BackendPlanDetailResponse | { message?: string } | null
+      if (!response.ok || !payload || !('plan' in payload) || !payload.plan) {
         const msg =
           response.status === 401
             ? 'Backend-Login erforderlich.'
-            : payload?.message ?? 'Anfrage konnte nicht als erledigt markiert werden.'
+            : (payload && 'message' in payload && typeof payload.message === 'string' && payload.message) || 'Änderungen konnten nicht gespeichert werden.'
         showToast(msg, 'danger')
-        return false
+        return
       }
-
-      setLinkedRequestResolved(true)
-      return true
+      applyPlanPayload(payload)
+      if (requestIdToSend) setLinkedRequestResolved(true)
+      showToast(
+        requestIdToSend ? 'Plan gespeichert · Anfrage erledigt ✓' : 'Änderungen gespeichert ✓',
+        'success',
+      )
     } catch {
-      showToast('Anfrage konnte nicht als erledigt markiert werden.', 'danger')
-      return false
+      showToast('Änderungen konnten nicht gespeichert werden.', 'danger')
+    } finally {
+      setSaving(false)
     }
-  }, [deepLinkRequestId, linkedRequestResolved, showToast])
+  }
 
-  const savePlan = async () => {
-    const response = await fetch(`/api/backend/plans/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: planName,
-        description: planDesc || null,
-      }),
-    })
-    const payload = await response.json().catch(() => null)
-    if (!response.ok || !payload?.plan) {
-      const msg =
-        response.status === 401
-          ? 'Backend-Login erforderlich.'
-          : (payload && typeof payload.message === 'string' && payload.message) || 'Plan konnte nicht gespeichert werden.'
-      showToast(msg, 'danger')
-      return
-    }
-    setPlan(p => p ? { ...p, name: payload.plan.name, description: payload.plan.description } : p)
-    setPlanName(payload.plan.name)
-    setPlanDesc(payload.plan.description ?? '')
+  const discardChanges = () => { void load() }
+
+  const handleBack = () => {
+    if (dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) return
+    router.push('/admin/plans')
+  }
+
+  // Local draft only — persisted later via commitSave.
+  const savePlan = () => {
+    const trimmed = planName.trim()
+    if (!trimmed) { showToast('Plan-Name darf nicht leer sein.', 'danger'); return }
+    setPlan(p => p ? { ...p, name: trimmed, description: planDesc || null } : p)
     setEditingPlan(false)
-    await load()
-    showToast('Plan gespeichert ✓', 'success')
+    setDirty(true)
   }
 
   const openAddDay = () => { setDayModal({ open: true, editing: null }); setDayName(''); setDayDesc('') }
   const openEditDay = (day: WorkoutDay) => { setDayModal({ open: true, editing: day }); setDayName(day.name); setDayDesc(day.description ?? '') }
 
-  const saveDay = async (e: React.FormEvent) => {
+  // Local draft only.
+  const saveDay = (e: React.FormEvent) => {
     e.preventDefault()
+    const name = dayName.trim()
+    if (!name) { showToast('Tag-Name darf nicht leer sein.', 'danger'); return }
+    const description = dayDesc || null
+
     if (dayModal.editing) {
-      const response = await fetch(`/api/backend/workout-days/${dayModal.editing.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: dayName,
-          description: dayDesc || null,
-        }),
-      })
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null)
-        const msg =
-          response.status === 401
-            ? 'Backend-Login erforderlich.'
-            : (payload && typeof payload.message === 'string' && payload.message) || 'Trainingstag konnte nicht gespeichert werden.'
-        showToast(msg, 'danger')
-        return
-      }
+      const editingId = dayModal.editing.id
+      setDays(prev => prev.map(d => d.id === editingId ? { ...d, name, description } : d))
     } else {
-      const response = await fetch(`/api/backend/plans/${id}/days`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: dayName,
-          description: dayDesc || null,
-        }),
-      })
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null)
-        const msg =
-          response.status === 401
-            ? 'Backend-Login erforderlich.'
-            : (payload && typeof payload.message === 'string' && payload.message) || 'Trainingstag konnte nicht erstellt werden.'
-        showToast(msg, 'danger')
-        return
-      }
+      const newDay = {
+        id: tmpId(),
+        plan_id: id,
+        name,
+        description,
+        sort_order: days.length,
+        created_at: new Date().toISOString(),
+      } as WorkoutDay
+      setDays(prev => [...prev, newDay])
+      setExercises(prev => ({ ...prev, [newDay.id]: [] }))
+      setExpandedDayId(newDay.id)
     }
     setDayModal({ open: false, editing: null })
-    showToast(dayModal.editing ? 'Trainingstag gespeichert ✓' : 'Trainingstag erstellt ✓', 'success')
-    await load()
+    setDirty(true)
   }
 
-  const deleteDay = async (dayId: string) => {
-    if (!confirm('Trainingstag und alle Übungen löschen?')) return
-    const response = await fetch(`/api/backend/workout-days/${dayId}`, {
-      method: 'DELETE',
-    })
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null)
-      const msg =
-        response.status === 401
-          ? 'Backend-Login erforderlich.'
-          : (payload && typeof payload.message === 'string' && payload.message) || 'Trainingstag konnte nicht gelöscht werden.'
-      showToast(msg, 'danger')
-      return
-    }
-    showToast('Trainingstag geloescht', 'danger')
-    await load()
+  // Local draft only — removes the day and its exercises from state.
+  const deleteDay = (dayId: string) => {
+    if (!confirm('Trainingstag und alle Übungen aus dem Entwurf entfernen?')) return
+    setDays(prev => prev.filter(d => d.id !== dayId))
+    setExercises(prev => { const next = { ...prev }; delete next[dayId]; return next })
+    setDirty(true)
   }
 
   const openAddEx = (dayId: string) => {
@@ -407,126 +421,120 @@ export default function PlanBuilderPage() {
     })
   }
 
-  const addPickedExercise = async (exercise: LibraryExercise) => {
-    if (!pickerDayId) return
-
-    const response = await fetch(`/api/backend/workout-days/${pickerDayId}/exercises`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: exercise.name,
-        description: null,
-        sets: 3,
-        reps: '10',
-        restSeconds: 60,
-        targetWeightKg: null,
-        note: null,
-        libraryItemId: exercise.id,
-        imageUrl: exercise.image_url ?? null,
-      }),
-    })
-    if (!response.ok) {
-      const data = await response.json().catch(() => null)
-      const msg =
-        response.status === 401
-          ? 'Backend-Login erforderlich.'
-          : (data && typeof data.message === 'string' && data.message) || 'Übung konnte nicht hinzugefügt werden.'
-      showToast(msg, 'danger')
-      return
-    }
+  // Local draft only — appends a new exercise with a tmp id.
+  const addPickedExercise = (exercise: LibraryExercise) => {
+    const dayId = pickerDayId
+    if (!dayId) return
+    const list = exercises[dayId] ?? []
+    const newEx = {
+      id: tmpId(),
+      day_id: dayId,
+      name: exercise.name,
+      description: null,
+      sets: 3,
+      reps: '10',
+      target_weight: null,
+      rest_seconds: 60,
+      note: null,
+      sort_order: list.length,
+      image_url: exercise.image_url ?? null,
+      library_id: exercise.id,
+      created_at: new Date().toISOString(),
+    } as Exercise
+    setExercises(prev => ({ ...prev, [dayId]: [...(prev[dayId] ?? []), newEx] }))
     setPickerDayId(null)
-    showToast('Übung hinzugefügt ✓', 'success')
-    await load()
-    if (deepLinkRequestId) {
-      const requestResolved = await markLinkedRequestResolved()
-      if (requestResolved) {
-        showToast('Anfrage automatisch als erledigt markiert.', 'success')
-      } else {
-        showToast('Änderung gespeichert, Anfrage bitte manuell prüfen.', 'info')
-      }
-    }
+    setDirty(true)
   }
 
-  const saveEx = async (e: React.FormEvent) => {
+  const openReplaceEx = (ex: Exercise) => {
+    setExpandedDayId(ex.day_id)
+    setReplaceTarget(ex)
+  }
+
+  // Local draft only — reorders the array; persisted later via commitSave.
+  const moveExercise = (dayId: string, index: number, direction: -1 | 1) => {
+    const list = exercises[dayId] ?? []
+    const target = index + direction
+    if (target < 0 || target >= list.length) return
+
+    const reordered = [...list]
+    const [moved] = reordered.splice(index, 1)
+    reordered.splice(target, 0, moved)
+
+    setExercises(prev => ({ ...prev, [dayId]: reordered }))
+    setDirty(true)
+  }
+
+  // Local draft only — name + imageUrl from the NEW exercise; programming
+  // (sets/reps/rest/target/note) of the OLD exercise kept; description cleared.
+  // Same id (real or tmp) and position preserved.
+  const replacePickedExercise = (exercise: LibraryExercise) => {
+    const target = replaceTarget
+    if (!target) return
+    setExercises(prev => ({
+      ...prev,
+      [target.day_id]: (prev[target.day_id] ?? []).map(ex =>
+        ex.id === target.id
+          ? { ...ex, name: exercise.name, image_url: exercise.image_url ?? null, description: null, library_id: exercise.id }
+          : ex,
+      ),
+    }))
+    setReplaceTarget(null)
+    setDirty(true)
+  }
+
+  // Local draft only — updates an existing exercise or appends a new one (tmp id).
+  const saveEx = (e: React.FormEvent) => {
     e.preventDefault()
-    const payload = {
-      name: exForm.name,
+    const name = exForm.name.trim()
+    if (!name) { showToast('Übungs-Name darf nicht leer sein.', 'danger'); return }
+    const fields = {
+      name,
       description: exForm.description || null,
       sets: exForm.sets,
       reps: exForm.reps,
-      targetWeightKg: exForm.target_weight ? parseFloat(exForm.target_weight) : null,
-      restSeconds: exForm.rest_seconds ? parseInt(exForm.rest_seconds) : 90,
+      target_weight: exForm.target_weight ? parseFloat(exForm.target_weight) : null,
+      rest_seconds: exForm.rest_seconds ? parseInt(exForm.rest_seconds) : 90,
       note: exForm.note || null,
-      imageUrl: exModal.editing?.image_url ?? null,
     }
+
     if (exModal.editing) {
-      const response = await fetch(`/api/backend/exercises/${exModal.editing.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (!response.ok) {
-        const data = await response.json().catch(() => null)
-        const msg =
-          response.status === 401
-            ? 'Backend-Login erforderlich.'
-            : (data && typeof data.message === 'string' && data.message) || 'Übung konnte nicht gespeichert werden.'
-        showToast(msg, 'danger')
-        return
-      }
+      const editing = exModal.editing
+      setExercises(prev => ({
+        ...prev,
+        [editing.day_id]: (prev[editing.day_id] ?? []).map(ex =>
+          ex.id === editing.id ? { ...ex, ...fields } : ex,
+        ),
+      }))
     } else {
-      const response = await fetch(`/api/backend/workout-days/${exModal.dayId}/exercises`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (!response.ok) {
-        const data = await response.json().catch(() => null)
-        const msg =
-          response.status === 401
-            ? 'Backend-Login erforderlich.'
-            : (data && typeof data.message === 'string' && data.message) || 'Übung konnte nicht erstellt werden.'
-        showToast(msg, 'danger')
-        return
-      }
+      const dayId = exModal.dayId
+      const list = exercises[dayId] ?? []
+      const newEx = {
+        id: tmpId(),
+        day_id: dayId,
+        ...fields,
+        sort_order: list.length,
+        image_url: null,
+        library_id: null,
+        created_at: new Date().toISOString(),
+      } as Exercise
+      setExercises(prev => ({ ...prev, [dayId]: [...(prev[dayId] ?? []), newEx] }))
     }
     setExModal({ open: false, dayId: '', editing: null })
-    showToast(exModal.editing ? 'Uebung gespeichert ✓' : 'Uebung erstellt ✓', 'success')
-    await load()
-    if (deepLinkRequestId) {
-      const requestResolved = await markLinkedRequestResolved()
-      if (requestResolved) {
-        showToast('Anfrage automatisch als erledigt markiert.', 'success')
-      } else {
-        showToast('Änderung gespeichert, Anfrage bitte manuell prüfen.', 'info')
-      }
-    }
+    setDirty(true)
   }
 
-  const deleteEx = async (exId: string) => {
-    if (!confirm('Übung löschen?')) return
-    const response = await fetch(`/api/backend/exercises/${exId}`, {
-      method: 'DELETE',
-    })
-    if (!response.ok) {
-      const data = await response.json().catch(() => null)
-      const msg =
-        response.status === 401
-          ? 'Backend-Login erforderlich.'
-          : (data && typeof data.message === 'string' && data.message) || 'Übung konnte nicht gelöscht werden.'
-      showToast(msg, 'danger')
-      return
-    }
-    showToast('Uebung geloescht', 'danger')
-    await load()
-    if (deepLinkRequestId) {
-      const requestResolved = await markLinkedRequestResolved()
-      if (requestResolved) {
-        showToast('Anfrage automatisch als erledigt markiert.', 'success')
-      } else {
-        showToast('Änderung gespeichert, Anfrage bitte manuell prüfen.', 'info')
+  // Local draft only — removes the exercise from state.
+  const deleteEx = (exId: string) => {
+    if (!confirm('Übung aus dem Entwurf entfernen?')) return
+    setExercises(prev => {
+      const next: Record<string, Exercise[]> = {}
+      for (const [dayId, list] of Object.entries(prev)) {
+        next[dayId] = list.filter(ex => ex.id !== exId)
       }
-    }
+      return next
+    })
+    setDirty(true)
   }
 
   const toggleDay = (dayId: string) => {
@@ -562,10 +570,10 @@ export default function PlanBuilderPage() {
   return (
     <div className="p-6 max-w-3xl mx-auto">
       {/* Back */}
-      <Link href="/admin/plans" className="text-sm text-[#797D83] hover:text-[#EDECEA] flex items-center gap-1 mb-4 transition-colors">
+      <button type="button" onClick={handleBack} className="text-sm text-[#797D83] hover:text-[#EDECEA] flex items-center gap-1 mb-4 transition-colors">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
         Zurück zu Pläne
-      </Link>
+      </button>
 
       {/* Plan Header */}
       <div className="bg-[#111318] rounded-2xl border border-white/[0.06] p-5 mb-6">
@@ -584,7 +592,7 @@ export default function PlanBuilderPage() {
               className="w-full text-sm text-[#797D83] bg-[#0b0c0f] border border-white/[0.08] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent resize-none placeholder:text-[#555A61]"
             />
             <div className="flex gap-2">
-              <button onClick={savePlan} className="px-4 py-2 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-lg transition-colors">Speichern</button>
+              <button onClick={savePlan} className="px-4 py-2 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-lg transition-colors">Übernehmen</button>
               <button onClick={() => setEditingPlan(false)} className="px-4 py-2 border border-white/[0.08] text-[#797D83] text-sm font-medium rounded-lg hover:bg-white/[0.04] transition-colors">Abbrechen</button>
             </div>
           </div>
@@ -660,8 +668,31 @@ export default function PlanBuilderPage() {
                           {ex.note && <div className="text-xs text-[#A78BFA] mt-0.5">{ex.note}</div>}
                         </div>
                         <div className="flex gap-1 flex-shrink-0">
-                          <button onClick={() => openEditEx(ex)} className="p-1.5 text-[#797D83] hover:text-white hover:bg-white/[0.06] rounded-lg text-xs transition-colors">✏️</button>
-                          <button onClick={() => deleteEx(ex.id)} className="p-1.5 text-[#797D83] hover:text-red-400 hover:bg-red-500/10 rounded-lg text-xs transition-colors">🗑️</button>
+                          <button
+                            onClick={() => moveExercise(day.id, ei, -1)}
+                            disabled={ei === 0}
+                            title="Nach oben"
+                            aria-label="Nach oben"
+                            className="p-1.5 text-[#797D83] hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#797D83]"
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6" /></svg>
+                          </button>
+                          <button
+                            onClick={() => moveExercise(day.id, ei, 1)}
+                            disabled={ei === (exercises[day.id] ?? []).length - 1}
+                            title="Nach unten"
+                            aria-label="Nach unten"
+                            className="p-1.5 text-[#797D83] hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#797D83]"
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                          </button>
+                          <button onClick={() => openEditEx(ex)} title="Bearbeiten" className="p-1.5 text-[#797D83] hover:text-white hover:bg-white/[0.06] rounded-lg text-xs transition-colors">✏️</button>
+                          <button onClick={() => openReplaceEx(ex)} title="Durch andere Übung ersetzen" aria-label="Ersetzen" className="p-1.5 text-[#797D83] hover:text-[#A78BFA] hover:bg-[#A78BFA]/10 rounded-lg transition-colors">
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M4 8h12l-3-3M20 16H8l3 3" />
+                            </svg>
+                          </button>
+                          <button onClick={() => deleteEx(ex.id)} title="Löschen" className="p-1.5 text-[#797D83] hover:text-red-400 hover:bg-red-500/10 rounded-lg text-xs transition-colors">🗑️</button>
                         </div>
                         </StaggerItem>
                       </li>
@@ -689,6 +720,36 @@ export default function PlanBuilderPage() {
         + Trainingstag hinzufügen
       </button>
 
+      {/* Spacer so the sticky action bar never covers content */}
+      {dirty && <div className="h-24" />}
+
+      {/* Sticky draft action bar — only while there are unsaved changes */}
+      {dirty && (
+        <div className="fixed bottom-0 inset-x-0 z-40 border-t border-white/[0.08] bg-[#0b0c0f]/95 backdrop-blur-md">
+          <div className="max-w-3xl mx-auto px-6 py-3 flex items-center justify-between gap-3">
+            <span className="text-xs text-[#A78BFA] font-medium">Ungespeicherte Änderungen</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={discardChanges}
+                disabled={saving}
+                className="press px-4 py-2 border border-white/[0.08] text-[#797D83] hover:text-[#EDECEA] text-sm font-medium rounded-xl hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
+              >
+                Änderungen verwerfen
+              </button>
+              <button
+                type="button"
+                onClick={commitSave}
+                disabled={saving}
+                className="press px-5 py-2 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl disabled:opacity-50 transition-colors shadow-[0_4px_16px_-4px_rgba(167,139,250,0.45)]"
+              >
+                {saving ? 'Speichern…' : 'Änderungen speichern'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Day Modal */}
       {dayModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
@@ -707,7 +768,7 @@ export default function PlanBuilderPage() {
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setDayModal({ open: false, editing: null })} className="flex-1 py-2.5 border border-white/[0.08] text-[#797D83] text-sm font-medium rounded-xl hover:bg-white/[0.04] transition-colors">Abbrechen</button>
-                <button type="submit" className="flex-1 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl transition-colors">Speichern</button>
+                <button type="submit" className="flex-1 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl transition-colors">Übernehmen</button>
               </div>
             </form>
           </div>
@@ -756,7 +817,7 @@ export default function PlanBuilderPage() {
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setExModal({ open: false, dayId: '', editing: null })} className="flex-1 py-2.5 border border-white/[0.08] text-[#797D83] text-sm font-medium rounded-xl hover:bg-white/[0.04] transition-colors">Abbrechen</button>
-                <button type="submit" className="flex-1 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl transition-colors">Speichern</button>
+                <button type="submit" className="flex-1 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl transition-colors">Übernehmen</button>
               </div>
             </form>
           </div>
@@ -764,9 +825,9 @@ export default function PlanBuilderPage() {
       )}
 
       <ExercisePicker
-        open={pickerDayId !== null}
-        onClose={() => setPickerDayId(null)}
-        onSelect={addPickedExercise}
+        open={pickerDayId !== null || replaceTarget !== null}
+        onClose={() => { setPickerDayId(null); setReplaceTarget(null) }}
+        onSelect={replaceTarget ? replacePickedExercise : addPickedExercise}
       />
     </div>
   )

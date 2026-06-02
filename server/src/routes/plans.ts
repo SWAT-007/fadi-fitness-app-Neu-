@@ -337,6 +337,247 @@ plansRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
   }
 });
 
+// Save the WHOLE edited plan in one transaction (draft-mode commit).
+// Diff/upsert: existing ids are updated, missing ids deleted, null/tmp ids created.
+// Exercises are upserted (NOT delete+recreate) so kept exercises retain their
+// WorkoutLogs/ExerciseLogs. Optionally resolves a linked change-request in the
+// same transaction. Existing single-item endpoints stay untouched.
+plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const planIdParam = req.params.id;
+  const planId = Array.isArray(planIdParam) ? planIdParam[0] : planIdParam;
+  if (!planId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  // ── Input normalization helpers ───────────────────────────────────────────
+  const httpError = (status: number, message: string) =>
+    Object.assign(new Error(message), { httpStatus: status });
+  const isNewId = (id: unknown) =>
+    id === null || id === undefined || (typeof id === "string" && id.startsWith("tmp"));
+  const asStr = (v: unknown) => (typeof v === "string" ? v : "");
+  const asNullableStr = (v: unknown) => (v === null ? null : typeof v === "string" ? v : null);
+  const asInt = (v: unknown, fallback: number) =>
+    typeof v === "number" && Number.isInteger(v) && v > 0 ? v : fallback;
+  const asReps = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : "10");
+  const asNullableNum = (v: unknown) =>
+    v === null ? null : typeof v === "number" && Number.isFinite(v) ? v : null;
+
+  const planName = asStr(req.body?.name).trim();
+  if (!planName) {
+    return res.status(400).json({ message: "Invalid request: plan name required" });
+  }
+  const daysInput = Array.isArray(req.body?.days) ? (req.body.days as unknown[]) : [];
+  const requestIdInput = req.body?.requestId;
+  const requestId =
+    typeof requestIdInput === "string" && requestIdInput.length > 0 ? requestIdInput : null;
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Plan must belong to this trainer
+      const existingPlan = await tx.workoutPlan.findFirst({
+        where: { id: planId, trainerId: trainerProfile.id },
+        select: { id: true },
+      });
+      if (!existingPlan) {
+        throw httpError(404, "Not found");
+      }
+
+      // Current DB structure (for diff + ownership validation)
+      const dbDays = await tx.workoutDay.findMany({
+        where: { planId },
+        select: { id: true, exercises: { select: { id: true } } },
+      });
+      const dbDayIds = new Set(dbDays.map((d) => d.id));
+      const dbExByDay = new Map<string, Set<string>>(
+        dbDays.map((d) => [d.id, new Set(d.exercises.map((e) => e.id))]),
+      );
+
+      // Update plan name
+      await tx.workoutPlan.update({ where: { id: planId }, data: { name: planName } });
+
+      // Validate provided day ids + compute which existing days to keep
+      const keepDayIds: string[] = [];
+      for (const rawDay of daysInput) {
+        const dayObj = (rawDay ?? {}) as { id?: unknown };
+        if (!isNewId(dayObj.id)) {
+          const dayId = asStr(dayObj.id);
+          if (!dbDayIds.has(dayId)) {
+            throw httpError(400, `Unknown dayId: ${dayId}`);
+          }
+          keepDayIds.push(dayId);
+        }
+      }
+
+      // Delete removed days (cascades their exercises + logs — intended when a day is removed)
+      await tx.workoutDay.deleteMany({
+        where: { planId, id: { notIn: keepDayIds } },
+      });
+
+      // Upsert days + their exercises, sortOrder = array index
+      for (let dayIndex = 0; dayIndex < daysInput.length; dayIndex += 1) {
+        const rawDay = (daysInput[dayIndex] ?? {}) as {
+          id?: unknown;
+          name?: unknown;
+          description?: unknown;
+          exercises?: unknown;
+        };
+        const dayName = asStr(rawDay.name).trim();
+        if (!dayName) {
+          throw httpError(400, "Invalid request: day name required");
+        }
+        const dayDescription = asNullableStr(rawDay.description);
+        const exercisesInput = Array.isArray(rawDay.exercises) ? (rawDay.exercises as unknown[]) : [];
+
+        let dayId: string;
+        if (isNewId(rawDay.id)) {
+          const createdDay = await tx.workoutDay.create({
+            data: { planId, name: dayName, description: dayDescription, sortOrder: dayIndex },
+            select: { id: true },
+          });
+          dayId = createdDay.id;
+        } else {
+          dayId = asStr(rawDay.id);
+          await tx.workoutDay.update({
+            where: { id: dayId },
+            data: { name: dayName, description: dayDescription, sortOrder: dayIndex },
+          });
+        }
+
+        const existingExIds = dbExByDay.get(dayId) ?? new Set<string>();
+
+        // Validate provided exercise ids + compute which to keep (update)
+        const keepExIds: string[] = [];
+        for (const rawEx of exercisesInput) {
+          const exObj = (rawEx ?? {}) as { id?: unknown };
+          if (!isNewId(exObj.id)) {
+            const exId = asStr(exObj.id);
+            if (!existingExIds.has(exId)) {
+              throw httpError(400, `Unknown exerciseId for day ${dayId}: ${exId}`);
+            }
+            keepExIds.push(exId);
+          }
+        }
+
+        // Delete only the exercises actually removed (kept ones retain their logs)
+        await tx.exercise.deleteMany({
+          where: { dayId, id: { notIn: keepExIds } },
+        });
+
+        // Upsert exercises, sortOrder = array index
+        for (let exIndex = 0; exIndex < exercisesInput.length; exIndex += 1) {
+          const rawEx = (exercisesInput[exIndex] ?? {}) as Record<string, unknown>;
+          const exName = asStr(rawEx.name).trim();
+          if (!exName) {
+            throw httpError(400, "Invalid request: exercise name required");
+          }
+          const exData = {
+            name: exName,
+            description: asNullableStr(rawEx.description),
+            sets: asInt(rawEx.sets, 3),
+            reps: asReps(rawEx.reps),
+            targetWeightKg: asNullableNum(rawEx.targetWeightKg),
+            restSeconds: asNullableNum(rawEx.restSeconds),
+            note: asNullableStr(rawEx.note),
+            imageUrl: asNullableStr(rawEx.imageUrl),
+            sortOrder: exIndex,
+          };
+          if (isNewId(rawEx.id)) {
+            await tx.exercise.create({ data: { dayId, ...exData } });
+          } else {
+            await tx.exercise.update({ where: { id: asStr(rawEx.id) }, data: exData });
+          }
+        }
+      }
+
+      // Optionally resolve a linked change-request — only if it belongs to this plan + trainer
+      if (requestId) {
+        const request = await tx.exerciseChangeRequest.findFirst({
+          where: {
+            id: requestId,
+            day: { planId },
+            client: { trainerId: trainerProfile.id },
+          },
+          select: { id: true },
+        });
+        if (!request) {
+          throw httpError(400, "requestId does not belong to this plan");
+        }
+        await tx.exerciseChangeRequest.update({
+          where: { id: requestId },
+          data: { status: "resolved" },
+        });
+      }
+    });
+
+    // Return the freshly saved plan tree (with REAL ids) — same shape as GET /:id
+    const saved = await prisma.workoutPlan.findFirst({
+      where: { id: planId, trainerId: trainerProfile.id },
+      include: {
+        days: {
+          orderBy: { sortOrder: "asc" },
+          include: { exercises: { orderBy: { sortOrder: "asc" } } },
+        },
+      },
+    });
+    if (!saved) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    return res.json({
+      plan: {
+        id: saved.id,
+        name: saved.name,
+        description: saved.description,
+        createdAt: saved.createdAt,
+        updatedAt: saved.updatedAt,
+      },
+      days: saved.days.map((day: (typeof saved.days)[number]) => ({
+        id: day.id,
+        planId: day.planId,
+        name: day.name,
+        description: day.description,
+        sortOrder: day.sortOrder,
+        exercises: day.exercises.map((exercise: (typeof day.exercises)[number]) => ({
+          id: exercise.id,
+          dayId: exercise.dayId,
+          name: exercise.name,
+          description: exercise.description,
+          sets: exercise.sets,
+          reps: exercise.reps,
+          targetWeightKg: exercise.targetWeightKg,
+          restSeconds: exercise.restSeconds,
+          note: exercise.note,
+          sortOrder: exercise.sortOrder,
+          imageUrl: exercise.imageUrl,
+          libraryId: null,
+        })),
+      })),
+    });
+  } catch (error) {
+    const httpStatus =
+      error && typeof error === "object" && "httpStatus" in error
+        ? (error as { httpStatus: number }).httpStatus
+        : 500;
+    if (httpStatus !== 500) {
+      return res.status(httpStatus).json({ message: (error as Error).message });
+    }
+    console.error("[plans:save-full] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 plansRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "trainer") {
     return res.status(403).json({ message: "Forbidden" });
@@ -991,6 +1232,81 @@ workoutDaysRouter.post("/:dayId/exercises", requireAuth, async (req: Authenticat
     });
   } catch (error) {
     console.error("[plans:create-exercise] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// Reorder exercises within a day: persist a new order by rewriting sortOrder 0..n
+// in a single transaction. All exerciseIds must belong to this day.
+workoutDaysRouter.patch("/:dayId/exercises/reorder", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "trainer") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const dayIdParam = req.params.dayId;
+  const dayId = Array.isArray(dayIdParam) ? dayIdParam[0] : dayIdParam;
+  if (!dayId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const exerciseIdsInput = req.body?.exerciseIds;
+  if (
+    !Array.isArray(exerciseIdsInput) ||
+    exerciseIdsInput.length === 0 ||
+    !exerciseIdsInput.every((value) => typeof value === "string" && value.length > 0)
+  ) {
+    return res.status(400).json({ message: "exerciseIds must be a non-empty string array" });
+  }
+  const exerciseIds = exerciseIdsInput as string[];
+
+  // Reject duplicates
+  if (new Set(exerciseIds).size !== exerciseIds.length) {
+    return res.status(400).json({ message: "exerciseIds must be unique" });
+  }
+
+  try {
+    const trainerProfile = await prisma.trainerProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!trainerProfile) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    // Day must belong to this trainer
+    const existingDay = await prisma.workoutDay.findFirst({
+      where: { id: dayId, plan: { trainerId: trainerProfile.id } },
+      select: { id: true },
+    });
+    if (!existingDay) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    // All exercises of this day (must exactly match the provided id set)
+    const dayExercises = await prisma.exercise.findMany({
+      where: { dayId: existingDay.id },
+      select: { id: true },
+    });
+    const dayExerciseIds = new Set(dayExercises.map((e) => e.id));
+    if (
+      exerciseIds.length !== dayExerciseIds.size ||
+      !exerciseIds.every((id) => dayExerciseIds.has(id))
+    ) {
+      return res.status(400).json({ message: "exerciseIds must match exactly the exercises of this day" });
+    }
+
+    await prisma.$transaction(
+      exerciseIds.map((exerciseId, index) =>
+        prisma.exercise.update({
+          where: { id: exerciseId },
+          data: { sortOrder: index },
+        }),
+      ),
+    );
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("[plans:reorder-exercises] error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 });
