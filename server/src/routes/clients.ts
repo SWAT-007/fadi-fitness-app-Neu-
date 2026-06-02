@@ -4,6 +4,7 @@ import bcrypt from "bcrypt";
 import { prisma } from "../db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { unexpectedErrorResponse } from "../utils/errors";
+import { clampDuration } from "../utils/duration";
 
 const clientsRouter = Router();
 
@@ -709,7 +710,13 @@ clientsRouter.get("/:clientId/workout-logs", requireAuth, async (req: Authentica
       }),
     ]);
 
-    return res.json({ totalCount, workoutLogs });
+    return res.json({
+      totalCount,
+      workoutLogs: workoutLogs.map((log) => ({
+        ...log,
+        durationSeconds: clampDuration(log.durationSeconds),
+      })),
+    });
   } catch (error) {
         return unexpectedErrorResponse(res, "clients:workout-logs:list", error);
   }

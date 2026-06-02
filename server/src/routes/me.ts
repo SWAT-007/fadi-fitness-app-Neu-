@@ -6,6 +6,7 @@ import fs from "fs";
 import { prisma } from "../db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { unexpectedErrorResponse } from "../utils/errors";
+import { clampDuration } from "../utils/duration";
 import {
   listNotificationsForUser,
   mapNotification,
@@ -278,7 +279,10 @@ meRouter.get("/dashboard", requireAuth, async (req: AuthenticatedRequest, res) =
         completedCount,
         completedThisWeekDayIds: [...new Set(completedThisWeekLogs.map((log) => log.dayId))],
         activeDayIds: [...new Set(activeLogs.map((log) => log.dayId))],
-        monthlyWorkouts,
+        monthlyWorkouts: monthlyWorkouts.map((log) => ({
+          ...log,
+          durationSeconds: clampDuration(log.durationSeconds),
+        })),
       },
       latestProgressLog,
       hasCurrentWeekCheckin: Boolean(currentWeekCheckin),
@@ -670,7 +674,9 @@ meRouter.get("/workouts/:dayId/play", requireAuth, async (req: AuthenticatedRequ
     return res.json({
       day: { ...day, exercises },
       exercises,
-      workoutLog: activeLog ?? null,
+      workoutLog: activeLog
+        ? { ...activeLog, durationSeconds: clampDuration(activeLog.durationSeconds) }
+        : null,
       exerciseLogs,
     });
   } catch (error) {
@@ -2185,7 +2191,10 @@ meRouter.get("/progress-summary", requireAuth, async (req: AuthenticatedRequest,
       },
       workoutSummary: {
         completedWorkoutCount,
-        recentWorkouts,
+        recentWorkouts: recentWorkouts.map((log) => ({
+          ...log,
+          durationSeconds: clampDuration(log.durationSeconds),
+        })),
       },
     });
   } catch (error) {
