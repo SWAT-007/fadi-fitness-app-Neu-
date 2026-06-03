@@ -52,3 +52,6 @@ backups/
 # playwright / review artifacts (generated, must not trigger dev recompiles)
 .playwright-mcp/
 review-*.png
+
+# IDE
+.idea/

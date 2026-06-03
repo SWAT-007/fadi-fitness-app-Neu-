@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/components/Motion'
 import { EmptyState } from '@/components/ui/client-ui'
 import { resolveImageUrl } from '@/lib/exercises'
+import { tapLight, successBuzz } from '@/lib/haptics'
 
 type SetLog = {
   weight: string
@@ -190,6 +191,10 @@ export default function WorkoutPlayerPage() {
   }, [id, router, freshStart])
 
   const updateSet = (exerciseId: string, setIndex: number, field: keyof SetLog, value: string | boolean) => {
+    // Haptic tap only when checking a set OFF (not when undoing it).
+    if (field === 'completed' && value === true) {
+      void tapLight()
+    }
     setLogs(prev => ({
       ...prev,
       [exerciseId]: prev[exerciseId].map((set, index) => (
@@ -286,6 +291,7 @@ export default function WorkoutPlayerPage() {
       setFinalDurationSeconds(durationSeconds)
       setSaving(false)
       setComplete(true)
+      void successBuzz()
       showToast('Workout gespeichert ✓', 'success')
     } catch (err) {
       console.error('Failed to save workout', err)
