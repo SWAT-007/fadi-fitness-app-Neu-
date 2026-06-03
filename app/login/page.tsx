@@ -104,12 +104,6 @@ export default function LoginPage() {
               >
                 Anmelden
               </button>
-              <button
-                disabled
-                className="w-full border border-white/[0.15] text-white/50 font-semibold py-4 rounded-2xl text-[15px] tracking-wide cursor-not-allowed backdrop-blur-sm bg-white/[0.04]"
-              >
-                Konto erstellen
-              </button>
             </div>
           </div>
         ) : (
