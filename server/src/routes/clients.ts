@@ -1,4 +1,4 @@
-import { NotificationType } from "@prisma/client";
+import { NotificationType, Prisma } from "@prisma/client";
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import { prisma } from "../db";
@@ -42,6 +42,20 @@ const mapClientProfile = (client: {
   createdAt: client.createdAt,
   updatedAt: client.updatedAt,
 });
+
+// Fields required by mapClientProfile — shared so the profile-only and
+// profile-with-login creation paths return an identical shape.
+const clientProfileSelect = {
+  id: true,
+  fullName: true,
+  email: true,
+  phone: true,
+  notes: true,
+  status: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
 const messageSelect = {
   id: true,
@@ -287,6 +301,20 @@ clientsRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
   const phone = normalizeOptionalString(req.body?.phone);
   const notes = normalizeOptionalString(req.body?.notes);
 
+  // Optional initial login: an empty password keeps today's behavior (profile
+  // only). A non-empty password creates an app login for the client right away.
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  const wantsLogin = password.length > 0;
+
+  if (wantsLogin) {
+    if (!emailInput) {
+      return res.status(400).json({ message: "E-Mail ist erforderlich, um ein Passwort zu setzen." });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Passwort muss mindestens 6 Zeichen haben." });
+    }
+  }
+
   try {
     const trainerProfile = await prisma.trainerProfile.findUnique({
       where: { userId: req.user.userId },
@@ -297,30 +325,68 @@ clientsRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
       return res.status(500).json({ message: "Internal server error" });
     }
 
-    const client = await prisma.clientProfile.create({
-      data: {
-        trainerId: trainerProfile.id,
-        fullName: name,
-        email: emailInput,
-        phone,
-        notes,
-      },
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        notes: true,
-        status: true,
-        userId: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    // Profile only — unchanged behavior.
+    if (!wantsLogin) {
+      const client = await prisma.clientProfile.create({
+        data: {
+          trainerId: trainerProfile.id,
+          fullName: name,
+          email: emailInput,
+          phone,
+          notes,
+        },
+        select: clientProfileSelect,
+      });
+
+      return res.status(201).json({ client: mapClientProfile(client) });
+    }
+
+    // With login: never silently link an existing account — refuse with 409.
+    const existingUser = await prisma.user.findUnique({
+      where: { email: emailInput },
+      select: { id: true },
+    });
+    if (existingUser) {
+      return res.status(409).json({ message: "Diese E-Mail wird bereits verwendet." });
+    }
+
+    // Hash outside the transaction to keep it short (bcrypt is CPU-bound).
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    // Profile + user created atomically: a failure leaves no half-built client.
+    const client = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: emailInput,
+          passwordHash,
+          role: "CLIENT",
+          fullName: name,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+
+      return tx.clientProfile.create({
+        data: {
+          trainerId: trainerProfile.id,
+          fullName: name,
+          email: emailInput,
+          phone,
+          notes,
+          status: "active",
+          userId: user.id,
+        },
+        select: clientProfileSelect,
+      });
     });
 
     return res.status(201).json({ client: mapClientProfile(client) });
   } catch (error) {
-        return unexpectedErrorResponse(res, "clients:create", error);
+    // Safety net for a race on the unique email between the check and the insert.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return res.status(409).json({ message: "Diese E-Mail wird bereits verwendet." });
+    }
+    return unexpectedErrorResponse(res, "clients:create", error);
   }
 });
 
