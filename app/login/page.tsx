@@ -47,7 +47,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen flex flex-col overflow-hidden bg-[#050504]">
+    <div className="relative min-h-[100dvh] flex flex-col overflow-x-hidden overflow-y-auto bg-[#050504]">
       {/* Hero image — trainer 1 */}
       <div className="absolute inset-0 z-0">
         <Image

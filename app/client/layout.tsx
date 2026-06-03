@@ -53,6 +53,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [profile, setProfile] = useState<Profile | null>(null)
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  // SSR-safe: navigator only exists in the browser.
+  const [offline, setOffline] = useState(() =>
+    typeof navigator !== 'undefined' ? !navigator.onLine : false,
+  )
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -121,6 +125,19 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     if (pathname.startsWith('/client/messages')) setUnreadMessageCount(0)
   }, [pathname])
 
+  // Catch the connection dropping while the app is in use.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const update = () => setOffline(!navigator.onLine)
+    update()
+    window.addEventListener('online', update)
+    window.addEventListener('offline', update)
+    return () => {
+      window.removeEventListener('online', update)
+      window.removeEventListener('offline', update)
+    }
+  }, [])
+
 
 
   const handleLogout = async () => {
@@ -131,11 +148,35 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     }
   }
 
+  // Fullscreen offline notice — fixed, so it overlays whatever is on screen.
+  const offlineOverlay = offline ? (
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-5 bg-[#050504] px-8 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-[#A78BFA]/15 border border-[#A78BFA]/25 flex items-center justify-center">
+        <svg className="w-7 h-7 text-[#A78BFA]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M8.5 16.5a5 5 0 017 0M5 12.5a10 10 0 0114 0M2 9a15 15 0 0120 0" />
+        </svg>
+      </div>
+      <div>
+        <p className="text-[#EDECEA] text-lg font-semibold">Keine Verbindung</p>
+        <p className="text-[#797D83] text-sm mt-1">Bitte prüfe dein Internet.</p>
+      </div>
+      <button
+        onClick={() => window.location.reload()}
+        className="press px-5 py-2.5 rounded-xl bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold transition-colors"
+      >
+        Erneut versuchen
+      </button>
+    </div>
+  ) : null
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#050504]">
-        <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
-      </div>
+      <>
+        {offlineOverlay}
+        <div className="min-h-screen flex items-center justify-center bg-[#050504]">
+          <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </>
     )
   }
 
@@ -152,7 +193,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   return (
     <ToastProvider>
-      <div className={`bg-[#050504] ${isMessages ? 'h-[100dvh] overflow-hidden flex flex-col' : 'min-h-screen'}`}>
+      {offlineOverlay}
+      <div
+        className={`bg-[#050504] ${isMessages ? 'h-[100dvh] overflow-hidden flex flex-col' : 'min-h-screen'}`}
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
 
         {/* Top header */}
         <div className="sticky top-0 z-20">

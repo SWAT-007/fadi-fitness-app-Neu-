@@ -39,6 +39,20 @@ body {
   font-family: var(--font-body);
 }
 
+/* ─── Native feel: no overscroll glow/bounce, no tap highlight, no text select ── */
+html, body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* …but keep text selectable in inputs so editing/copy still works. */
+input, textarea, [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 /* ─── Scrollbar ──────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }

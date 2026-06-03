@@ -53,7 +53,7 @@ export async function POST() {
   const response = NextResponse.json({ ok: true })
   response.cookies.set(BACKEND_TOKEN_COOKIE, backendToken, {
     ...COOKIE_OPTIONS,
-    maxAge: 7 * 24 * 60 * 60,
+    maxAge: 30 * 24 * 60 * 60,
   })
 
   return response

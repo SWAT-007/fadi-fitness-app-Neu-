@@ -34,7 +34,7 @@ const fallbackFullNameFromEmail = (email: string): string => {
 const createToken = (userId: string, role: RegisterRole): string | null => {
   const jwtSecret = process.env.JWT_SECRET;
   if (!jwtSecret) return null;
-  return jwt.sign({ sub: userId, role }, jwtSecret, { expiresIn: "7d" });
+  return jwt.sign({ sub: userId, role }, jwtSecret, { expiresIn: "30d" });
 };
 
 authRouter.post("/register", async (req, res) => {

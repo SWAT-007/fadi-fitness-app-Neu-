@@ -8,7 +8,7 @@ const COOKIE_OPTIONS = {
   sameSite: 'lax' as const,
   secure: process.env.NODE_ENV === 'production',
   path: '/',
-  maxAge: 7 * 24 * 60 * 60,
+  maxAge: 30 * 24 * 60 * 60,
 }
 
 export async function POST(request: Request) {
