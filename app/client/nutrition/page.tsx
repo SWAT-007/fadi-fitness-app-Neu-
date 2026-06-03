@@ -28,9 +28,9 @@ const SLOT_LABEL: Record<FoodCategory, string> = {
   vegetable: 'Gemüse', fruit: 'Obst', dairy: 'Milchprodukt', other: 'Sonstiges',
 }
 const SLOT_COLOR: Record<FoodCategory, { dot: string; text: string; bar: string }> = {
-  protein:   { dot: 'bg-[#111111] border border-white/[0.06]0',   text: 'text-blue-700',   bar: '#3b82f6' },
-  carbs:     { dot: 'bg-[#A78BFA]/100',  text: 'text-[#A78BFA]',  bar: '#22c55e' },
-  fat:       { dot: 'bg-yellow-500', text: 'text-yellow-700', bar: '#eab308' },
+  protein:   { dot: 'bg-blue-500',   text: 'text-blue-400',   bar: '#3b82f6' },
+  carbs:     { dot: 'bg-green-500',  text: 'text-green-400',  bar: '#22c55e' },
+  fat:       { dot: 'bg-yellow-500', text: 'text-yellow-400', bar: '#eab308' },
   vegetable: { dot: 'bg-[#A78BFA]/60',  text: 'text-[#A78BFA]',  bar: '#22c55e' },
   fruit:     { dot: 'bg-pink-500',   text: 'text-pink-700',   bar: '#ec4899' },
   dairy:     { dot: 'bg-purple-500', text: 'text-purple-700', bar: '#a855f7' },
