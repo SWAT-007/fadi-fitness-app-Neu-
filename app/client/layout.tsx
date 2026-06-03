@@ -54,9 +54,26 @@ interface BackendNotification {
 const getStoredAuthToken = () =>
   typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null
 
-const clearStoredAuthToken = () => {
+const getCachedUser = (): Profile | null => {
+  if (typeof window === 'undefined') return null
+  const raw = window.localStorage.getItem('cached_user')
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as Profile
+  } catch {
+    return null
+  }
+}
+
+const setCachedUser = (user: Profile) => {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem('cached_user', JSON.stringify(user))
+}
+
+const clearStoredSession = () => {
   if (typeof window === 'undefined') return
   window.localStorage.removeItem('auth_token')
+  window.localStorage.removeItem('cached_user')
 }
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
@@ -96,7 +113,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           const restorePayload = await restoreResponse.json().catch(() => null) as RestoreResponse | null
 
           if (!restoreResponse.ok || !restorePayload?.ok) {
-            clearStoredAuthToken()
+            clearStoredSession()
             router.replace('/login')
             return
           }
@@ -107,7 +124,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         }
 
         if (!authResponse.ok || !authPayload?.ok || !authPayload.user?.role) {
-          if (authResponse.status === 401) clearStoredAuthToken()
+          if (authResponse.status === 401) clearStoredSession()
           router.replace('/login')
           return
         }
@@ -123,13 +140,27 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           return
         }
 
-        setProfile({
+        const nextProfile: Profile = {
           id: clientPayload.client.id,
           email: clientPayload.client.email,
           full_name: clientPayload.client.fullName,
           role: 'client',
           created_at: '',
-        })
+        }
+
+        setCachedUser(nextProfile)
+        setProfile(nextProfile)
+      } catch {
+        const token = getStoredAuthToken()
+        if (!token) {
+          router.replace('/login')
+          return
+        }
+
+        const cachedUser = getCachedUser()
+        if (cachedUser) {
+          setProfile(cachedUser)
+        }
       } finally {
         setLoading(false)
       }
@@ -183,7 +214,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   const handleLogout = async () => {
     try {
-      clearStoredAuthToken()
+      clearStoredSession()
       await fetch('/api/backend/auth/logout', { method: 'POST' })
     } finally {
       router.replace('/login')

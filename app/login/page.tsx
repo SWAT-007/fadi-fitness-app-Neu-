@@ -14,14 +14,31 @@ const withErrorId = (m: string, id?: string) => id ? `${m} (Fehler-ID: ${id})` :
 const getStoredAuthToken = () =>
   typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null
 
+const getCachedUser = (): { role?: string } | null => {
+  if (typeof window === 'undefined') return null
+  const raw = window.localStorage.getItem('cached_user')
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as { role?: string }
+  } catch {
+    return null
+  }
+}
+
 const setStoredAuthToken = (token: string) => {
   if (typeof window === 'undefined') return
   window.localStorage.setItem('auth_token', token)
 }
 
-const clearStoredAuthToken = () => {
+const setCachedUser = (user: unknown) => {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem('cached_user', JSON.stringify(user))
+}
+
+const clearStoredSession = () => {
   if (typeof window === 'undefined') return
   window.localStorage.removeItem('auth_token')
+  window.localStorage.removeItem('cached_user')
 }
 
 export default function LoginPage() {
@@ -39,6 +56,11 @@ export default function LoginPage() {
       const token = getStoredAuthToken()
       if (!token) return
 
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        router.replace('/client')
+        return
+      }
+
       try {
         setLoading(true)
         const restoreRes = await fetch('/api/backend/auth/restore', {
@@ -48,16 +70,18 @@ export default function LoginPage() {
         })
         const restorePayload = await restoreRes.json().catch(() => null) as RestoreResponse | null
         if (!restoreRes.ok || !restorePayload?.ok) {
-          clearStoredAuthToken()
+          clearStoredSession()
           return
         }
 
         const meRes = await fetch('/api/backend/auth/me', { method: 'GET', cache: 'no-store' })
         const mePayload = await meRes.json().catch(() => null) as MeResponse | null
         if (!meRes.ok || !mePayload?.ok || !mePayload.user?.role) {
-          clearStoredAuthToken()
+          clearStoredSession()
           return
         }
+
+        setCachedUser(mePayload.user)
 
         if (cancelled) return
         const role = mePayload.user.role.toLowerCase()
@@ -70,9 +94,11 @@ export default function LoginPage() {
           return
         }
 
-        clearStoredAuthToken()
+        clearStoredSession()
       } catch {
-        // Keep the login form available if restore fails unexpectedly.
+        if (getStoredAuthToken()) {
+          router.replace('/client')
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -102,16 +128,18 @@ export default function LoginPage() {
       const meRes = await fetch('/api/backend/auth/me', { method: 'GET', cache: 'no-store' })
       const mePayload = await meRes.json().catch(() => null) as MeResponse | null
       if (!meRes.ok || !mePayload?.ok || !mePayload.user?.role) {
-        clearStoredAuthToken()
+        clearStoredSession()
         setError(withErrorId(mePayload?.message ?? 'Sitzung konnte nicht validiert werden.', mePayload?.errorId))
         setLoading(false)
         return
       }
 
+      setCachedUser(mePayload.user)
+
       const role = mePayload.user.role.toLowerCase()
       if (role === 'trainer' || role === 'admin') { router.push('/admin'); return }
       if (role === 'client') { router.push('/client'); return }
-      clearStoredAuthToken()
+      clearStoredSession()
       setError('Unbekannte Benutzerrolle.')
       setLoading(false)
     } catch {

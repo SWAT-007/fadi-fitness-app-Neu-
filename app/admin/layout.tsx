@@ -80,9 +80,10 @@ type ExerciseChangeRequestsResponse = {
   requests?: Array<{ id?: string }>
 }
 
-const clearStoredAuthToken = () => {
+const clearStoredSession = () => {
   if (typeof window === 'undefined') return
   window.localStorage.removeItem('auth_token')
+  window.localStorage.removeItem('cached_user')
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -206,7 +207,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const handleLogout = async () => {
     try {
-      clearStoredAuthToken()
+      clearStoredSession()
       await fetch('/api/backend/auth/logout', { method: 'POST' })
     } catch {
       // Ignore and redirect anyway.
