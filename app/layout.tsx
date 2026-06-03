@@ -28,6 +28,15 @@ export default function RootLayout({
   return (
     <html lang="de">
       <body className="h-full antialiased" style={{ background: 'var(--background)', color: 'var(--foreground)' }}>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js').catch(() => {});
+              }
+            `,
+          }}
+        />
         {children}
       </body>
     </html>
