@@ -24,6 +24,15 @@ public class MainActivity extends BridgeActivity {
                 saved + "; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000");
             cm.flush();
         }
+
+        // Lokales Caching: gecachte Seiten/Assets sofort laden, Netz nur als Fallback
+        android.webkit.WebView webView = getBridge().getWebView();
+        if (webView != null) {
+            android.webkit.WebSettings settings = webView.getSettings();
+            settings.setCacheMode(android.webkit.WebSettings.LOAD_CACHE_ELSE_NETWORK);
+            settings.setDomStorageEnabled(true);
+            settings.setDatabaseEnabled(true);
+        }
     }
 
     @Override
