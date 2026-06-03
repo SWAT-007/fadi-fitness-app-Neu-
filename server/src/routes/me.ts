@@ -2173,13 +2173,27 @@ meRouter.post("/messages/read", requireAuth, async (req: AuthenticatedRequest, r
       return res.json({ updatedCount: 0 });
     }
 
+    const now = new Date();
     const result = await prisma.message.updateMany({
       where: {
         senderId: clientProfile.trainer.userId,
         receiverId: req.user.userId,
         readAt: null,
       },
-      data: { readAt: new Date() },
+      data: { readAt: now },
+    });
+
+    // Also clear the unread MESSAGE notifications for this client. The bottom-nav
+    // badge counts unread notifications of type message, so without this the badge
+    // reappears on the next poll even though the messages were read. Type-filtered
+    // on purpose — other notification types stay untouched.
+    await prisma.notification.updateMany({
+      where: {
+        userId: req.user.userId,
+        type: NotificationType.MESSAGE,
+        isRead: false,
+      },
+      data: { isRead: true, readAt: now },
     });
 
     return res.json({ updatedCount: result.count });

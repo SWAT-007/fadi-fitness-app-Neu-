@@ -146,9 +146,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     return pathname.startsWith(itemHref)
   }
 
+  // Messages uses a full-height chat layout (chat fills viewport, input docked
+  // above the nav, list scrolls internally) instead of the normal scrolling page.
+  const isMessages = pathname.startsWith('/client/messages')
+
   return (
     <ToastProvider>
-      <div className="min-h-screen bg-[#050504]">
+      <div className={`bg-[#050504] ${isMessages ? 'h-[100dvh] overflow-hidden flex flex-col' : 'min-h-screen'}`}>
 
         {/* Top header */}
         <div className="sticky top-0 z-20">
@@ -178,9 +182,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           </div>
         </div>
 
-        {/* Page content — pb-28 reserves space above the fixed nav */}
-        <main className="pb-28">
-          <PageFade key={pathname}>
+        {/* Page content — pb-28 reserves space above the fixed nav.
+            Messages instead fills the remaining height (flex-1) so the chat can
+            dock its input above the nav; the chat handles its own bottom spacing. */}
+        <main className={isMessages ? 'flex-1 min-h-0' : 'pb-28'}>
+          <PageFade key={pathname} className={isMessages ? 'h-full' : ''}>
             {children}
           </PageFade>
         </main>
