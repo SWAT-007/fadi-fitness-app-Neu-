@@ -1,0 +1,118 @@
+FITNESS-APP ARCHITEKTUR (READ-ONLY ANALYSE)
+
+A) HIGH-LEVEL ARCHITEKTUR
+- Browser (Admin/Trainer oder Client) spricht mit Next.js App Router Frontend.
+- Frontend ruft nicht direkt Express auf, sondern ueber Next-Proxy-Routen unter app/api/backend/*.
+- Diese Proxy-Routen leiten an Express (/api/v1/*) weiter und reichen Auth-Cookies/JWT durch.
+- Express API-Server (server/src/index.ts) kapselt Business-Logik, Rollenpruefung und Datenzugriffe.
+- Prisma ist die DB-Schicht (server/src/db.ts) auf PostgreSQL.
+- Deployment ist auf Railway vorbereitet (ENV/Notes vorhanden).
+- Domain mila-coach.com ist als Ziel genannt, aber im gelesenen Code nicht hart hinterlegt.
+
+B) WICHTIGE ORDNERSTRUKTUR
+- app/admin/*: Trainer/Admin UI (Dashboard, Clients, Messages, Requests, Plans, Nutrition, Recipes)
+- app/client/*: Client UI (Dashboard, Workout Play, Messages, Nutrition, Progress, Check-ins)
+- app/api/backend/*: Next.js Proxy-Schicht zum Express-Backend
+- components/*: wiederverwendbare UI- und Bell-Komponenten
+- server/src/routes/*: Express-Routen nach Domaenen (auth, me, clients, notifications, plans, nutrition)
+- prisma/schema.prisma: Datenmodell und Relationen
+- graphify-out/*: Knowledge-Graph, Communities, Querverweise
+
+C) API MAP (PROXY -> EXPRESS -> ZWECK)
+- /api/backend/auth/login -> POST /api/v1/auth/login -> Login, JWT/Cookie-Session
+- /api/backend/auth/me -> GET /api/v1/me -> aktuellen User + Rolle laden
+- /api/backend/notifications -> GET /api/v1/notifications -> Notifications laden
+- /api/backend/notifications/[id]/target -> GET /api/v1/notifications/:id/target -> Deep-Link Resolver
+- /api/backend/notifications/[id]/read -> PATCH /api/v1/notifications/:id/read -> Notification gelesen
+- /api/backend/messages/clients -> GET /api/v1/clients/messages/clients -> Trainer-Chatliste + unreadCount
+- /api/backend/clients/[id]/messages -> GET/POST /api/v1/clients/:id/messages -> Trainer<->Client Chat
+- /api/backend/clients/[id]/messages/read -> PATCH /api/v1/clients/:id/messages/read -> Chat gelesen markieren
+- /api/backend/me/messages -> GET/POST /api/v1/me/messages -> Client-Nachrichtenfluss
+- /api/backend/me/exercise-change-requests -> GET/POST /api/v1/me/exercise-change-requests -> Client erstellt/listet Wechselanfragen
+- /api/backend/clients/exercise-change-requests -> GET /api/v1/clients/exercise-change-requests -> Trainer sieht offen + Verlauf
+- /api/backend/clients/exercise-change-requests/[id] -> PATCH /api/v1/clients/exercise-change-requests/:id -> resolved/rejected setzen
+- /api/backend/plans/* -> /api/v1/plans/* -> Trainingsplaene, Tage, Uebungen
+- /api/backend/nutrition/* -> /api/v1/nutrition/* -> Foods, Nutrition-Plaene, Meals, Rezepte
+
+D) DATENBANK MAP (KERNSCHEMA)
+- User 1:1 zu TrainerProfile oder ClientProfile (rollenbasiert)
+- TrainerProfile 1:n ClientProfile; zusaetzlich Links zu WorkoutPlan, NutritionPlan, Recipe
+- WorkoutPlan 1:n WorkoutDay; WorkoutDay 1:n Exercise
+- AssignedPlan verbindet WorkoutPlan mit ClientProfile (aktive Zuweisung + Zeitraum)
+- ExerciseChangeRequest referenziert clientId, dayId, exerciseId, optional resolvedByTrainerId
+- Message speichert Trainer/Client Chat (sender/receiver + Read-Status)
+- Notification gehoert zu User und traegt Typ (MESSAGE, REQUEST, WORKOUT, CHECKIN, ...)
+- NutritionPlan 1:n NutritionMeal; AssignedNutritionPlan verbindet Plan mit Client
+- Food als Stammdaten; Recipe + RecipeIngredient fuer Rezeptlogik
+- Logs/Progress: WorkoutLog, ExerciseLog, ProgressLog, WeeklyCheckin, CheckinImage
+
+E) KONKRETE DATENFLUESSE
+1) Login Trainer
+- /login -> /api/backend/auth/login -> /api/v1/auth/login -> JWT Cookie -> /admin
+
+2) Login Client
+- gleicher Flow, dann Rollen-Redirect nach /client
+
+3) Trainer erstellt/verwaltet Kunden
+- Admin-Clients UI nutzt /api/backend/clients/* (Liste, Details, Aktionen)
+
+4) Trainer erstellt Trainingsplan
+- Admin-Plans UI nutzt /api/backend/plans/* (Plan/Day/Exercise CRUD)
+
+5) Client macht Workout
+- app/client/workout/[id]/play laedt Plan-Session, loggt Fortschritt, kann Request/Nachricht senden
+
+6) Client sendet Nachricht
+- POST /api/backend/me/messages erstellt Message + Trainer-Notification(MESSAGE) mit Zielhinweisen
+
+7) Trainer bekommt Notification
+- TrainerNotificationBell laedt /api/backend/notifications
+
+8) Trainer klickt Notification und landet direkt im Chat
+- erst /api/backend/notifications/{id}/target
+- dann read markieren, popup schliessen, badge refresh, router.push(href)
+- MESSAGE Deep-Link: idealerweise /admin/messages?clientId=<ClientProfile.id>
+- /admin/messages liest clientId, selektiert Chat, laedt Verlauf, markiert unread als gelesen
+
+9) Client sendet Uebungswechsel-Anfrage
+- POST /api/backend/me/exercise-change-requests mit dayId/exerciseId
+- Backend liefert auch planId aus Relation zurueck
+
+10) Trainer sieht Anfrage
+- /admin/requests zeigt offen + Verlauf
+- Uebungslink fuehrt auf Planroute mit dayId/exerciseId/requestId
+
+11) Trainer klickt Uebung und landet bei Plan/Uebung
+- Zielseite liest dayId/exerciseId/requestId
+- Tag oeffnen, scrollen, highlighten, ggf. Edit-Modus
+
+12) Trainer speichert Aenderung und Anfrage wird erledigt
+- bei vorhandenem requestId: PATCH request auf resolved (nicht beim blossen Klick)
+- Anfrage bleibt im Verlauf
+
+13) Food-Datenbank / Nutrition Flow
+- Admin verwaltet Foods/Plaene/Rezepte
+- Client nutzt aktiven Plan + Meals/Foods/Logs via /api/v1/me/nutrition
+
+F) MERMAID-VORLAGE FUER ARCHITEKTURDIAGRAMM
+```mermaid
+flowchart LR
+  U[Browser: Trainer/Client] --> N[Next.js App Router UI]
+  N --> P[Next API Proxy /app/api/backend/*]
+  P --> E[Express API /api/v1/*]
+  E --> A[Auth Middleware JWT]
+  E --> B[Business Routes auth, me, clients, notifications, plans, nutrition]
+  B --> R[Prisma Client]
+  R --> D[(PostgreSQL on Railway)]
+
+  N --> UI1[Admin Area clients/messages/requests/plans/nutrition]
+  N --> UI2[Client Area workout/messages/nutrition/progress]
+
+  B --> M[Message + Notification Flow]
+  B --> X[ExerciseChangeRequest Flow]
+  B --> T[Deep-Link Resolver GET /notifications/:id/target]
+```
+
+G) HINWEISE / UNKLARHEITEN
+- mila-coach.com wurde im gelesenen Code nicht als feste Konfiguration gefunden.
+- app/client/nutrition/page.tsx ist sehr gross; Kernfluss ist klar, UI-Details koennen bei Bedarf separat vertieft werden.

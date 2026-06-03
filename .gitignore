@@ -48,3 +48,7 @@ next-env.d.ts
 graphify-out/
 docs/2026-*/
 backups/
+
+# playwright / review artifacts (generated, must not trigger dev recompiles)
+.playwright-mcp/
+review-*.png

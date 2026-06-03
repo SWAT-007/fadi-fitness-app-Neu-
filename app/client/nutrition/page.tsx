@@ -293,69 +293,22 @@ function mapDrinkLog(d: BackendDrinkLog): DrinkLogWithMeal {
 
 type DrinkCatalogItem = { id: string; name: string; kcalPer100ml: number | null; unit: string | null }
 
-// ─── Simultaneous macro solver (NNLS) ────────────────────────────────────────
-// Used by "Berechnen": size the main sources together so cross-contributions
-// (e.g. eggs carry fat, oats carry protein) are accounted for, instead of solving
-// each macro independently.
+type MacroKey = 'protein' | 'carbs' | 'fat'
 
-// Gaussian elimination for a square system; null if singular.
-function gaussianSolve(A: number[][], b: number[]): number[] | null {
-  const n = A.length
-  const M = A.map((row, i) => [...row, b[i]])
-  for (let i = 0; i < n; i++) {
-    let pivot = i
-    for (let r = i + 1; r < n; r++) {
-      if (Math.abs(M[r][i]) > Math.abs(M[pivot][i])) pivot = r
-    }
-    if (Math.abs(M[pivot][i]) < 1e-9) return null
-    if (pivot !== i) { const tmp = M[i]; M[i] = M[pivot]; M[pivot] = tmp }
-    for (let r = i + 1; r < n; r++) {
-      const factor = M[r][i] / M[i][i]
-      for (let c = i; c <= n; c++) M[r][c] -= factor * M[i][c]
-    }
-  }
-  const x = Array(n).fill(0)
-  for (let i = n - 1; i >= 0; i--) {
-    let s = M[i][n]
-    for (let c = i + 1; c < n; c++) s -= M[i][c] * x[c]
-    x[i] = s / M[i][i]
-  }
-  return x
+const MACRO_KEYS: MacroKey[] = ['protein', 'carbs', 'fat']
+
+const macroDensity = (food: Food, macro: MacroKey) => {
+  if (macro === 'protein') return food.protein_per_100g / 100
+  if (macro === 'carbs') return food.carbs_per_100g / 100
+  return food.fat_per_100g / 100
 }
 
-// Least squares via normal equations AᵀA·x = Aᵀb. null if singular.
-function lsqNormal(A: number[][], b: number[]): number[] | null {
-  const n = A[0]?.length ?? 0
-  if (n === 0) return []
-  const At: number[][] = Array.from({ length: n }, (_, i) => A.map(row => row[i]))
-  const AtA = Array.from({ length: n }, (_, i) =>
-    Array.from({ length: n }, (_, j) => At[i].reduce((s, _v, r) => s + At[i][r] * At[j][r], 0)),
-  )
-  const Atb = At.map(col => col.reduce((s, v, r) => s + v * b[r], 0))
-  return gaussianSolve(AtA, Atb)
-}
+const macroCategory = (macro: MacroKey): FoodCategory => macro
 
-// Non-negative least squares via active-set pinning (NO minimum grams).
-// Returns one value per column of A, all >= 0; null if a sub-system is singular.
-function nnls(A: number[][], b: number[]): number[] | null {
-  const n = A[0]?.length ?? 0
-  if (n === 0) return []
-  const pinned = Array<boolean>(n).fill(false)
-  for (let iter = 0; iter <= n; iter++) {
-    const free: number[] = []
-    for (let j = 0; j < n; j++) if (!pinned[j]) free.push(j)
-    if (free.length === 0) return Array<number>(n).fill(0)
-    const Afree = A.map(row => free.map(j => row[j]))
-    const xFree = lsqNormal(Afree, b)
-    if (!xFree) return null
-    const x = Array<number>(n).fill(0)
-    free.forEach((j, k) => { x[j] = xFree[k] })
-    let worst = -1e-9, toPin = -1
-    for (const j of free) { if (x[j] < worst) { worst = x[j]; toPin = j } }
-    if (toPin === -1) return x.map(v => (v < 0 ? 0 : v))
-    pinned[toPin] = true
-  }
-  return null
+const mealTarget = (meal: NutritionMeal, macro: MacroKey) => {
+  if (macro === 'protein') return meal.target_protein
+  if (macro === 'carbs') return meal.target_carbs
+  return meal.target_fat
 }
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -394,8 +347,15 @@ export default function ClientNutritionPage() {
   // ── Save button flash ──
   const [saveFlash, setSaveFlash] = useState<Set<string>>(new Set())
 
-  // Meals whose target can't be hit exactly with the chosen sources (after Berechnen)
-  const [calcWarnings, setCalcWarnings] = useState<Set<string>>(new Set())
+  // Per-meal warning lines (overshoot details) produced by "Berechnen"
+  const [calcWarnings, setCalcWarnings] = useState<Map<string, string[]>>(new Map())
+  // Meals that have been calculated at least once (a computed 0 g source is valid)
+  const [calculatedMeals, setCalculatedMeals] = useState<Set<string>>(new Set())
+  const invalidateCalc = (mealId: string) =>
+    setCalculatedMeals(prev => {
+      if (!prev.has(mealId)) return prev
+      const s = new Set(prev); s.delete(mealId); return s
+    })
 
   // ── Macro met flash ──
   const prevMacroRef = useRef<Map<string, boolean>>(new Map())
@@ -423,6 +383,7 @@ export default function ClientNutritionPage() {
   // ─── Zusatzquellen-Persistenz (ClientMealFood mit isExtra=true) ────────────
   // Neue Zusatzquelle anlegen (max. 1 pro Makro — ersetzt vorhandene serverseitig).
   const addExtra = async (mealId: string, cat: FoodCategory, food: Food) => {
+    invalidateCalc(mealId)
     const existing = extraSlots[mealId]?.[cat]
     if (existing) { await replaceExtraFood(mealId, cat, food); return }
     try {
@@ -439,6 +400,7 @@ export default function ClientNutritionPage() {
 
   // Food der bestehenden Zusatzquelle tauschen (Gramm bleiben).
   const replaceExtraFood = async (mealId: string, cat: FoodCategory, food: Food) => {
+    invalidateCalc(mealId)
     const existing = extraSlots[mealId]?.[cat]
     if (!existing) return
     try {
@@ -454,6 +416,7 @@ export default function ClientNutritionPage() {
 
   // Eingegebene Gramm persistieren (on blur).
   const persistExtraGrams = async (mealId: string, cat: FoodCategory) => {
+    invalidateCalc(mealId)
     const existing = extraSlots[mealId]?.[cat]
     if (!existing) return
     const grams = Math.max(0, parseFloat(existing.grams) || 0)
@@ -468,6 +431,7 @@ export default function ClientNutritionPage() {
 
   // Zusatzquelle entfernen (DB-Zeile löschen + aus State).
   const removeExtra = async (mealId: string, cat: FoodCategory) => {
+    invalidateCalc(mealId)
     const existing = extraSlots[mealId]?.[cat]
     setExtraSlot(mealId, cat, null)
     if (!existing) return
@@ -623,6 +587,7 @@ export default function ClientNutritionPage() {
   //     damit Kunde am Ende „Berechnen" klickt. ────────────────────────────
 
   const pickSlot = async (mealId: string, food: Food, slotCat: FoodCategory) => {
+    invalidateCalc(mealId)
     const toDelete = cmf.filter(c => c.meal_id === mealId && c.food.category === slotCat)
     const toReset  = cmf.filter(c => c.meal_id === mealId && c.food.category !== slotCat)
     try {
@@ -661,6 +626,7 @@ export default function ClientNutritionPage() {
   }
 
   const clearSlot = async (mealId: string, cat: FoodCategory) => {
+    invalidateCalc(mealId)
     const toDelete = cmf.filter(c => c.meal_id === mealId && c.food.category === cat)
     const toReset  = cmf.filter(c => c.meal_id === mealId && c.food.category !== cat)
     try {
@@ -688,67 +654,78 @@ export default function ClientNutritionPage() {
     }
   }
 
-  // ─── „Berechnen" (Modell A) ──────────────────────────────────────────────
-  // Solve the up-to-3 main sources SIMULTANEOUSLY across all macros (NNLS), so
-  // cross-contributions are accounted for. Extra sources are fixed (their full
-  // P/C/F is subtracted from the target); vegetables are ignored.
+  // ─── „Berechnen" ─────────────────────────────────────────────────────────
+  // Gauss-Seidel fills each selected main source toward its leading macro.
   const calcMeal = async (mealId: string) => {
     if (!plan) return
     const meal = plan.nutrition_meals.find(m => m.id === mealId)
     if (!meal) return
     const slots = slotsByMeal[mealId] ?? {}
 
-    // Main sources: one per macro category (max 3), in fixed P/C/F order.
-    const mains = [slots.protein, slots.carbs, slots.fat].filter(Boolean) as CmfWithFood[]
+    const mains = MACRO_KEYS
+      .map(macro => {
+        const source = slots[macroCategory(macro)]
+        return source ? { macro, source } : null
+      })
+      .filter(Boolean) as Array<{ macro: MacroKey; source: CmfWithFood }>
     if (mains.length === 0) {
       showToast('info', 'Keine Hauptquelle gewählt.')
       return
     }
 
-    // b = targets minus full macro vectors of all extra sources (vegetables ignored), clamped >= 0.
-    let exP = 0, exK = 0, exF = 0
+    const extra = { protein: 0, carbs: 0, fat: 0 } satisfies Record<MacroKey, number>
     for (const slot of Object.values(extraSlots[mealId] ?? {})) {
       if (!slot) continue
+      if (isFreeCat(slot.food.category)) continue
       const g = Math.max(0, parseFloat(slot.grams) || 0)
       const m = calcMacros(slot.food, g)
-      exP += m.protein; exK += m.carbs; exF += m.fat
+      extra.protein += m.protein
+      extra.carbs += m.carbs
+      extra.fat += m.fat
     }
-    const b = [
-      Math.max(0, meal.target_protein - exP),
-      Math.max(0, meal.target_carbs - exK),
-      Math.max(0, meal.target_fat - exF),
-    ]
 
-    // A (3×n): per-gram macro columns of the main sources.
-    const A = [
-      mains.map(c => c.food.protein_per_100g / 100),
-      mains.map(c => c.food.carbs_per_100g / 100),
-      mains.map(c => c.food.fat_per_100g / 100),
-    ]
+    // Gauss-Seidel: each source fills its leading macro after current cross-contributions.
+    const gramsByMacro = Object.fromEntries(
+      mains.map(({ macro, source }) => [macro, Math.max(0, source.amount_g ?? 0)]),
+    ) as Record<MacroKey, number>
 
-    // NNLS; fall back to per-macro division (Modell A) if the system is singular.
-    let grams = nnls(A, b)
-    if (!grams) {
-      grams = mains.map(c => {
-        const perG = (c.food.category === 'protein' ? c.food.protein_per_100g
-          : c.food.category === 'carbs' ? c.food.carbs_per_100g
-          : c.food.fat_per_100g) / 100
-        const tgt = c.food.category === 'protein' ? b[0] : c.food.category === 'carbs' ? b[1] : b[2]
-        return perG > 0 ? tgt / perG : 0
-      })
+    for (let pass = 0; pass < 12; pass++) {
+      for (const { macro, source } of mains) {
+        const density = macroDensity(source.food, macro)
+        const otherContribution = mains.reduce((sum, other) => {
+          if (other.macro === macro) return sum
+          return sum + macroDensity(other.source.food, macro) * (gramsByMacro[other.macro] ?? 0)
+        }, extra[macro])
+        gramsByMacro[macro] = density > 0
+          ? Math.max(0, (mealTarget(meal, macro) - otherContribution) / density)
+          : 0
+      }
     }
-    const rounded = grams.map(g => Math.max(0, Math.round(g)))
 
-    // Residual after rounding: warn if any macro is off by > 3 g.
-    const got = [0, 0, 0]
-    mains.forEach((c, j) => {
-      got[0] += (c.food.protein_per_100g * rounded[j]) / 100
-      got[1] += (c.food.carbs_per_100g * rounded[j]) / 100
-      got[2] += (c.food.fat_per_100g * rounded[j]) / 100
-    })
-    const infeasible = [0, 1, 2].some(i => Math.abs(got[i] - b[i]) > 3)
+    const updates = mains.map(({ macro, source }) => ({
+      id: source.id,
+      amountG: Math.max(0, Math.round(gramsByMacro[macro] ?? 0)),
+    }))
 
-    const updates = mains.map((c, j) => ({ id: c.id, amountG: rounded[j] }))
+    const got = { ...extra }
+    for (const { source } of mains) {
+      const grams = updates.find(u => u.id === source.id)?.amountG ?? 0
+      got.protein += macroDensity(source.food, 'protein') * grams
+      got.carbs += macroDensity(source.food, 'carbs') * grams
+      got.fat += macroDensity(source.food, 'fat') * grams
+    }
+    // Concrete hint for each macro that unavoidably OVERSHOOTS the target by > 3 g.
+    const warningLines: string[] = []
+    for (const macro of MACRO_KEYS) {
+      const target = mealTarget(meal, macro)
+      const actual = Math.round(got[macro])
+      if (actual - target > 3) {
+        const label = SLOT_LABEL[macro]
+        warningLines.push(
+          `${label}: ${actual} g statt ${target} g – die gewählten Quellen liefern schon ${actual} g ${label}. Wähle eine magerere Quelle oder erhöhe das ${label}-Ziel.`,
+        )
+      }
+    }
 
     try {
       await Promise.all(updates.map(u =>
@@ -764,10 +741,12 @@ export default function ClientNutritionPage() {
         return u ? { ...c, amount_g: u.amountG } : c
       }))
       setCalcWarnings(prev => {
-        const s = new Set(prev)
-        if (infeasible) s.add(mealId); else s.delete(mealId)
-        return s
+        const m = new Map(prev)
+        if (warningLines.length > 0) m.set(mealId, warningLines); else m.delete(mealId)
+        return m
       })
+      // Meal counts as calculated — a computed 0 g source is valid (Bug A).
+      setCalculatedMeals(prev => { const s = new Set(prev); s.add(mealId); return s })
       showToast('success', 'Berechnet ✓')
     } catch {
       showToast('error', 'Fehler beim Berechnen')
@@ -863,6 +842,7 @@ export default function ClientNutritionPage() {
     for (const cats of Object.values(extraSlots)) {
       for (const slot of Object.values(cats)) {
         if (!slot) continue
+        if (isFreeCat(slot.food.category)) continue
         const g = Math.max(0, parseFloat(slot.grams) || 0)
         const m = calcMacros(slot.food, g)
         ep += m.protein; ek += m.carbs; ef += m.fat; ecal += m.calories
@@ -872,14 +852,11 @@ export default function ClientNutritionPage() {
     const drinkCal = drinkLogs.reduce((s, d) => s + Number(d.calories ?? 0), 0)
     return { p: base.p + ep, k: base.k + ek, f: base.f + ef, cal: base.cal + ecal + drinkCal }
   }, [cmf, extraSlots, drinkLogs])
-  const slotsByMeal = useMemo(() => {
-    const map: Record<string, Partial<Record<FoodCategory, CmfWithFood>>> = {}
-    for (const c of cmf) {
-      if (!map[c.meal_id]) map[c.meal_id] = {}
-      map[c.meal_id][c.food.category] = c
-    }
-    return map
-  }, [cmf])
+  const slotsByMeal: Record<string, Partial<Record<FoodCategory, CmfWithFood>>> = {}
+  for (const c of cmf) {
+    if (!slotsByMeal[c.meal_id]) slotsByMeal[c.meal_id] = {}
+    slotsByMeal[c.meal_id][c.food.category] = c
+  }
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -953,6 +930,7 @@ export default function ClientNutritionPage() {
           let mEP = 0, mEK = 0, mEF = 0, mECal = 0
           for (const slot of Object.values(mealExtra)) {
             if (!slot) continue
+            if (isFreeCat(slot.food.category)) continue
             const g = Math.max(0, parseFloat(slot.grams) || 0)
             const em = calcMacros(slot.food, g)
             mEP += em.protein; mEK += em.carbs; mEF += em.fat; mECal += em.calories
@@ -970,7 +948,11 @@ export default function ClientNutritionPage() {
             { cat: 'fat'     as FoodCategory, cur: tAdj.f, tgt: meal.target_fat     },
           ].filter(m => allowed.includes(m.cat))
 
-          const allCalculated = items.length > 0 && items.every(it => (it.amount_g ?? 0) > 0)
+          // A meal is ready to save once it has been calculated (a computed 0 g
+          // source is valid), or — for older data — when every source has grams.
+          const allCalculated = items.length > 0 && (
+            calculatedMeals.has(meal.id) || items.every(it => (it.amount_g ?? 0) > 0)
+          )
 
           const isOpen = openCards.has(meal.id)
           const isFlashing = saveFlash.has(meal.id)
@@ -1026,10 +1008,12 @@ export default function ClientNutritionPage() {
                 </div>
               </button>
 
-              {calcWarnings.has(meal.id) && (
-                <p className="px-5 pb-2 text-[10px] text-amber-300/90">
-                  Ziel mit dieser Auswahl nicht exakt erreichbar.
-                </p>
+              {(calcWarnings.get(meal.id)?.length ?? 0) > 0 && (
+                <div className="px-5 pb-2 space-y-1">
+                  {calcWarnings.get(meal.id)!.map((line, idx) => (
+                    <p key={idx} className="text-[10px] leading-snug text-amber-300/90">{line}</p>
+                  ))}
+                </div>
               )}
 
               {/* Collapsible body */}
@@ -1262,18 +1246,11 @@ export default function ClientNutritionPage() {
                 </div>
               )}
 
-              {/* „Berechnen" — sichtbar wenn alle Makro-Slots gefüllt sind und irgendetwas uncalc ist (auch Gemüse) */}
+              {/* „Berechnen" — visible once the meal has targets and at least one main source. */}
               {(() => {
-                const filledCount = allowed.filter(cat => slots[cat]).length
-                const allMacroFilled = filledCount === allowed.length && allowed.length > 0
-                const macroItems = allowed.map(c => slots[c]).filter(Boolean) as CmfWithFood[]
-                const allMealItems = [
-                  ...macroItems,
-                  ...allowedFree.map(c => slots[c]).filter(Boolean) as CmfWithFood[],
-                ]
-                // Treat null the same as 0 — both mean "not yet calculated"
-                const anyUncalc = allMealItems.some(it => !(it.amount_g ?? 0))
-                if (allMacroFilled && anyUncalc) {
+                const macroItems = SLOT_CATS.map(c => slots[c]).filter(Boolean) as CmfWithFood[]
+                const hasMacroTargets = MACRO_KEYS.some(macro => mealTarget(meal, macro) > 0)
+                if (hasMacroTargets && macroItems.length > 0) {
                   return (
                     <div className="px-5 py-3 bg-[#A78BFA]/[0.06] border-t border-[#A78BFA]/20">
                       <button

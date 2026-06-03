@@ -45,6 +45,33 @@ async function main() {
   });
 
   console.log("✓ TrainerProfile id:", profile.id);
+
+  // ── Global drink catalog (trainerId: null) — idempotent ────────────────────
+  const globalDrinks: Array<{ name: string; kcalPer100ml: number }> = [
+    { name: "Wasser", kcalPer100ml: 0 },
+    { name: "Kaffee", kcalPer100ml: 2 },
+    { name: "Milch", kcalPer100ml: 61 },
+    { name: "Cola Zero", kcalPer100ml: 0 },
+    { name: "Red Bull Zero", kcalPer100ml: 3 },
+    { name: "Red Bull (mit Zucker)", kcalPer100ml: 46 },
+    { name: "Orangensaft", kcalPer100ml: 45 },
+    { name: "Apfelsaft", kcalPer100ml: 46 },
+  ];
+
+  let createdDrinks = 0;
+  for (const d of globalDrinks) {
+    const existing = await prisma.drink.findFirst({
+      where: { name: d.name, trainerId: null },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await prisma.drink.create({
+      data: { trainerId: null, name: d.name, kcalPer100ml: d.kcalPer100ml, unit: "ml" },
+    });
+    createdDrinks += 1;
+  }
+  console.log(`✓ Global drinks: ${createdDrinks} created, ${globalDrinks.length - createdDrinks} already present.`);
+
   console.log("Seed complete — trainer login ready.");
 }
 

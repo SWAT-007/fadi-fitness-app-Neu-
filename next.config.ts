@@ -38,6 +38,29 @@ const nextConfig = withPWAConfig({
       ...(prodPattern ? [prodPattern] : []),
     ],
   },
+  // Keep the dev file-watcher from recompiling/full-reloading on generated
+  // artifacts (Playwright screenshots/logs, graphify output). Writing these into
+  // the project root otherwise triggers an endless Fast-Refresh → GET /client loop.
+  webpack: (
+    config: import("webpack").Configuration,
+    { dev }: { dev: boolean },
+  ) => {
+    if (dev) {
+      config.watchOptions = {
+        ...(config.watchOptions ?? {}),
+        ignored: [
+          "**/node_modules/**",
+          "**/.git/**",
+          "**/.next/**",
+          "**/.playwright-mcp/**",
+          "**/review-*.png",
+          "**/graphify-out/**",
+          "**/uploads/**",
+        ],
+      };
+    }
+    return config;
+  },
 });
 
 export default nextConfig;

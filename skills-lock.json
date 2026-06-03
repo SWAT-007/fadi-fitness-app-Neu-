@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "design-review": {
+      "source": "julianoczkowski/designer-skills",
+      "sourceType": "github",
+      "skillPath": "design-review/SKILL.md",
+      "computedHash": "a90668e07da71e4fe011148e2f989f628521d384cf4f1aaa0f3fddc836254cfb"
+    }
+  }
+}

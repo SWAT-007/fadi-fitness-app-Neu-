@@ -31,6 +31,34 @@ const getCurrentMonthStartKey = () => {
   return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
 };
 
+// Start of the current day in Europe/Berlin, returned as a UTC Date.
+// DST-aware via Intl (no extra dependency).
+const berlinDayStart = (now: Date = new Date()): Date => {
+  const offsetMsAt = (date: Date): number => {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Berlin",
+      hour12: false,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    }).formatToParts(date).reduce<Record<string, string>>((acc, p) => {
+      acc[p.type] = p.value;
+      return acc;
+    }, {});
+    const hour = parts.hour === "24" ? 0 : Number(parts.hour); // Intl midnight quirk
+    const asUtc = Date.UTC(
+      Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+      hour, Number(parts.minute), Number(parts.second),
+    );
+    return asUtc - date.getTime(); // ms Berlin is ahead of UTC at `date`
+  };
+  const offset = offsetMsAt(now);
+  const berlinNow = new Date(now.getTime() + offset);
+  const startWallUtc = Date.UTC(
+    berlinNow.getUTCFullYear(), berlinNow.getUTCMonth(), berlinNow.getUTCDate(), 0, 0, 0,
+  );
+  return new Date(startWallUtc - offset);
+};
+
 meRouter.get("/", requireAuth, (req: AuthenticatedRequest, res) => {
   res.json({ user: req.user });
 });
@@ -1148,8 +1176,9 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
       return res.status(404).json({ message: "Not found" });
     }
 
-    const todayStart = new Date();
-    todayStart.setUTCHours(0, 0, 0, 0);
+    // "Today" boundary in Europe/Berlin (not UTC), so entries don't vanish at
+    // UTC midnight for German users.
+    const todayStart = berlinDayStart();
 
     const [activeNutritionPlan, foods, clientMealFoods, mealHistory, drinkLogs, drinks] = await Promise.all([
       prisma.assignedNutritionPlan.findFirst({
