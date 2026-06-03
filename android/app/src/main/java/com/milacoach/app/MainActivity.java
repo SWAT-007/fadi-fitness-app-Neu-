@@ -12,11 +12,9 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
 
-        // Gespeicherten Token aus SharedPreferences wiederherstellen
         String saved = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getString(COOKIE_KEY, null);
         if (saved != null && !saved.isEmpty()) {
@@ -25,7 +23,8 @@ public class MainActivity extends BridgeActivity {
             cm.flush();
         }
 
-        // Lokales Caching: gecachte Seiten/Assets sofort laden, Netz nur als Fallback
+        super.onCreate(savedInstanceState);
+
         android.webkit.WebView webView = getBridge().getWebView();
         if (webView != null) {
             android.webkit.WebSettings settings = webView.getSettings();

@@ -1,14 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 
 const normalizeEmail = (v: string) => v.trim().toLowerCase()
 
-interface LoginResponse { ok?: boolean; message?: string; errorId?: string }
+interface LoginResponse { ok?: boolean; message?: string; errorId?: string; token?: string; user?: { role?: string } | null }
 interface MeResponse { ok?: boolean; user?: { role?: string } | null; message?: string; errorId?: string }
+interface RestoreResponse { ok?: boolean }
 const withErrorId = (m: string, id?: string) => id ? `${m} (Fehler-ID: ${id})` : m
+
+const getStoredAuthToken = () =>
+  typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null
+
+const setStoredAuthToken = (token: string) => {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem('auth_token', token)
+}
+
+const clearStoredAuthToken = () => {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem('auth_token')
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,6 +31,59 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showForm, setShowForm] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const restoreSession = async () => {
+      const token = getStoredAuthToken()
+      if (!token) return
+
+      try {
+        setLoading(true)
+        const restoreRes = await fetch('/api/backend/auth/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        })
+        const restorePayload = await restoreRes.json().catch(() => null) as RestoreResponse | null
+        if (!restoreRes.ok || !restorePayload?.ok) {
+          clearStoredAuthToken()
+          return
+        }
+
+        const meRes = await fetch('/api/backend/auth/me', { method: 'GET', cache: 'no-store' })
+        const mePayload = await meRes.json().catch(() => null) as MeResponse | null
+        if (!meRes.ok || !mePayload?.ok || !mePayload.user?.role) {
+          clearStoredAuthToken()
+          return
+        }
+
+        if (cancelled) return
+        const role = mePayload.user.role.toLowerCase()
+        if (role === 'trainer' || role === 'admin') {
+          router.replace('/admin')
+          return
+        }
+        if (role === 'client') {
+          router.replace('/client')
+          return
+        }
+
+        clearStoredAuthToken()
+      } catch {
+        // Keep the login form available if restore fails unexpectedly.
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    void restoreSession()
+
+    return () => {
+      cancelled = true
+    }
+  }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -30,14 +97,21 @@ export default function LoginPage() {
       })
       const loginPayload = await loginRes.json().catch(() => null) as LoginResponse | null
       if (!loginRes.ok) { setError(withErrorId(loginPayload?.message ?? 'Anmeldung fehlgeschlagen.', loginPayload?.errorId)); setLoading(false); return }
+      if (loginPayload?.token) setStoredAuthToken(loginPayload.token)
 
       const meRes = await fetch('/api/backend/auth/me', { method: 'GET', cache: 'no-store' })
       const mePayload = await meRes.json().catch(() => null) as MeResponse | null
-      if (!meRes.ok || !mePayload?.ok || !mePayload.user?.role) { setError(withErrorId(mePayload?.message ?? 'Sitzung konnte nicht validiert werden.', mePayload?.errorId)); setLoading(false); return }
+      if (!meRes.ok || !mePayload?.ok || !mePayload.user?.role) {
+        clearStoredAuthToken()
+        setError(withErrorId(mePayload?.message ?? 'Sitzung konnte nicht validiert werden.', mePayload?.errorId))
+        setLoading(false)
+        return
+      }
 
       const role = mePayload.user.role.toLowerCase()
       if (role === 'trainer' || role === 'admin') { router.push('/admin'); return }
       if (role === 'client') { router.push('/client'); return }
+      clearStoredAuthToken()
       setError('Unbekannte Benutzerrolle.')
       setLoading(false)
     } catch {

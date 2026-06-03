@@ -34,6 +34,7 @@ export async function POST(request: Request) {
 
     const backendPayload = await backendResponse.json().catch(() => null) as {
       token?: unknown
+      user?: unknown
       message?: unknown
     } | null
 
@@ -43,11 +44,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, message }, { status: backendResponse.status || 401 })
     }
 
-    const response = NextResponse.json({ ok: true })
+    const response = NextResponse.json({
+      ok: true,
+      user: backendPayload?.user ?? null,
+      token,
+    })
     response.cookies.set(BACKEND_TOKEN_COOKIE, token, COOKIE_OPTIONS)
     return response
   } catch {
     return NextResponse.json({ ok: false, message: 'Backend unavailable' }, { status: 502 })
   }
 }
-

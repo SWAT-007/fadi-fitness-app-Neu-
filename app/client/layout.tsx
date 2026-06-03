@@ -41,10 +41,22 @@ interface ClientProfilePayload {
   client?: { id: string; fullName: string; email: string } | null
 }
 
+interface RestoreResponse {
+  ok?: boolean
+}
+
 interface BackendNotification {
   id: string
   type: string
   is_read: boolean
+}
+
+const getStoredAuthToken = () =>
+  typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null
+
+const clearStoredAuthToken = () => {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem('auth_token')
 }
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
@@ -61,10 +73,41 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const authResponse = await fetch('/api/backend/auth/me', { method: 'GET', cache: 'no-store' })
-        const authPayload = await authResponse.json().catch(() => null) as AuthMePayload | null
+        const loadAuth = async () => {
+          const response = await fetch('/api/backend/auth/me', { method: 'GET', cache: 'no-store' })
+          const payload = await response.json().catch(() => null) as AuthMePayload | null
+          return { response, payload }
+        }
+
+        let { response: authResponse, payload: authPayload } = await loadAuth()
+
+        if (authResponse.status === 401) {
+          const token = getStoredAuthToken()
+          if (!token) {
+            router.replace('/login')
+            return
+          }
+
+          const restoreResponse = await fetch('/api/backend/auth/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+          })
+          const restorePayload = await restoreResponse.json().catch(() => null) as RestoreResponse | null
+
+          if (!restoreResponse.ok || !restorePayload?.ok) {
+            clearStoredAuthToken()
+            router.replace('/login')
+            return
+          }
+
+          const retried = await loadAuth()
+          authResponse = retried.response
+          authPayload = retried.payload
+        }
 
         if (!authResponse.ok || !authPayload?.ok || !authPayload.user?.role) {
+          if (authResponse.status === 401) clearStoredAuthToken()
           router.replace('/login')
           return
         }
@@ -140,6 +183,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   const handleLogout = async () => {
     try {
+      clearStoredAuthToken()
       await fetch('/api/backend/auth/logout', { method: 'POST' })
     } finally {
       router.replace('/login')
