@@ -191,7 +191,7 @@ export default function WorkoutDayPage() {
   if (loading) {
     return (
       <div className="flex justify-center p-12">
-        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -199,7 +199,7 @@ export default function WorkoutDayPage() {
   if (errorMessage) {
     return (
       <div className="p-4 max-w-lg mx-auto">
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
           {errorMessage}
         </div>
         <Link href="/client/plan" className="text-sm text-[#A78BFA]">← Zurück zum Plan</Link>
@@ -255,7 +255,7 @@ export default function WorkoutDayPage() {
               highlightedExId === ex.id ? 'bg-[#A78BFA]/10 ring-1 ring-inset ring-[#A78BFA]/35 transition-colors duration-500' : ''
             }`}
           >
-            <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-xs font-bold text-[#797D83] flex-shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-[rgba(167,139,250,0.12)] flex items-center justify-center text-xs font-bold text-[#A78BFA] flex-shrink-0">
               {i + 1}
             </div>
             <div className="flex-1 min-w-0">
@@ -271,7 +271,7 @@ export default function WorkoutDayPage() {
 
       <button
         onClick={handleStart}
-        className="w-full py-5 bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold rounded-2xl transition-colors shadow-lg shadow-emerald-100"
+        className="btn-primary press w-full py-5 text-lg font-bold"
       >
         Training starten →
       </button>
@@ -284,7 +284,7 @@ export default function WorkoutDayPage() {
   if (phase === 'active') return (
     <div>
       {/* Sticky header: timer + progress */}
-      <div className="sticky top-0 z-10 bg-white border-b border-white/[0.06] px-4 py-3">
+      <div className="sticky top-0 z-10 bg-[#0b0c0f]/95 backdrop-blur-md border-b border-white/[0.06] px-4 py-3">
         <div className="flex items-center justify-between mb-2 max-w-lg mx-auto">
           <div>
             <div className="font-bold text-[#EDECEA] text-sm">{day?.name}</div>
@@ -295,9 +295,9 @@ export default function WorkoutDayPage() {
             <div className="text-xs text-[#797D83]">Trainingszeit</div>
           </div>
         </div>
-        <div className="bg-gray-100 rounded-full h-1.5 max-w-lg mx-auto">
+        <div className="bg-white/[0.07] rounded-full h-1.5 max-w-lg mx-auto">
           <div
-            className="bg-emerald-500 h-1.5 rounded-full transition-all duration-300"
+            className="bg-[#A78BFA] h-1.5 rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(167,139,250,0.6)]"
             style={{ width: exercises.length > 0 ? `${(completedCount / exercises.length) * 100}%` : '0%' }}
           />
         </div>
@@ -313,14 +313,14 @@ export default function WorkoutDayPage() {
           return (
             <div
               key={ex.id}
-              className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-colors ${
-                exerciseCompleted ? 'border-emerald-200' : 'border-white/[0.06]'
+              className={`bg-[#111111] rounded-2xl border overflow-hidden transition-colors ${
+                exerciseCompleted ? 'border-[#A78BFA]/40' : 'border-white/[0.06]'
               }`}
             >
               {/* Header */}
-              <div className={`flex items-start gap-3 px-4 py-4 ${exerciseCompleted ? 'bg-emerald-50' : ''}`}>
+              <div className={`flex items-start gap-3 px-4 py-4 ${exerciseCompleted ? 'bg-[#A78BFA]/10' : ''}`}>
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 ${
-                  exerciseCompleted ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-[#797D83]'
+                  exerciseCompleted ? 'bg-[#A78BFA] text-[#050504]' : 'bg-white/[0.06] text-[#797D83]'
                 }`}>
                   {exerciseCompleted ? '✓' : i + 1}
                 </div>
@@ -339,7 +339,7 @@ export default function WorkoutDayPage() {
                 {/* Column headers */}
                 <div className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 px-4 pt-1 pb-2">
                   <div className="flex flex-col items-center gap-0.5">
-                    <svg className="w-3 h-3 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-3 h-3 text-[#797D83]" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
                     </svg>
                     <span className="text-[10px] font-semibold text-[#797D83]">#</span>
@@ -358,9 +358,9 @@ export default function WorkoutDayPage() {
                       const orm = calc1RM(set.weight, set.reps)
                       if (isActive) {
                         return (
-                          <div key={setIndex} className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 bg-blue-50 rounded-2xl px-2 py-2">
+                          <div key={setIndex} className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 bg-[#A78BFA]/[0.08] rounded-2xl px-2 py-2 border border-[#A78BFA]/[0.12]">
                             <div className="relative flex items-center justify-center">
-                              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-blue-500" />
+                              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#A78BFA] shadow-[0_0_6px_rgba(167,139,250,0.8)]" />
                               <span className="text-sm font-bold text-[#EDECEA] tabular-nums">{setIndex + 1}</span>
                             </div>
                             <input
@@ -370,14 +370,14 @@ export default function WorkoutDayPage() {
                               value={set.weight}
                               onChange={e => updateSetLog(ex.id, setIndex, 'weight', e.target.value)}
                               placeholder="—"
-                              className="w-full px-2 py-2 bg-white rounded-xl text-sm text-center font-bold text-[#EDECEA] tabular-nums shadow-sm border-0 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                              className="w-full px-2 py-2 bg-white/[0.07] rounded-xl text-sm text-center font-bold text-[#EDECEA] tabular-nums border border-white/[0.08] focus:ring-2 focus:ring-[#A78BFA]/40 focus:border-[#A78BFA]/30 focus:outline-none"
                             />
                             <span className="text-sm font-bold text-[#EDECEA] text-center tabular-nums">{set.reps}</span>
-                            <span className="text-xs font-medium text-blue-500 text-center tabular-nums">{orm}</span>
+                            <span className="text-xs font-medium text-[#A78BFA] text-center tabular-nums">{orm}</span>
                             <button
                               type="button"
                               onClick={() => updateSetLog(ex.id, setIndex, 'completed', !set.completed)}
-                              className="w-9 h-9 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center text-white transition-colors shadow-sm mx-auto"
+                              className="w-9 h-9 rounded-full bg-[#A78BFA] hover:bg-[#B79FFB] flex items-center justify-center text-[#050504] transition-colors shadow-[0_4px_12px_rgba(167,139,250,0.4)] mx-auto"
                             >
                               <CheckIcon />
                             </button>
@@ -387,14 +387,14 @@ export default function WorkoutDayPage() {
                       if (set.completed) {
                         return (
                           <div key={setIndex} className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 px-2 py-2">
-                            <span className="text-sm font-semibold text-emerald-500 text-center tabular-nums">{setIndex + 1}</span>
+                            <span className="text-sm font-semibold text-[#A78BFA] text-center tabular-nums">{setIndex + 1}</span>
                             <span className="text-sm text-[#797D83] text-center tabular-nums">{set.weight || '—'}</span>
                             <span className="text-sm text-[#797D83] text-center tabular-nums">{set.reps}</span>
                             <span className="text-xs text-[#797D83] text-center tabular-nums">{orm}</span>
                             <button
                               type="button"
                               onClick={() => updateSetLog(ex.id, setIndex, 'completed', !set.completed)}
-                              className="w-9 h-9 rounded-full bg-[#A78BFA]/10 flex items-center justify-center text-emerald-500 mx-auto"
+                              className="w-9 h-9 rounded-full bg-[#A78BFA]/10 flex items-center justify-center text-[#A78BFA] mx-auto"
                             >
                               <CheckIcon />
                             </button>
@@ -411,10 +411,10 @@ export default function WorkoutDayPage() {
                             value={set.weight}
                             onChange={e => updateSetLog(ex.id, setIndex, 'weight', e.target.value)}
                             placeholder="—"
-                            className="w-full px-2 py-2 bg-white/[0.03] border border-white/[0.06] rounded-xl text-sm text-center text-[#797D83] tabular-nums focus:ring-1 focus:ring-gray-300 focus:outline-none"
+                            className="w-full px-2 py-2 bg-white/[0.03] border border-white/[0.06] rounded-xl text-sm text-center text-[#797D83] tabular-nums focus:ring-1 focus:ring-[#A78BFA]/30 focus:outline-none"
                           />
                           <span className="text-sm text-[#797D83] text-center tabular-nums">{set.reps}</span>
-                          <span className="text-xs text-gray-300 text-center">—</span>
+                          <span className="text-xs text-[#797D83]/40 text-center">—</span>
                           <button
                             type="button"
                             disabled
@@ -433,18 +433,18 @@ export default function WorkoutDayPage() {
         })}
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl">
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl">
             {error}
           </div>
         )}
       </div>
 
       {/* Fixed CTA — sits above the client bottom nav (~64px tall) */}
-      <div className="fixed bottom-16 left-0 right-0 px-4 pb-2 pt-3 bg-white/90 backdrop-blur border-t border-white/[0.06]">
+      <div className="fixed bottom-16 left-0 right-0 px-4 pb-2 pt-3 bg-[#0b0c0f]/90 backdrop-blur border-t border-white/[0.06]">
         <button
           onClick={handleComplete}
           disabled={saving}
-          className="w-full max-w-lg mx-auto block py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-2xl transition-colors text-base"
+          className="btn-primary press w-full max-w-lg mx-auto block py-4 disabled:opacity-50 text-base"
         >
           {saving ? 'Wird gespeichert…' : 'Workout abschließen ✓'}
         </button>
@@ -456,34 +456,34 @@ export default function WorkoutDayPage() {
   // Phase 3 — Completion screen
   // ══════════════════════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen bg-emerald-600 flex flex-col items-center justify-center p-6 text-white">
+    <div className="min-h-screen bg-[#A78BFA] flex flex-col items-center justify-center p-6 text-white">
       <div className="text-7xl mb-6">🏆</div>
 
       <h1 className="text-3xl font-bold text-center mb-1">Stark gemacht!</h1>
-      <p className="text-emerald-200 text-center mb-10">{day?.name} abgeschlossen</p>
+      <p className="text-white/70 text-center mb-10">{day?.name} abgeschlossen</p>
 
-      <div className="w-full max-w-sm bg-white/15 rounded-3xl p-6 grid grid-cols-2 gap-5 mb-10">
+      <div className="w-full max-w-sm bg-white/15 rounded-3xl p-6 grid grid-cols-2 gap-5 mb-10 border border-white/20">
         <div className="text-center">
           <div className="text-3xl font-bold tabular-nums">{formatTime(finalDuration)}</div>
-          <div className="text-emerald-200 text-sm mt-1">Dauer</div>
+          <div className="text-white/60 text-sm mt-1">Dauer</div>
         </div>
         <div className="text-center">
           <div className="text-3xl font-bold">{exercises.length}</div>
-          <div className="text-emerald-200 text-sm mt-1">Übungen</div>
+          <div className="text-white/60 text-sm mt-1">Übungen</div>
         </div>
         <div className="text-center">
           <div className="text-3xl font-bold">{completedCount}</div>
-          <div className="text-emerald-200 text-sm mt-1">Abgehakt</div>
+          <div className="text-white/60 text-sm mt-1">Abgehakt</div>
         </div>
         <div className="text-center">
           <div className="text-3xl font-bold">{totalSets}</div>
-          <div className="text-emerald-200 text-sm mt-1">Sätze</div>
+          <div className="text-white/60 text-sm mt-1">Sätze</div>
         </div>
       </div>
 
       <Link
         href="/client"
-        className="w-full max-w-sm py-4 bg-white text-[#A78BFA] font-bold rounded-2xl text-center block hover:bg-emerald-50 transition-colors"
+        className="w-full max-w-sm py-4 bg-[#050504] text-[#A78BFA] font-bold rounded-2xl text-center block hover:bg-[#111111] transition-colors"
       >
         Zurück zum Dashboard
       </Link>
