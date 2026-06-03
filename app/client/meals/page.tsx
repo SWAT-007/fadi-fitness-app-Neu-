@@ -194,22 +194,22 @@ export default function MealsPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="p-4 max-w-lg mx-auto pb-8">
-      <h1 className="text-display !text-gray-900">Freies Protokoll</h1>
-      <p className="text-sm text-gray-500 mt-1 mb-5">
+      <h1 className="text-display">Freies Protokoll</h1>
+      <p className="text-sm text-[#797D83] mt-1 mb-5">
         Für freie Einträge. Dein Haupt-Ernährungsplan ist unter Ernährung.
       </p>
 
       {/* ── Log Form ────────────────────────────────────────────────────────── */}
-      <div ref={formRef} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
+      <div ref={formRef} className="card-secondary p-5 mb-6">
         <h2 className="text-section mb-4">Neuer Eintrag</h2>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-3">
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl mb-3">
             {error}
           </div>
         )}
         {flash && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm px-4 py-3 rounded-xl mb-3">
+          <div className="bg-green-500/10 border border-green-500/20 text-green-400 text-sm px-4 py-3 rounded-xl mb-3">
             {flash}
           </div>
         )}
@@ -217,7 +217,7 @@ export default function MealsPage() {
         <form onSubmit={handleSave} className="space-y-3">
           {/* Name */}
           <div>
-            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-semibold text-[#797D83] uppercase tracking-wide mb-1.5">
               Bezeichnung
             </label>
             <input
@@ -225,7 +225,7 @@ export default function MealsPage() {
               onChange={set('meal_name')}
               required
               placeholder="z.B. Haferflocken mit Beeren"
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
+              className="w-full px-4 py-2.5 bg-[#0b0c0f] border border-white/[0.1] rounded-xl text-sm text-[#EDECEA] placeholder-[#797D83] focus:border-[#A78BFA]/40 focus:outline-none transition"
             />
           </div>
 
@@ -238,7 +238,7 @@ export default function MealsPage() {
               { field: 'fat_g'     as const, label: 'Fett',          unit: 'g',    step: '0.1' },
             ] as const).map(({ field, label, unit, step }) => (
               <div key={field}>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                <label className="block text-xs font-semibold text-[#797D83] uppercase tracking-wide mb-1.5">
                   {label}
                 </label>
                 <div className="relative">
@@ -249,9 +249,9 @@ export default function MealsPage() {
                     value={form[field]}
                     onChange={set(field)}
                     placeholder="0"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition pr-10"
+                    className="w-full px-3 py-2.5 bg-[#0b0c0f] border border-white/[0.1] rounded-xl text-sm text-[#EDECEA] placeholder-[#797D83] focus:border-[#A78BFA]/40 focus:outline-none transition pr-10"
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#797D83] pointer-events-none">
                     {unit}
                   </span>
                 </div>
@@ -262,7 +262,7 @@ export default function MealsPage() {
           <button
             type="submit"
             disabled={saving || !form.meal_name.trim()}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors text-sm mt-1"
+            className="btn-primary press w-full py-3 disabled:opacity-40 text-sm mt-1"
           >
             {saving ? 'Speichern…' : 'Mahlzeit speichern'}
           </button>
@@ -272,15 +272,14 @@ export default function MealsPage() {
       {/* ── History ─────────────────────────────────────────────────────────── */}
       {loading ? (
         <div className="flex justify-center py-8">
-          <div className="w-7 h-7 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-7 h-7 border-4 border-[#A78BFA] border-t-transparent rounded-full animate-spin" />
         </div>
       ) : grouped.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+        <div className="card-secondary">
           <EmptyState
             icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M5 3v7a2 2 0 002 2 2 2 0 002-2V3M7 12v9" /><path d="M16 3c-1.4 1-2.2 3-2.2 5.5 0 1.9 1 3 2.2 3.2V21" /></svg>}
             title="Noch keine Mahlzeiten"
             subtext="Trage deine erste Mahlzeit oben ein."
-            className="!text-gray-900"
           />
         </div>
       ) : (
@@ -300,39 +299,39 @@ export default function MealsPage() {
             const hasAnyMacros = total.calories > 0 || total.protein_g > 0
 
             return (
-              <div key={group.dateKey} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div key={group.dateKey} className="card-secondary overflow-hidden">
                 {/* Day header */}
-                <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                <div className="px-5 py-3 bg-white/[0.02] border-b border-white/[0.06] flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[#797D83] uppercase tracking-wide">
                     {group.label}
                   </span>
                   {hasAnyMacros && (
                     <div className="flex items-center gap-2">
                       {total.calories > 0 && (
-                        <span className="text-xs font-medium text-gray-600">{Math.round(total.calories)} kcal</span>
+                        <span className="text-xs font-medium text-[#EDECEA]">{Math.round(total.calories)} kcal</span>
                       )}
                     </div>
                   )}
                 </div>
 
                 {/* Meal rows */}
-                <ul className="divide-y divide-gray-100">
+                <ul className="divide-y divide-white/[0.06]">
                   {group.items.map(log => (
                     <li key={log.id} className="flex items-start gap-3 px-5 py-4">
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 text-sm leading-snug">{log.meal_name}</p>
+                        <p className="font-medium text-[#EDECEA] text-sm leading-snug">{log.meal_name}</p>
                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                          {log.calories  != null && <MacroBadge value={log.calories}  unit=" kcal" color="text-gray-500"   />}
-                          {log.protein_g != null && <MacroBadge value={log.protein_g} unit="g E"   color="text-blue-600"  />}
-                          {log.carbs_g   != null && <MacroBadge value={log.carbs_g}   unit="g K"   color="text-green-600" />}
-                          {log.fat_g     != null && <MacroBadge value={log.fat_g}     unit="g F"   color="text-yellow-600"/>}
+                          {log.calories  != null && <MacroBadge value={log.calories}  unit=" kcal" color="text-[#797D83]"  />}
+                          {log.protein_g != null && <MacroBadge value={log.protein_g} unit="g E"   color="text-blue-400"  />}
+                          {log.carbs_g   != null && <MacroBadge value={log.carbs_g}   unit="g K"   color="text-green-400" />}
+                          {log.fat_g     != null && <MacroBadge value={log.fat_g}     unit="g F"   color="text-yellow-400"/>}
                         </div>
                       </div>
 
                       {/* Re-add button */}
                       <button
                         onClick={() => reAdd(log)}
-                        className="flex-shrink-0 text-xs font-semibold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                        className="flex-shrink-0 text-xs font-semibold text-[#A78BFA] hover:text-[#A78BFA] bg-[#A78BFA]/10 hover:bg-[#A78BFA]/20 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
                       >
                         + Nochmal
                       </button>
