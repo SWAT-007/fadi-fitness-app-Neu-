@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3001 --webpack",
-    "build": "prisma generate && prisma migrate deploy && tsc --noEmit && next build --webpack",
-    "start": "next start",
+    "build": "prisma generate && tsc --noEmit && next build --webpack",
+    "start": "prisma migrate deploy && next start",
     "start:api": "tsx server/src/index.ts",
     "lint": "eslint",
     "dev:api": "tsx watch server/src/index.ts",
