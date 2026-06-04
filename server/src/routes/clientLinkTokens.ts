@@ -3,6 +3,7 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import { Prisma, UserRole } from "@prisma/client";
 import { prisma } from "../db";
+import { resolveScope } from "../lib/scope";
 import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { unexpectedErrorResponse } from "../utils/errors";
 
@@ -66,12 +67,9 @@ clientLinkTokensRouter.post("/", requireAuth, async (req: AuthenticatedRequest, 
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
+    const scope = await resolveScope(req.user);
+    const ownedTrainerId = scope.trainerProfileId;
+    if (!ownedTrainerId) {
       return res.status(500).json({ message: "Internal server error" });
     }
 
@@ -81,7 +79,7 @@ clientLinkTokensRouter.post("/", requireAuth, async (req: AuthenticatedRequest, 
 
     await prisma.clientLinkToken.create({
       data: {
-        trainerId: trainerProfile.id,
+        trainerId: ownedTrainerId,
         email,
         tokenHash,
         expiresAt,

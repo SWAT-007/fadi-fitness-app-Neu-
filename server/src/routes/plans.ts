@@ -3,6 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { prisma } from "../db";
+import { resolveScope } from "../lib/scope";
 import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { buildExerciseChangeLink, createRequestAcceptedNotification } from "./notificationHelpers";
 
@@ -147,19 +148,16 @@ plansRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
+    const scope = await resolveScope(req.user);
+    const ownedTrainerId = scope.trainerProfileId;
+    if (!ownedTrainerId) {
       return res.status(500).json({ message: "Internal server error" });
     }
 
     const result = await prisma.$transaction(async (tx) => {
       const createdPlan = await tx.workoutPlan.create({
         data: {
-          trainerId: trainerProfile.id,
+          trainerId: ownedTrainerId,
           name: planName,
           description: planDescription,
         },
@@ -226,17 +224,12 @@ plansRouter.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const plans = await prisma.workoutPlan.findMany({
-      where: { trainerId: trainerProfile.id },
+      where: {
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
@@ -272,19 +265,12 @@ plansRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const plan = await prisma.workoutPlan.findFirst({
       where: {
         id: planId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       include: {
         days: {
@@ -377,18 +363,15 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
     typeof requestIdInput === "string" && requestIdInput.length > 0 ? requestIdInput : null;
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     await prisma.$transaction(async (tx) => {
       // Plan must belong to this trainer
       const existingPlan = await tx.workoutPlan.findFirst({
-        where: { id: planId, trainerId: trainerProfile.id },
+        where: {
+          id: planId,
+          ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+        },
         select: { id: true },
       });
       if (!existingPlan) {
@@ -508,7 +491,9 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
           where: {
             id: requestId,
             day: { planId },
-            client: { trainerId: trainerProfile.id },
+            ...(scope.filterTrainerId && {
+              client: { trainerId: scope.filterTrainerId },
+            }),
           },
           select: {
             id: true,
@@ -540,7 +525,10 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
 
     // Return the freshly saved plan tree (with REAL ids) — same shape as GET /:id
     const saved = await prisma.workoutPlan.findFirst({
-      where: { id: planId, trainerId: trainerProfile.id },
+      where: {
+        id: planId,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
       include: {
         days: {
           orderBy: { sortOrder: "asc" },
@@ -623,19 +611,12 @@ plansRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) =>
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existingPlan = await prisma.workoutPlan.findFirst({
       where: {
         id: planId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       select: { id: true },
     });
@@ -686,19 +667,12 @@ plansRouter.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res) =
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existingPlan = await prisma.workoutPlan.findFirst({
       where: {
         id: planId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       select: { id: true },
     });
@@ -746,19 +720,12 @@ plansRouter.post("/:id/days", requireAuth, async (req: AuthenticatedRequest, res
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existingPlan = await prisma.workoutPlan.findFirst({
       where: {
         id: planId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       select: {
         id: true,
@@ -868,19 +835,12 @@ plansRouter.post("/:id/assignments", requireAuth, async (req: AuthenticatedReque
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const plan = await prisma.workoutPlan.findFirst({
       where: {
         id: planId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       select: {
         id: true,
@@ -895,7 +855,7 @@ plansRouter.post("/:id/assignments", requireAuth, async (req: AuthenticatedReque
     const client = await prisma.clientProfile.findFirst({
       where: {
         id: clientId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       select: {
         id: true,
@@ -1010,21 +970,16 @@ workoutDaysRouter.patch("/:dayId", requireAuth, async (req: AuthenticatedRequest
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existingDay = await prisma.workoutDay.findFirst({
       where: {
         id: dayId,
-        plan: {
-          trainerId: trainerProfile.id,
-        },
+        ...(scope.filterTrainerId && {
+          plan: {
+            trainerId: scope.filterTrainerId,
+          },
+        }),
       },
       select: {
         id: true,
@@ -1079,21 +1034,16 @@ workoutDaysRouter.delete("/:dayId", requireAuth, async (req: AuthenticatedReques
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existingDay = await prisma.workoutDay.findFirst({
       where: {
         id: dayId,
-        plan: {
-          trainerId: trainerProfile.id,
-        },
+        ...(scope.filterTrainerId && {
+          plan: {
+            trainerId: scope.filterTrainerId,
+          },
+        }),
       },
       select: { id: true },
     });
@@ -1168,14 +1118,7 @@ workoutDaysRouter.post("/:dayId/exercises", requireAuth, async (req: Authenticat
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     // Prefer DB-trusted imageUrl from ExerciseLibrary over client-sent value
     let imageUrl = clientImageUrl;
@@ -1192,9 +1135,11 @@ workoutDaysRouter.post("/:dayId/exercises", requireAuth, async (req: Authenticat
     const existingDay = await prisma.workoutDay.findFirst({
       where: {
         id: dayId,
-        plan: {
-          trainerId: trainerProfile.id,
-        },
+        ...(scope.filterTrainerId && {
+          plan: {
+            trainerId: scope.filterTrainerId,
+          },
+        }),
       },
       select: { id: true },
     });
@@ -1282,17 +1227,16 @@ workoutDaysRouter.patch("/:dayId/exercises/reorder", requireAuth, async (req: Au
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     // Day must belong to this trainer
     const existingDay = await prisma.workoutDay.findFirst({
-      where: { id: dayId, plan: { trainerId: trainerProfile.id } },
+      where: {
+        id: dayId,
+        ...(scope.filterTrainerId && {
+          plan: { trainerId: scope.filterTrainerId },
+        }),
+      },
       select: { id: true },
     });
     if (!existingDay) {
@@ -1677,23 +1621,18 @@ exercisesRouter.patch("/:exerciseId", requireAuth, async (req: AuthenticatedRequ
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existingExercise = await prisma.exercise.findFirst({
       where: {
         id: exerciseId,
-        day: {
-          plan: {
-            trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && {
+          day: {
+            plan: {
+              trainerId: scope.filterTrainerId,
+            },
           },
-        },
+        }),
       },
       select: { id: true },
     });
@@ -1755,23 +1694,18 @@ exercisesRouter.delete("/:exerciseId", requireAuth, async (req: AuthenticatedReq
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existingExercise = await prisma.exercise.findFirst({
       where: {
         id: exerciseId,
-        day: {
-          plan: {
-            trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && {
+          day: {
+            plan: {
+              trainerId: scope.filterTrainerId,
+            },
           },
-        },
+        }),
       },
       select: { id: true },
     });

@@ -2,6 +2,7 @@ import { NotificationType } from "@prisma/client";
 import { Router } from "express";
 import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { prisma } from "../db";
+import { resolveScope } from "../lib/scope";
 import {
   listNotificationsForUser,
   mapNotification,
@@ -160,6 +161,7 @@ notificationsRouter.get("/:id/target", async (req: AuthenticatedRequest, res) =>
 
   try {
     const trainerUserId = req.user!.userId;
+    const scope = await resolveScope(req.user!);
 
     const notification = await prisma.notification.findFirst({
       where: { id: notificationId, userId: trainerUserId },
@@ -176,15 +178,12 @@ notificationsRouter.get("/:id/target", async (req: AuthenticatedRequest, res) =>
       return res.status(404).json({ message: "Not found" });
     }
 
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: trainerUserId },
-      select: { id: true },
-    });
-
     const verifyClient = async (clientProfileId: string): Promise<boolean> => {
-      if (!trainerProfile) return false;
       const cp = await prisma.clientProfile.findFirst({
-        where: { id: clientProfileId, trainerId: trainerProfile.id },
+        where: {
+          id: clientProfileId,
+          ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+        },
         select: { id: true },
       });
       return cp !== null;
@@ -199,8 +198,6 @@ notificationsRouter.get("/:id/target", async (req: AuthenticatedRequest, res) =>
     };
 
     const resolveMessageClientId = async (): Promise<string | null> => {
-      if (!trainerProfile) return null;
-
       const parsedClientId = parseClientIdFromNotification();
       if (parsedClientId && (await verifyClient(parsedClientId))) {
         return parsedClientId;
@@ -217,7 +214,9 @@ notificationsRouter.get("/:id/target", async (req: AuthenticatedRequest, res) =>
             gte: new Date(notifMs - nearWindowMs),
             lte: new Date(notifMs + nearWindowMs),
           },
-          sender: { clientProfile: { trainerId: trainerProfile.id } },
+          ...(scope.filterTrainerId && {
+            sender: { clientProfile: { trainerId: scope.filterTrainerId } },
+          }),
         },
         select: {
           content: true,
@@ -256,8 +255,6 @@ notificationsRouter.get("/:id/target", async (req: AuthenticatedRequest, res) =>
     const resolveActivityClientId = async (
       type: "WORKOUT" | "CHECKIN",
     ): Promise<string | null> => {
-      if (!trainerProfile) return null;
-
       const parsedClientId = parseClientIdFromNotification();
       if (parsedClientId && (await verifyClient(parsedClientId))) {
         return parsedClientId;
@@ -273,7 +270,9 @@ notificationsRouter.get("/:id/target", async (req: AuthenticatedRequest, res) =>
               gte: new Date(notifMs - windowMs),
               lte: new Date(notifMs + windowMs),
             },
-            client: { trainerId: trainerProfile.id },
+            ...(scope.filterTrainerId && {
+              client: { trainerId: scope.filterTrainerId },
+            }),
           },
           select: {
             completedAt: true,
@@ -300,7 +299,9 @@ notificationsRouter.get("/:id/target", async (req: AuthenticatedRequest, res) =>
             gte: new Date(notifMs - windowMs),
             lte: new Date(notifMs + windowMs),
           },
-          client: { trainerId: trainerProfile.id },
+          ...(scope.filterTrainerId && {
+            client: { trainerId: scope.filterTrainerId },
+          }),
         },
         select: {
           createdAt: true,

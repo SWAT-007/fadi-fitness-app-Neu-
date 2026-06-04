@@ -1,6 +1,7 @@
 import path from "path";
 import { Router } from "express";
 import { prisma } from "../db";
+import { resolveScope } from "../lib/scope";
 import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { parseAllPdfsInDir, type ParsedRecipe } from "../../../lib/recipeParser";
 
@@ -81,19 +82,14 @@ nutritionRouter.get("/foods", requireAuth, async (req: AuthenticatedRequest, res
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const foods = await prisma.food.findMany({
-      where: {
-        OR: [{ trainerId: trainerProfile.id }, { trainerId: null }],
-      },
+      where: scope.filterTrainerId
+        ? {
+            OR: [{ trainerId: scope.filterTrainerId }, { trainerId: null }],
+          }
+        : {},
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -179,18 +175,15 @@ nutritionRouter.post("/foods", requireAuth, async (req: AuthenticatedRequest, re
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
+    const scope = await resolveScope(req.user);
+    const ownedTrainerId = scope.trainerProfileId;
+    if (!ownedTrainerId) {
       return res.status(500).json({ message: "Internal server error" });
     }
 
     const food = await prisma.food.create({
       data: {
-        trainerId: trainerProfile.id,
+        trainerId: ownedTrainerId,
         name,
         caloriesPer100g,
         proteinPer100g,
@@ -317,19 +310,12 @@ nutritionRouter.patch("/foods/:id", requireAuth, async (req: AuthenticatedReques
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existingFood = await prisma.food.findFirst({
       where: {
         id: foodId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       select: { id: true },
     });
@@ -381,19 +367,12 @@ nutritionRouter.delete("/foods/:id", requireAuth, async (req: AuthenticatedReque
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existingFood = await prisma.food.findFirst({
       where: {
         id: foodId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       select: { id: true },
     });
@@ -427,16 +406,12 @@ nutritionRouter.get("/drinks", requireAuth, async (req: AuthenticatedRequest, re
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const drinks = await prisma.drink.findMany({
-      where: { OR: [{ trainerId: trainerProfile.id }, { trainerId: null }] },
+      where: scope.filterTrainerId
+        ? { OR: [{ trainerId: scope.filterTrainerId }, { trainerId: null }] }
+        : {},
       orderBy: { name: "asc" },
       select: drinkSelect,
     });
@@ -469,16 +444,14 @@ nutritionRouter.post("/drinks", requireAuth, async (req: AuthenticatedRequest, r
   const unit = normalizeOptionalString(req.body?.unit);
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) {
+    const scope = await resolveScope(req.user);
+    const ownedTrainerId = scope.trainerProfileId;
+    if (!ownedTrainerId) {
       return res.status(500).json({ message: "Internal server error" });
     }
 
     const drink = await prisma.drink.create({
-      data: { trainerId: trainerProfile.id, name, kcalPer100ml, unit },
+      data: { trainerId: ownedTrainerId, name, kcalPer100ml, unit },
       select: drinkSelect,
     });
 
@@ -530,16 +503,13 @@ nutritionRouter.patch("/drinks/:id", requireAuth, async (req: AuthenticatedReque
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existing = await prisma.drink.findFirst({
-      where: { id: drinkId, trainerId: trainerProfile.id },
+      where: {
+        id: drinkId,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
       select: { id: true },
     });
     if (!existing) {
@@ -571,16 +541,13 @@ nutritionRouter.delete("/drinks/:id", requireAuth, async (req: AuthenticatedRequ
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existing = await prisma.drink.findFirst({
-      where: { id: drinkId, trainerId: trainerProfile.id },
+      where: {
+        id: drinkId,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
       select: { id: true },
     });
     if (!existing) {
@@ -601,17 +568,12 @@ nutritionRouter.get("/plans", requireAuth, async (req: AuthenticatedRequest, res
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const plans = await prisma.nutritionPlan.findMany({
-      where: { trainerId: trainerProfile.id },
+      where: {
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
@@ -654,18 +616,15 @@ nutritionRouter.post("/plans", requireAuth, async (req: AuthenticatedRequest, re
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
+    const scope = await resolveScope(req.user);
+    const ownedTrainerId = scope.trainerProfileId;
+    if (!ownedTrainerId) {
       return res.status(500).json({ message: "Internal server error" });
     }
 
     const plan = await prisma.nutritionPlan.create({
       data: {
-        trainerId: trainerProfile.id,
+        trainerId: ownedTrainerId,
         name,
         description,
       },
@@ -703,19 +662,12 @@ nutritionRouter.delete("/plans/:id", requireAuth, async (req: AuthenticatedReque
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existingPlan = await prisma.nutritionPlan.findFirst({
       where: {
         id: planId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       select: { id: true },
     });
@@ -747,19 +699,12 @@ nutritionRouter.get("/plans/:id", requireAuth, async (req: AuthenticatedRequest,
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const plan = await prisma.nutritionPlan.findFirst({
       where: {
         id: planId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       select: {
         id: true,
@@ -792,9 +737,11 @@ nutritionRouter.get("/plans/:id", requireAuth, async (req: AuthenticatedRequest,
       prisma.assignedNutritionPlan.findMany({
         where: {
           planId: plan.id,
-          client: {
-            trainerId: trainerProfile.id,
-          },
+          ...(scope.filterTrainerId && {
+            client: {
+              trainerId: scope.filterTrainerId,
+            },
+          }),
         },
         orderBy: { assignedAt: "desc" },
         select: {
@@ -813,7 +760,9 @@ nutritionRouter.get("/plans/:id", requireAuth, async (req: AuthenticatedRequest,
         },
       }),
       prisma.clientProfile.findMany({
-        where: { trainerId: trainerProfile.id },
+        where: {
+          ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+        },
         orderBy: { fullName: "asc" },
         select: {
           id: true,
@@ -865,17 +814,13 @@ nutritionRouter.patch("/plans/:id", requireAuth, async (req: AuthenticatedReques
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existingPlan = await prisma.nutritionPlan.findFirst({
-      where: { id: planId, trainerId: trainerProfile.id },
+      where: {
+        id: planId,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
       select: { id: true },
     });
 
@@ -927,16 +872,13 @@ nutritionRouter.post("/plans/:id/meals", requireAuth, async (req: AuthenticatedR
         : null;
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const plan = await prisma.nutritionPlan.findFirst({
-      where: { id: planId, trainerId: trainerProfile.id },
+      where: {
+        id: planId,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
       select: { id: true },
     });
     if (!plan) {
@@ -1032,16 +974,15 @@ nutritionRouter.patch("/meals/:mealId", requireAuth, async (req: AuthenticatedRe
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existingMeal = await prisma.nutritionMeal.findFirst({
-      where: { id: mealId, plan: { trainerId: trainerProfile.id } },
+      where: {
+        id: mealId,
+        ...(scope.filterTrainerId && {
+          plan: { trainerId: scope.filterTrainerId },
+        }),
+      },
       select: { id: true },
     });
     if (!existingMeal) {
@@ -1076,16 +1017,15 @@ nutritionRouter.delete("/meals/:mealId", requireAuth, async (req: AuthenticatedR
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existingMeal = await prisma.nutritionMeal.findFirst({
-      where: { id: mealId, plan: { trainerId: trainerProfile.id } },
+      where: {
+        id: mealId,
+        ...(scope.filterTrainerId && {
+          plan: { trainerId: scope.filterTrainerId },
+        }),
+      },
       select: { id: true },
     });
     if (!existingMeal) {
@@ -1129,21 +1069,21 @@ nutritionRouter.post("/plans/:id/assignments", requireAuth, async (req: Authenti
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const [plan, client] = await Promise.all([
       prisma.nutritionPlan.findFirst({
-        where: { id: planId, trainerId: trainerProfile.id },
+        where: {
+          id: planId,
+          ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+        },
         select: { id: true, name: true },
       }),
       prisma.clientProfile.findFirst({
-        where: { id: clientId, trainerId: trainerProfile.id },
+        where: {
+          id: clientId,
+          ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+        },
         select: { id: true, userId: true },
       }),
     ]);
@@ -1212,19 +1152,15 @@ nutritionRouter.patch("/assignments/:assignmentId", requireAuth, async (req: Aut
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existing = await prisma.assignedNutritionPlan.findFirst({
       where: {
         id: assignmentId,
-        client: { trainerId: trainerProfile.id },
-        plan: { trainerId: trainerProfile.id },
+        ...(scope.filterTrainerId && {
+          client: { trainerId: scope.filterTrainerId },
+          plan: { trainerId: scope.filterTrainerId },
+        }),
       },
       select: { id: true },
     });
@@ -1257,19 +1193,15 @@ nutritionRouter.delete("/assignments/:assignmentId", requireAuth, async (req: Au
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existing = await prisma.assignedNutritionPlan.findFirst({
       where: {
         id: assignmentId,
-        client: { trainerId: trainerProfile.id },
-        plan: { trainerId: trainerProfile.id },
+        ...(scope.filterTrainerId && {
+          client: { trainerId: scope.filterTrainerId },
+          plan: { trainerId: scope.filterTrainerId },
+        }),
       },
       select: { id: true },
     });
@@ -1313,11 +1245,9 @@ nutritionRouter.post("/recipes/import-pdfs", requireAuth, async (req: Authentica
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+    const scope = await resolveScope(req.user);
+    const ownedTrainerId = scope.trainerProfileId;
+    if (!ownedTrainerId) return res.status(500).json({ message: "Internal server error" });
 
     const pdfsDir = path.join(process.cwd(), "public", "pdfs");
 
@@ -1339,7 +1269,11 @@ nutritionRouter.post("/recipes/import-pdfs", requireAuth, async (req: Authentica
 
       try {
         const existing = await prisma.recipe.findFirst({
-          where: { trainerId: trainerProfile.id, sourcePdf: r.source_pdf, name: r.name },
+          where: {
+            sourcePdf: r.source_pdf,
+            name: r.name,
+            ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+          },
           select: { id: true },
         });
 
@@ -1362,7 +1296,7 @@ nutritionRouter.post("/recipes/import-pdfs", requireAuth, async (req: Authentica
           await prisma.recipe.update({ where: { id: existing.id }, data });
           updated++;
         } else {
-          await prisma.recipe.create({ data: { ...data, trainerId: trainerProfile.id } });
+          await prisma.recipe.create({ data: { ...data, trainerId: ownedTrainerId } });
           imported++;
         }
       } catch (recipeErr) {
@@ -1385,35 +1319,41 @@ nutritionRouter.get("/recipes", requireAuth, async (req: AuthenticatedRequest, r
   const search = typeof req.query.search === "string" ? req.query.search.trim() : null;
 
   try {
-    let trainerId: string | null = null;
-
     if (isTrainerOrAdmin(req.user.role)) {
-      const trainerProfile = await prisma.trainerProfile.findUnique({
-        where: { userId: req.user.userId },
-        select: { id: true },
+      const scope = await resolveScope(req.user);
+
+      const recipes = await prisma.recipe.findMany({
+        where: {
+          ...(scope.filterTrainerId
+            ? { OR: [{ trainerId: scope.filterTrainerId }, { trainerId: null }] }
+            : {}),
+          ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
+        },
+        orderBy: { name: "asc" },
+        take: limit,
+        select: recipeSelect,
       });
-      if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
-      trainerId = trainerProfile.id;
+
+      return res.json({ recipes });
     } else {
       const clientProfile = await prisma.clientProfile.findUnique({
         where: { userId: req.user.userId },
         select: { trainerId: true },
       });
       if (!clientProfile) return res.status(500).json({ message: "Internal server error" });
-      trainerId = clientProfile.trainerId;
+
+      const recipes = await prisma.recipe.findMany({
+        where: {
+          OR: [{ trainerId: clientProfile.trainerId }, { trainerId: null }],
+          ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
+        },
+        orderBy: { name: "asc" },
+        take: limit,
+        select: recipeSelect,
+      });
+
+      return res.json({ recipes });
     }
-
-    const recipes = await prisma.recipe.findMany({
-      where: {
-        OR: [{ trainerId }, { trainerId: null }],
-        ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
-      },
-      orderBy: { name: "asc" },
-      take: limit,
-      select: recipeSelect,
-    });
-
-    return res.json({ recipes });
   } catch (error) {
     console.error("[nutrition:recipes:list] error:", error);
     return res.status(500).json({ message: "Internal server error" });
@@ -1426,11 +1366,9 @@ nutritionRouter.post("/recipes", requireAuth, async (req: AuthenticatedRequest, 
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+    const scope = await resolveScope(req.user);
+    const ownedTrainerId = scope.trainerProfileId;
+    if (!ownedTrainerId) return res.status(500).json({ message: "Internal server error" });
 
     const {
       name,
@@ -1455,7 +1393,7 @@ nutritionRouter.post("/recipes", requireAuth, async (req: AuthenticatedRequest, 
 
     const recipe = await prisma.recipe.create({
       data: {
-        trainerId: trainerProfile.id,
+        trainerId: ownedTrainerId,
         name: name.trim(),
         description: typeof description === "string" ? description : null,
         instructions: typeof instructions === "string" ? instructions : null,
@@ -1493,14 +1431,13 @@ nutritionRouter.patch("/recipes/:id", requireAuth, async (req: AuthenticatedRequ
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+    const scope = await resolveScope(req.user);
 
     const existing = await prisma.recipe.findFirst({
-      where: { id: recipeId, trainerId: trainerProfile.id },
+      where: {
+        id: recipeId,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
       select: { id: true },
     });
     if (!existing) return res.status(404).json({ message: "Not found" });
@@ -1568,14 +1505,13 @@ nutritionRouter.delete("/recipes/:id", requireAuth, async (req: AuthenticatedReq
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+    const scope = await resolveScope(req.user);
 
     const recipe = await prisma.recipe.findFirst({
-      where: { id: recipeId, trainerId: trainerProfile.id },
+      where: {
+        id: recipeId,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
       select: { id: true },
     });
     if (!recipe) return res.status(404).json({ message: "Not found" });

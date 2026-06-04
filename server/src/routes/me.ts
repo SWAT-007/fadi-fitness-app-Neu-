@@ -4,6 +4,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { prisma } from "../db";
+import { resolveScope } from "../lib/scope";
 import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { unexpectedErrorResponse } from "../utils/errors";
 import { clampDuration } from "../utils/duration";
@@ -69,6 +70,7 @@ meRouter.get("/trainer-dashboard", requireAuth, async (req: AuthenticatedRequest
   }
 
   try {
+    const scope = await resolveScope(req.user);
     const trainerProfile = await prisma.trainerProfile.findUnique({
       where: { userId: req.user.userId },
       select: {
@@ -83,7 +85,7 @@ meRouter.get("/trainer-dashboard", requireAuth, async (req: AuthenticatedRequest
       },
     });
 
-    if (!trainerProfile) {
+    if (!trainerProfile && !scope.isAdmin) {
       return res.status(404).json({ message: "Not found" });
     }
 
@@ -98,31 +100,41 @@ meRouter.get("/trainer-dashboard", requireAuth, async (req: AuthenticatedRequest
       recentClients,
     ] = await Promise.all([
       prisma.clientProfile.count({
-        where: { trainerId: trainerProfile.id },
+        where: {
+          ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+        },
       }),
       prisma.clientProfile.count({
         where: {
-          trainerId: trainerProfile.id,
+          ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
           status: { equals: "active", mode: "insensitive" },
         },
       }),
       prisma.workoutPlan.count({
-        where: { trainerId: trainerProfile.id },
+        where: {
+          ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+        },
       }),
       prisma.assignedPlan.count({
         where: {
           active: true,
-          client: { trainerId: trainerProfile.id },
-          plan: { trainerId: trainerProfile.id },
+          ...(scope.filterTrainerId && {
+            client: { trainerId: scope.filterTrainerId },
+            plan: { trainerId: scope.filterTrainerId },
+          }),
         },
       }),
       prisma.nutritionPlan.count({
-        where: { trainerId: trainerProfile.id },
+        where: {
+          ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+        },
       }),
       prisma.exerciseChangeRequest.count({
         where: {
           status: { equals: "pending", mode: "insensitive" },
-          client: { trainerId: trainerProfile.id },
+          ...(scope.filterTrainerId && {
+            client: { trainerId: scope.filterTrainerId },
+          }),
         },
       }),
       prisma.message.count({
@@ -132,7 +144,9 @@ meRouter.get("/trainer-dashboard", requireAuth, async (req: AuthenticatedRequest
         },
       }),
       prisma.clientProfile.findMany({
-        where: { trainerId: trainerProfile.id },
+        where: {
+          ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+        },
         orderBy: { createdAt: "desc" },
         take: 5,
         select: {
@@ -146,10 +160,10 @@ meRouter.get("/trainer-dashboard", requireAuth, async (req: AuthenticatedRequest
 
     return res.json({
       trainer: {
-        id: trainerProfile.id,
-        userId: trainerProfile.userId,
-        email: trainerProfile.user.email ?? "",
-        fullName: trainerProfile.user.fullName ?? "",
+        id: trainerProfile?.id ?? "",
+        userId: trainerProfile?.userId ?? req.user.userId,
+        email: trainerProfile?.user.email ?? "",
+        fullName: trainerProfile?.user.fullName ?? "",
       },
       stats: {
         clientCount,

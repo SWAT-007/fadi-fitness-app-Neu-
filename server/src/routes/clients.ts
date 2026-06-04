@@ -2,6 +2,7 @@ import { NotificationType, Prisma } from "@prisma/client";
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import { prisma } from "../db";
+import { resolveScope } from "../lib/scope";
 import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { unexpectedErrorResponse } from "../utils/errors";
 import { clampDuration } from "../utils/duration";
@@ -73,19 +74,12 @@ const messageSelect = {
   },
 } as const;
 
-const resolveTrainerProfile = async (userId: string) => {
-  return prisma.trainerProfile.findUnique({
-    where: { userId },
-    select: {
-      id: true,
-      userId: true,
-    },
-  });
-};
-
-const resolveOwnedClientProfile = async (trainerId: string, clientId: string) => {
+const resolveOwnedClientProfile = async (trainerId: string | undefined, clientId: string) => {
   return prisma.clientProfile.findFirst({
-    where: { id: clientId, trainerId },
+    where: {
+      id: clientId,
+      ...(trainerId && { trainerId }),
+    },
     select: {
       id: true,
       userId: true,
@@ -110,13 +104,14 @@ clientsRouter.get("/exercise-change-requests", requireAuth, async (req: Authenti
         : { equals: statusQuery, mode: "insensitive" as const };
 
   try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+    const scope = await resolveScope(req.user);
 
     const requests = await prisma.exerciseChangeRequest.findMany({
       where: {
         ...(whereStatus ? { status: whereStatus } : {}),
-        client: { trainerId: trainerProfile.id },
+        ...(scope.filterTrainerId && {
+          client: { trainerId: scope.filterTrainerId },
+        }),
       },
       orderBy: { createdAt: "desc" },
       select: {
@@ -196,13 +191,14 @@ clientsRouter.patch(
     }
 
     try {
-      const trainerProfile = await resolveTrainerProfile(req.user.userId);
-      if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+      const scope = await resolveScope(req.user);
 
       const existing = await prisma.exerciseChangeRequest.findFirst({
         where: {
           id: requestId,
-          client: { trainerId: trainerProfile.id },
+          ...(scope.filterTrainerId && {
+            client: { trainerId: scope.filterTrainerId },
+          }),
         },
         select: {
           id: true,
@@ -316,12 +312,9 @@ clientsRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
+    const scope = await resolveScope(req.user);
+    const ownedTrainerId = scope.trainerProfileId;
+    if (!ownedTrainerId) {
       return res.status(500).json({ message: "Internal server error" });
     }
 
@@ -329,7 +322,7 @@ clientsRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
     if (!wantsLogin) {
       const client = await prisma.clientProfile.create({
         data: {
-          trainerId: trainerProfile.id,
+          trainerId: ownedTrainerId,
           fullName: name,
           email: emailInput,
           phone,
@@ -368,7 +361,7 @@ clientsRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
 
       return tx.clientProfile.create({
         data: {
-          trainerId: trainerProfile.id,
+          trainerId: ownedTrainerId,
           fullName: name,
           email: emailInput,
           phone,
@@ -396,17 +389,12 @@ clientsRouter.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const clients = await prisma.clientProfile.findMany({
-      where: { trainerId: trainerProfile.id },
+      where: {
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
@@ -433,11 +421,12 @@ clientsRouter.get("/messages/clients", requireAuth, async (req: AuthenticatedReq
   }
 
   try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+    const scope = await resolveScope(req.user);
 
     const clients = await prisma.clientProfile.findMany({
-      where: { trainerId: trainerProfile.id },
+      where: {
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
       select: {
         id: true,
         trainerId: true,
@@ -530,10 +519,8 @@ clientsRouter.post("/:id/reset-password", requireAuth, async (req: Authenticated
   }
 
   try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ ok: false, message: "Internal server error" });
-
-    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    const scope = await resolveScope(req.user);
+    const clientProfile = await resolveOwnedClientProfile(scope.filterTrainerId, clientId);
     if (!clientProfile) return res.status(404).json({ ok: false, message: "Not found" });
     if (!clientProfile.userId) {
       return res.status(400).json({ ok: false, message: "Der Kunde hat noch keinen App-Zugang." });
@@ -568,10 +555,8 @@ clientsRouter.post("/:id/app-access", requireAuth, async (req: AuthenticatedRequ
   }
 
   try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
-
-    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    const scope = await resolveScope(req.user);
+    const clientProfile = await resolveOwnedClientProfile(scope.filterTrainerId, clientId);
     if (!clientProfile) return res.status(404).json({ message: "Not found" });
 
     const normalizedEmail = clientProfile.email.trim().toLowerCase();
@@ -690,10 +675,8 @@ clientsRouter.get("/:clientId/nutrition-assignments", requireAuth, async (req: A
   const limit = Number.isFinite(rawLimit) ? Math.min(200, Math.max(1, rawLimit)) : 50;
 
   try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
-
-    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    const scope = await resolveScope(req.user);
+    const clientProfile = await resolveOwnedClientProfile(scope.filterTrainerId, clientId);
     if (!clientProfile) return res.status(404).json({ message: "Not found" });
 
     const assignments = await prisma.assignedNutritionPlan.findMany({
@@ -727,10 +710,8 @@ clientsRouter.get("/:clientId/workout-logs", requireAuth, async (req: Authentica
   const dateLt = typeof req.query.dateLt === "string" ? req.query.dateLt.trim() : "";
 
   try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
-
-    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    const scope = await resolveScope(req.user);
+    const clientProfile = await resolveOwnedClientProfile(scope.filterTrainerId, clientId);
     if (!clientProfile) return res.status(404).json({ message: "Not found" });
 
     const where = {
@@ -815,19 +796,12 @@ clientsRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) =>
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const client = await prisma.clientProfile.findFirst({
       where: {
         id: clientId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       select: {
         id: true,
@@ -865,10 +839,8 @@ clientsRouter.get("/:clientId/messages", requireAuth, async (req: AuthenticatedR
   const limit = isNaN(rawLimit) || rawLimit < 1 ? 100 : Math.min(rawLimit, 300);
 
   try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
-
-    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    const scope = await resolveScope(req.user);
+    const clientProfile = await resolveOwnedClientProfile(scope.filterTrainerId, clientId);
     if (!clientProfile) return res.status(404).json({ message: "Not found" });
 
     if (!clientProfile.userId) {
@@ -914,10 +886,8 @@ clientsRouter.post("/:clientId/messages", requireAuth, async (req: Authenticated
   }
 
   try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
-
-    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    const scope = await resolveScope(req.user);
+    const clientProfile = await resolveOwnedClientProfile(scope.filterTrainerId, clientId);
     if (!clientProfile) return res.status(404).json({ message: "Not found" });
     if (!clientProfile.userId) {
       return res.status(400).json({ message: "Client has no linked user" });
@@ -964,10 +934,8 @@ clientsRouter.post("/:clientId/messages/read", requireAuth, async (req: Authenti
   if (!clientId) return res.status(404).json({ message: "Not found" });
 
   try {
-    const trainerProfile = await resolveTrainerProfile(req.user.userId);
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
-
-    const clientProfile = await resolveOwnedClientProfile(trainerProfile.id, clientId);
+    const scope = await resolveScope(req.user);
+    const clientProfile = await resolveOwnedClientProfile(scope.filterTrainerId, clientId);
     if (!clientProfile) return res.status(404).json({ message: "Not found" });
     if (!clientProfile.userId) {
       return res.json({ updatedCount: 0 });
@@ -999,19 +967,12 @@ clientsRouter.get("/:id/assignments", requireAuth, async (req: AuthenticatedRequ
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const client = await prisma.clientProfile.findFirst({
       where: {
         id: clientId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       select: { id: true },
     });
@@ -1023,9 +984,11 @@ clientsRouter.get("/:id/assignments", requireAuth, async (req: AuthenticatedRequ
     const assignments = await prisma.assignedPlan.findMany({
       where: {
         clientId: client.id,
-        plan: {
-          trainerId: trainerProfile.id,
-        },
+        ...(scope.filterTrainerId && {
+          plan: {
+            trainerId: scope.filterTrainerId,
+          },
+        }),
       },
       orderBy: { assignedAt: "desc" },
       select: {
@@ -1111,19 +1074,12 @@ clientsRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) 
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existing = await prisma.clientProfile.findFirst({
       where: {
         id: clientId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       select: { id: true },
     });
@@ -1165,19 +1121,12 @@ clientsRouter.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res)
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existing = await prisma.clientProfile.findFirst({
       where: {
         id: clientId,
-        trainerId: trainerProfile.id,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       select: { id: true, userId: true },
     });
@@ -1254,20 +1203,15 @@ clientAssignmentsRouter.patch("/:assignmentId", requireAuth, async (req: Authent
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existing = await prisma.assignedPlan.findFirst({
       where: {
         id: assignmentId,
-        client: { trainerId: trainerProfile.id },
-        plan: { trainerId: trainerProfile.id },
+        ...(scope.filterTrainerId && {
+          client: { trainerId: scope.filterTrainerId },
+          plan: { trainerId: scope.filterTrainerId },
+        }),
       },
       select: { id: true },
     });
@@ -1326,20 +1270,15 @@ clientAssignmentsRouter.delete("/:assignmentId", requireAuth, async (req: Authen
   }
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-
-    if (!trainerProfile) {
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    const scope = await resolveScope(req.user);
 
     const existing = await prisma.assignedPlan.findFirst({
       where: {
         id: assignmentId,
-        client: { trainerId: trainerProfile.id },
-        plan: { trainerId: trainerProfile.id },
+        ...(scope.filterTrainerId && {
+          client: { trainerId: scope.filterTrainerId },
+          plan: { trainerId: scope.filterTrainerId },
+        }),
       },
       select: { id: true },
     });
@@ -1394,14 +1333,13 @@ clientsRouter.get("/:clientId/checkins", requireAuth, async (req: AuthenticatedR
   const limit = isNaN(rawLimit) || rawLimit < 1 ? 20 : Math.min(rawLimit, 100);
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+    const scope = await resolveScope(req.user);
 
     const clientProfile = await prisma.clientProfile.findFirst({
-      where: { id: clientId, trainerId: trainerProfile.id },
+      where: {
+        id: clientId,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
       select: { id: true },
     });
     if (!clientProfile) return res.status(404).json({ message: "Not found" });
@@ -1456,14 +1394,13 @@ clientsRouter.get("/:clientId/progress-logs", requireAuth, async (req: Authentic
   const limit = isNaN(rawLimit) || rawLimit < 1 ? 20 : Math.min(rawLimit, 200);
 
   try {
-    const trainerProfile = await prisma.trainerProfile.findUnique({
-      where: { userId: req.user.userId },
-      select: { id: true },
-    });
-    if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+    const scope = await resolveScope(req.user);
 
     const clientProfile = await prisma.clientProfile.findFirst({
-      where: { id: clientId, trainerId: trainerProfile.id },
+      where: {
+        id: clientId,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
       select: { id: true },
     });
     if (!clientProfile) return res.status(404).json({ message: "Not found" });
