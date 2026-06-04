@@ -332,13 +332,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <div className="text-[#797D83] text-[11px] truncate">{profile?.email}</div>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="press mt-1 w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-[#797D83] hover:text-white hover:bg-white/[0.04]"
-            >
-              <span className="w-[18px] h-[18px] flex items-center justify-center text-[#797D83]">{Icon.logout}</span>
-              Abmelden
-            </button>
           </div>
         </aside>
 
@@ -351,8 +344,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <span className="w-5 h-5 block">{Icon.menu}</span>
             </button>
             <span className="font-semibold text-[#EDECEA] tracking-tight flex-1 lg:hidden">MilaCoach</span>
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-1">
               {profile && <TrainerNotificationBell trainerId={profile.id} />}
+              <button
+                onClick={handleLogout}
+                className="press flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[#797D83] hover:text-[#EDECEA] hover:bg-white/[0.05] transition-colors"
+                aria-label="Abmelden"
+              >
+                <span className="w-[18px] h-[18px] block">{Icon.logout}</span>
+                <span className="hidden sm:inline text-[13px] font-medium">Abmelden</span>
+              </button>
             </div>
           </header>
 
