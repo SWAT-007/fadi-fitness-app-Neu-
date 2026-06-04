@@ -3,7 +3,7 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import { Prisma, UserRole } from "@prisma/client";
 import { prisma } from "../db";
-import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
+import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { unexpectedErrorResponse } from "../utils/errors";
 
 const clientLinkTokensRouter = Router();
@@ -56,7 +56,7 @@ const loadInviteToken = async (rawToken: string) => {
 };
 
 clientLinkTokensRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -307,3 +307,4 @@ clientLinkTokensRouter.post("/accept/:token", async (req, res) => {
 });
 
 export { clientLinkTokensRouter };
+

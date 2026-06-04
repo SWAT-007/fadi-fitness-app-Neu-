@@ -1,6 +1,6 @@
 import { NotificationType } from "@prisma/client";
 import { Router } from "express";
-import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
+import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { prisma } from "../db";
 import {
   listNotificationsForUser,
@@ -131,7 +131,7 @@ const pickClosestByTime = <T>(
 notificationsRouter.use(requireAuth);
 
 notificationsRouter.use((req: AuthenticatedRequest, res, next) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -400,3 +400,4 @@ notificationsRouter.patch("/read-all", async (req: AuthenticatedRequest, res) =>
 });
 
 export { notificationsRouter };
+

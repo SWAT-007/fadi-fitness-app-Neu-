@@ -43,7 +43,7 @@ export async function POST() {
       ? backendPayload.user.role.toLowerCase()
       : ''
 
-    if (role !== 'trainer') {
+    if (role !== 'trainer' && role !== 'admin') {
       return sessionError('Admin-Zugriff ist fuer dieses Konto nicht erlaubt.', 403)
     }
   } catch {

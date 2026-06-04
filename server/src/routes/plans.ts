@@ -3,7 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { prisma } from "../db";
-import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
+import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { buildExerciseChangeLink, createRequestAcceptedNotification } from "./notificationHelpers";
 
 const plansRouter = Router();
@@ -32,7 +32,7 @@ const mapPlan = (plan: {
 });
 
 plansRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -221,7 +221,7 @@ plansRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
 });
 
 plansRouter.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -261,7 +261,7 @@ plansRouter.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
 });
 
 plansRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -344,7 +344,7 @@ plansRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
 // WorkoutLogs/ExerciseLogs. Optionally resolves a linked change-request in the
 // same transaction. Existing single-item endpoints stay untouched.
 plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -596,7 +596,7 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
 });
 
 plansRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -675,7 +675,7 @@ plansRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) =>
 });
 
 plansRouter.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -722,7 +722,7 @@ plansRouter.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res) =
 });
 
 plansRouter.post("/:id/days", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -852,7 +852,7 @@ plansRouter.post("/:id/days", requireAuth, async (req: AuthenticatedRequest, res
 });
 
 plansRouter.post("/:id/assignments", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -986,7 +986,7 @@ plansRouter.post("/:id/assignments", requireAuth, async (req: AuthenticatedReque
 });
 
 workoutDaysRouter.patch("/:dayId", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1068,7 +1068,7 @@ workoutDaysRouter.patch("/:dayId", requireAuth, async (req: AuthenticatedRequest
 });
 
 workoutDaysRouter.delete("/:dayId", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1117,7 +1117,7 @@ workoutDaysRouter.delete("/:dayId", requireAuth, async (req: AuthenticatedReques
 });
 
 workoutDaysRouter.post("/:dayId/exercises", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1256,7 +1256,7 @@ workoutDaysRouter.post("/:dayId/exercises", requireAuth, async (req: Authenticat
 // Reorder exercises within a day: persist a new order by rewriting sortOrder 0..n
 // in a single transaction. All exerciseIds must belong to this day.
 workoutDaysRouter.patch("/:dayId/exercises/reorder", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1329,7 +1329,7 @@ workoutDaysRouter.patch("/:dayId/exercises/reorder", requireAuth, async (req: Au
 });
 
 exercisesRouter.get("/library", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1379,7 +1379,7 @@ exercisesRouter.get("/library", requireAuth, async (req: AuthenticatedRequest, r
 });
 
 exercisesRouter.post("/library", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1470,7 +1470,7 @@ exercisesRouter.post(
   requireAuth,
   exerciseImageUploadMiddleware,
   async (req: AuthenticatedRequest, res) => {
-    if (req.user?.role !== "trainer") {
+    if (!req.user || !isTrainerOrAdmin(req.user.role)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
@@ -1518,7 +1518,7 @@ exercisesRouter.post(
 );
 
 exercisesRouter.patch("/library/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1600,7 +1600,7 @@ exercisesRouter.patch("/library/:id", requireAuth, async (req: AuthenticatedRequ
 });
 
 exercisesRouter.delete("/library/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1628,7 +1628,7 @@ exercisesRouter.delete("/library/:id", requireAuth, async (req: AuthenticatedReq
 });
 
 exercisesRouter.patch("/:exerciseId", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1744,7 +1744,7 @@ exercisesRouter.patch("/:exerciseId", requireAuth, async (req: AuthenticatedRequ
 });
 
 exercisesRouter.delete("/:exerciseId", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1795,3 +1795,4 @@ exercisesRouter.delete("/:exerciseId", requireAuth, async (req: AuthenticatedReq
 });
 
 export { plansRouter, workoutDaysRouter, exercisesRouter };
+

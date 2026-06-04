@@ -4,7 +4,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { prisma } from "../db";
-import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
+import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { unexpectedErrorResponse } from "../utils/errors";
 import { clampDuration } from "../utils/duration";
 import {
@@ -64,7 +64,7 @@ meRouter.get("/", requireAuth, (req: AuthenticatedRequest, res) => {
 });
 
 meRouter.get("/trainer-dashboard", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -2368,3 +2368,4 @@ meRouter.post(
 );
 
 export { meRouter };
+

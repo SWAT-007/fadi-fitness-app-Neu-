@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 
-export type AppUserRole = "trainer" | "client";
+export type AppUserRole = "admin" | "trainer" | "client";
 
 export interface AuthUser {
   userId: string;
@@ -27,9 +27,13 @@ const getBearerToken = (headerValue?: string): string | null => {
 const normalizeRole = (role?: string): AppUserRole | null => {
   if (!role) return null;
   const normalized = role.toLowerCase();
-  if (normalized === "trainer" || normalized === "client") return normalized;
+  if (normalized === "admin" || normalized === "trainer" || normalized === "client") return normalized;
   return null;
 };
+
+export function isTrainerOrAdmin(role?: string): boolean {
+  return ["trainer", "admin"].includes(role?.toLowerCase() ?? "");
+}
 
 export const requireAuth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const token = getBearerToken(req.header("authorization"));
@@ -57,4 +61,3 @@ export const requireAuth = (req: AuthenticatedRequest, res: Response, next: Next
     return res.status(401).json({ message: "Unauthorized" });
   }
 };
-

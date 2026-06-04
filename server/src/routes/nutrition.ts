@@ -1,7 +1,7 @@
 import path from "path";
 import { Router } from "express";
 import { prisma } from "../db";
-import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
+import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { parseAllPdfsInDir, type ParsedRecipe } from "../../../lib/recipeParser";
 
 const nutritionRouter = Router();
@@ -76,7 +76,7 @@ const toAllowedCategories = (value: unknown): string[] | null =>
     : null;
 
 nutritionRouter.get("/foods", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -121,7 +121,7 @@ nutritionRouter.get("/foods", requireAuth, async (req: AuthenticatedRequest, res
 });
 
 nutritionRouter.post("/foods", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -232,7 +232,7 @@ nutritionRouter.post("/foods", requireAuth, async (req: AuthenticatedRequest, re
 });
 
 nutritionRouter.patch("/foods/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -370,7 +370,7 @@ nutritionRouter.patch("/foods/:id", requireAuth, async (req: AuthenticatedReques
 });
 
 nutritionRouter.delete("/foods/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -422,7 +422,7 @@ const drinkSelect = {
 } as const;
 
 nutritionRouter.get("/drinks", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -449,7 +449,7 @@ nutritionRouter.get("/drinks", requireAuth, async (req: AuthenticatedRequest, re
 });
 
 nutritionRouter.post("/drinks", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -490,7 +490,7 @@ nutritionRouter.post("/drinks", requireAuth, async (req: AuthenticatedRequest, r
 });
 
 nutritionRouter.patch("/drinks/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -560,7 +560,7 @@ nutritionRouter.patch("/drinks/:id", requireAuth, async (req: AuthenticatedReque
 });
 
 nutritionRouter.delete("/drinks/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -596,7 +596,7 @@ nutritionRouter.delete("/drinks/:id", requireAuth, async (req: AuthenticatedRequ
 });
 
 nutritionRouter.get("/plans", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -636,7 +636,7 @@ nutritionRouter.get("/plans", requireAuth, async (req: AuthenticatedRequest, res
 });
 
 nutritionRouter.post("/plans", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -692,7 +692,7 @@ nutritionRouter.post("/plans", requireAuth, async (req: AuthenticatedRequest, re
 });
 
 nutritionRouter.delete("/plans/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -736,7 +736,7 @@ nutritionRouter.delete("/plans/:id", requireAuth, async (req: AuthenticatedReque
 });
 
 nutritionRouter.get("/plans/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -836,7 +836,7 @@ nutritionRouter.get("/plans/:id", requireAuth, async (req: AuthenticatedRequest,
 });
 
 nutritionRouter.patch("/plans/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -903,7 +903,7 @@ nutritionRouter.patch("/plans/:id", requireAuth, async (req: AuthenticatedReques
 });
 
 nutritionRouter.post("/plans/:id/meals", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -976,7 +976,7 @@ nutritionRouter.post("/plans/:id/meals", requireAuth, async (req: AuthenticatedR
 });
 
 nutritionRouter.patch("/meals/:mealId", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1065,7 +1065,7 @@ nutritionRouter.patch("/meals/:mealId", requireAuth, async (req: AuthenticatedRe
 });
 
 nutritionRouter.delete("/meals/:mealId", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1113,7 +1113,7 @@ const assignmentSelect = {
 } as const;
 
 nutritionRouter.post("/plans/:id/assignments", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1196,7 +1196,7 @@ nutritionRouter.post("/plans/:id/assignments", requireAuth, async (req: Authenti
 });
 
 nutritionRouter.patch("/assignments/:assignmentId", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1246,7 +1246,7 @@ nutritionRouter.patch("/assignments/:assignmentId", requireAuth, async (req: Aut
 });
 
 nutritionRouter.delete("/assignments/:assignmentId", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1308,7 +1308,7 @@ const recipeSelect = {
 } as const;
 
 nutritionRouter.post("/recipes/import-pdfs", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1387,7 +1387,7 @@ nutritionRouter.get("/recipes", requireAuth, async (req: AuthenticatedRequest, r
   try {
     let trainerId: string | null = null;
 
-    if (req.user.role === "trainer") {
+    if (isTrainerOrAdmin(req.user.role)) {
       const trainerProfile = await prisma.trainerProfile.findUnique({
         where: { userId: req.user.userId },
         select: { id: true },
@@ -1421,7 +1421,7 @@ nutritionRouter.get("/recipes", requireAuth, async (req: AuthenticatedRequest, r
 });
 
 nutritionRouter.post("/recipes", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1482,7 +1482,7 @@ nutritionRouter.post("/recipes", requireAuth, async (req: AuthenticatedRequest, 
 });
 
 nutritionRouter.patch("/recipes/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1557,7 +1557,7 @@ nutritionRouter.patch("/recipes/:id", requireAuth, async (req: AuthenticatedRequ
 });
 
 nutritionRouter.delete("/recipes/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1589,3 +1589,4 @@ nutritionRouter.delete("/recipes/:id", requireAuth, async (req: AuthenticatedReq
 });
 
 export { nutritionRouter };
+

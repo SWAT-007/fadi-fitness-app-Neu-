@@ -1,18 +1,24 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { Prisma } from "@prisma/client";
+import { Prisma, UserRole } from "@prisma/client";
 import { prisma } from "../db";
 import { errorResponse, unexpectedErrorResponse } from "../utils/errors";
 
 const authRouter = Router();
 
-type RegisterRole = "trainer" | "client";
+type RegisterRole = "admin" | "trainer" | "client";
+
+const roleToUserRole: Record<RegisterRole, UserRole> = {
+  admin: UserRole.ADMIN,
+  trainer: UserRole.TRAINER,
+  client: UserRole.CLIENT,
+};
 
 const normalizeRole = (value: unknown): RegisterRole | null => {
   if (typeof value !== "string") return null;
   const role = value.trim().toLowerCase();
-  if (role === "trainer" || role === "client") return role;
+  if (role === "admin" || role === "trainer" || role === "client") return role;
   return null;
 };
 
@@ -56,7 +62,7 @@ authRouter.post("/register", async (req, res) => {
       data: {
         email,
         passwordHash,
-        role: role.toUpperCase() as "TRAINER" | "CLIENT",
+        role: roleToUserRole[role],
         fullName: fallbackFullNameFromEmail(email),
         ...(role === "trainer" && {
           trainerProfile: { create: {} },

@@ -2,7 +2,7 @@ import { NotificationType, Prisma } from "@prisma/client";
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import { prisma } from "../db";
-import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
+import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { unexpectedErrorResponse } from "../utils/errors";
 import { clampDuration } from "../utils/duration";
 import { buildExerciseChangeLink, createRequestAcceptedNotification } from "./notificationHelpers";
@@ -97,7 +97,7 @@ const resolveOwnedClientProfile = async (trainerId: string, clientId: string) =>
 };
 
 clientsRouter.get("/exercise-change-requests", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -180,7 +180,7 @@ clientsRouter.patch(
   "/exercise-change-requests/:requestId",
   requireAuth,
   async (req: AuthenticatedRequest, res) => {
-    if (req.user?.role !== "trainer") {
+    if (!req.user || !isTrainerOrAdmin(req.user.role)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
@@ -288,7 +288,7 @@ clientsRouter.patch(
 );
 
 clientsRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -391,7 +391,7 @@ clientsRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
 });
 
 clientsRouter.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -428,7 +428,7 @@ clientsRouter.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
 });
 
 clientsRouter.get("/messages/clients", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -515,7 +515,7 @@ clientsRouter.get("/messages/clients", requireAuth, async (req: AuthenticatedReq
 });
 
 clientsRouter.post("/:id/reset-password", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
   }
 
@@ -553,7 +553,7 @@ clientsRouter.post("/:id/reset-password", requireAuth, async (req: Authenticated
 });
 
 clientsRouter.post("/:id/app-access", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -678,7 +678,7 @@ clientsRouter.post("/:id/app-access", requireAuth, async (req: AuthenticatedRequ
 });
 
 clientsRouter.get("/:clientId/nutrition-assignments", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -712,7 +712,7 @@ clientsRouter.get("/:clientId/nutrition-assignments", requireAuth, async (req: A
 });
 
 clientsRouter.get("/:clientId/workout-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -805,7 +805,7 @@ clientsRouter.get("/:clientId/workout-logs", requireAuth, async (req: Authentica
 });
 
 clientsRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -853,7 +853,7 @@ clientsRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) =>
 });
 
 clientsRouter.get("/:clientId/messages", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -900,7 +900,7 @@ clientsRouter.get("/:clientId/messages", requireAuth, async (req: AuthenticatedR
 });
 
 clientsRouter.post("/:clientId/messages", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -955,7 +955,7 @@ clientsRouter.post("/:clientId/messages", requireAuth, async (req: Authenticated
 });
 
 clientsRouter.post("/:clientId/messages/read", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -989,7 +989,7 @@ clientsRouter.post("/:clientId/messages/read", requireAuth, async (req: Authenti
 });
 
 clientsRouter.get("/:id/assignments", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1064,7 +1064,7 @@ clientsRouter.get("/:id/assignments", requireAuth, async (req: AuthenticatedRequ
 });
 
 clientsRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1155,7 +1155,7 @@ clientsRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) 
 });
 
 clientsRouter.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1238,7 +1238,7 @@ clientsRouter.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res)
 const clientAssignmentsRouter = Router();
 
 clientAssignmentsRouter.patch("/:assignmentId", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1315,7 +1315,7 @@ clientAssignmentsRouter.patch("/:assignmentId", requireAuth, async (req: Authent
 });
 
 clientAssignmentsRouter.delete("/:assignmentId", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1382,7 +1382,7 @@ const weeklyCheckinSelect = {
 } as const;
 
 clientsRouter.get("/:clientId/checkins", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1444,7 +1444,7 @@ const assignedNutritionPlanSelect = {
 } as const;
 
 clientsRouter.get("/:clientId/progress-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
-  if (req.user?.role !== "trainer") {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -1482,3 +1482,4 @@ clientsRouter.get("/:clientId/progress-logs", requireAuth, async (req: Authentic
 });
 
 export { clientsRouter, clientAssignmentsRouter };
+
