@@ -22,6 +22,9 @@ const Icon = {
   users: (
     <svg viewBox="0 0 24 24" {...stroke}><circle cx="9" cy="8" r="3.25" /><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" /><path d="M16 4.5a3 3 0 010 6" /><path d="M21 20c0-2.5-1.7-4.7-4-5.6" /></svg>
   ),
+  trainer: (
+    <svg viewBox="0 0 24 24" {...stroke}><circle cx="10" cy="8" r="3.25" /><path d="M4 20c0-3.3 2.7-6 6-6c1.15 0 2.23.32 3.15.88" /><path d="M18 13.5l1.07 2.17 2.4.35-1.74 1.7.41 2.38L18 18.97l-2.14 1.13.41-2.38-1.74-1.7 2.4-.35z" /></svg>
+  ),
   plans: (
     <svg viewBox="0 0 24 24" {...stroke}><rect x="4" y="4" width="16" height="17" rx="2" /><path d="M8 9h8M8 13h8M8 17h5" /><path d="M8 3v3M16 3v3" /></svg>
   ),
@@ -90,6 +93,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter()
   const pathname = usePathname()
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -128,6 +132,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           : 'Trainer'
         const email = typeof payload.user.email === 'string' ? payload.user.email : ''
 
+        // Keep the real role available via a flag (Profile.role only allows
+        // 'trainer' | 'client', so admins are stored as 'trainer' there).
+        setIsAdmin(role === 'admin')
         setProfile({
           id: payload.user.userId,
           email,
@@ -268,13 +275,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <img src="/logo.png" alt="MilaCoach" className="w-9 h-9 rounded-lg object-contain ring-1 ring-white/10" />
               <div className="leading-tight">
                 <div className="text-white font-semibold text-[15px] tracking-tight">MilaCoach</div>
-                <div className="text-[#797D83] text-[11px] uppercase tracking-[0.12em] mt-0.5">Trainer</div>
+                <div className="text-[#797D83] text-[11px] uppercase tracking-[0.12em] mt-0.5">{isAdmin ? 'Admin' : 'Trainer'}</div>
               </div>
             </div>
           </div>
 
           <nav className="flex-1 px-3 pt-2 space-y-0.5 overflow-y-auto">
-            {navItems.map(item => {
+            {(isAdmin
+              ? [
+                  navItems[0],
+                  navItems[1],
+                  { href: '/admin/trainers', label: 'Trainer', icon: Icon.trainer } as (typeof navItems)[number],
+                  ...navItems.slice(2),
+                ]
+              : navItems
+            ).map(item => {
               const active = item.href === '/admin'
                 ? pathname === '/admin'
                 : pathname.startsWith(item.href)
