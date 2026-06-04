@@ -498,6 +498,7 @@ export default function TrainerMessagesPage() {
             <form
               onSubmit={sendMessage}
               className="px-3 lg:px-6 py-3 border-t border-white/[0.06] bg-[#111111]"
+              style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
             >
               <div className="flex items-end gap-2 bg-[#050504] border border-white/[0.08] rounded-2xl px-3 py-2 focus-within:border-[#A78BFA]/40 focus-within:ring-1 focus-within:ring-[#A78BFA]/10 transition-all">
                 <textarea
