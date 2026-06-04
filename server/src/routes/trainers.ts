@@ -246,4 +246,101 @@ trainersRouter.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res
   }
 });
 
+// ── f) POST /:id/reset-password — set a new password (admin) ─────────────────
+trainersRouter.post("/:id/reset-password", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (!requireAdmin(req)) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const id = getParam(req.params.id);
+  if (!id) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  if (password.length < 6) {
+    return res.status(400).json({ message: "Passwort muss mindestens 6 Zeichen haben." });
+  }
+
+  try {
+    const target = await prisma.user.findFirst({
+      where: { id, role: UserRole.TRAINER },
+      select: { id: true },
+    });
+    if (!target) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await prisma.user.update({
+      where: { id },
+      data: { passwordHash },
+      select: { id: true },
+    });
+
+    return res.json({ ok: true });
+  } catch (error) {
+    return unexpectedErrorResponse(res, "trainers:reset-password", error);
+  }
+});
+
+// ── g) DELETE /:id/permanent — hard delete (admin, only if no clients) ───────
+// Separate from the soft DELETE /:id (deactivate) used by the list page.
+trainersRouter.delete("/:id/permanent", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (!requireAdmin(req)) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const id = getParam(req.params.id);
+  if (!id) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  try {
+    const target = await prisma.user.findFirst({
+      where: { id, role: UserRole.TRAINER },
+      select: { id: true, trainerProfile: { select: { id: true } } },
+    });
+    if (!target) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const trainerProfileId = target.trainerProfile?.id;
+
+    // Safety check: refuse if the trainer still has clients.
+    if (trainerProfileId) {
+      const clientCount = await prisma.clientProfile.count({
+        where: { trainerId: trainerProfileId },
+      });
+      if (clientCount > 0) {
+        return res.status(409).json({
+          error: `Trainer hat noch ${clientCount} Kunden. Bitte erst Kunden loeschen oder einem anderen Trainer zuweisen.`,
+        });
+      }
+    }
+
+    try {
+      // Hard delete: TrainerProfile + User in one transaction.
+      await prisma.$transaction(async (tx) => {
+        if (trainerProfileId) {
+          await tx.trainerProfile.delete({ where: { id: trainerProfileId } });
+        }
+        await tx.user.delete({ where: { id } });
+      });
+    } catch (txError) {
+      // Other Restrict relations (e.g. workout/nutrition plans) block deletion.
+      if (txError instanceof Prisma.PrismaClientKnownRequestError && txError.code === "P2003") {
+        return res.status(409).json({
+          error: "Trainer hat noch zugeordnete Daten (z.B. Trainings- oder Ernaehrungsplaene). Bitte diese zuerst entfernen.",
+        });
+      }
+      throw txError;
+    }
+
+    return res.json({ ok: true, deleted: true });
+  } catch (error) {
+    return unexpectedErrorResponse(res, "trainers:delete-permanent", error);
+  }
+});
+
 export { trainersRouter };

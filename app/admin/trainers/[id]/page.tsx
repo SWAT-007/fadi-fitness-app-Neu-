@@ -30,6 +30,17 @@ export default function EditTrainerPage() {
   const [error, setError] = useState('')
   const [flash, setFlash] = useState('')
 
+  // Password reset
+  const [newPassword, setNewPassword] = useState('')
+  const [resetting, setResetting] = useState(false)
+  const [resetError, setResetError] = useState('')
+  const [resetFlash, setResetFlash] = useState('')
+
+  // Hard delete
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
   const load = useCallback(async () => {
     if (!trainerId) return
     try {
@@ -101,6 +112,56 @@ export default function EditTrainerPage() {
       setError('Netzwerkfehler beim Speichern.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleResetPassword = async () => {
+    setResetError('')
+    setResetFlash('')
+    if (newPassword.length < 6) {
+      setResetError('Passwort muss mindestens 6 Zeichen haben.')
+      return
+    }
+    setResetting(true)
+    try {
+      const response = await fetch(`/api/backend/trainers/${trainerId}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: newPassword }),
+      })
+      const payload = await response.json().catch(() => null) as { message?: string; error?: string } | null
+      if (!response.ok) {
+        if (response.status === 401) setResetError('Backend-Login erforderlich.')
+        else setResetError(payload?.message ?? payload?.error ?? 'Passwort konnte nicht geändert werden.')
+        setResetting(false)
+        return
+      }
+      setNewPassword('')
+      setResetFlash('✓ Passwort geändert')
+      setTimeout(() => setResetFlash(''), 2500)
+    } catch {
+      setResetError('Netzwerkfehler beim Zurücksetzen.')
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setDeleteError('')
+    setDeleting(true)
+    try {
+      const response = await fetch(`/api/backend/trainers/${trainerId}/permanent`, { method: 'DELETE' })
+      const payload = await response.json().catch(() => null) as { message?: string; error?: string } | null
+      if (!response.ok) {
+        if (response.status === 401) setDeleteError('Backend-Login erforderlich.')
+        else setDeleteError(payload?.error ?? payload?.message ?? 'Trainer konnte nicht gelöscht werden.')
+        setDeleting(false)
+        return
+      }
+      router.push('/admin/trainers')
+    } catch {
+      setDeleteError('Netzwerkfehler beim Löschen.')
+      setDeleting(false)
     }
   }
 
@@ -223,6 +284,94 @@ export default function EditTrainerPage() {
           </button>
         </div>
       </form>
+
+      {/* Reset password */}
+      <div className="bg-[#111318] border border-white/[0.08] rounded-2xl shadow-lg p-6 mt-5">
+        <h2 className="text-sm font-semibold text-[#EDECEA]">Passwort zurücksetzen</h2>
+        <p className="text-xs text-[#797D83] mt-1 mb-4">Setzt ein neues Passwort für den Trainer.</p>
+
+        {resetError && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl mb-3">
+            {resetError}
+          </div>
+        )}
+        {resetFlash && (
+          <div className="bg-green-500/10 border border-green-500/20 text-green-400 text-sm px-4 py-3 rounded-xl mb-3">
+            {resetFlash}
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="password"
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+            autoComplete="new-password"
+            minLength={6}
+            placeholder="Neues Passwort (min. 6 Zeichen)"
+            className="flex-1 px-4 py-2.5 bg-[#0b0c0f] border border-white/[0.08] text-[#EDECEA] rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent transition placeholder:text-[#555A61]"
+          />
+          <button
+            type="button"
+            onClick={handleResetPassword}
+            disabled={resetting || newPassword.length < 6}
+            className="press shrink-0 px-5 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl transition-colors disabled:opacity-40"
+          >
+            {resetting ? 'Setze…' : 'Passwort setzen'}
+          </button>
+        </div>
+      </div>
+
+      {/* Danger zone */}
+      <div className="bg-red-500/[0.04] border border-red-500/20 rounded-2xl p-6 mt-5">
+        <h2 className="text-sm font-semibold text-red-400">Gefahrenzone</h2>
+        <p className="text-xs text-[#797D83] mt-1 mb-4">
+          Löscht den Trainer und sein Profil endgültig. Nur möglich, wenn keine Kunden mehr zugeordnet sind.
+        </p>
+        <button
+          type="button"
+          onClick={() => { setDeleteError(''); setDeleteOpen(true) }}
+          className="press px-5 py-2.5 bg-red-500/80 hover:bg-red-500 text-white text-sm font-bold rounded-xl transition-colors"
+        >
+          Trainer endgültig löschen
+        </button>
+      </div>
+
+      {/* Delete confirm modal */}
+      {deleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#111111] border border-white/[0.08] rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center motion-page-fade">
+            <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 mx-auto mb-4">
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></svg>
+            </div>
+            <h3 className="font-bold text-[#EDECEA] mb-2 text-[17px]">Bist du sicher?</h3>
+            <p className="text-[#797D83] text-sm mb-4">
+              Das kann nicht rückgängig gemacht werden. Der Trainer und sein Profil werden gelöscht.
+            </p>
+            {deleteError && (
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl mb-4 text-left">
+                {deleteError}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteOpen(false)}
+                disabled={deleting}
+                className="press flex-1 py-3 border border-white/[0.08] text-[#797D83] text-sm font-medium rounded-xl hover:bg-white/[0.04] disabled:opacity-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="press flex-1 py-3 bg-red-500/80 hover:bg-red-500 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Lösche…' : 'Endgültig löschen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
