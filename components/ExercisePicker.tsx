@@ -19,7 +19,7 @@ type ExercisePickerProps = {
 
 function CloseIcon() {
   return (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
     </svg>
   )
@@ -46,7 +46,7 @@ export default function ExercisePicker({ open, onClose, onSelect }: ExercisePick
       .catch(error => {
         console.error('[ExercisePicker] Could not load exercise library:', error)
         setLibrary([])
-        setLoadError('Übungen konnten nicht geladen werden. Bitte versuche es erneut.')
+        setLoadError('Uebungen konnten nicht geladen werden. Bitte versuche es erneut.')
       })
       .finally(() => setLoading(false))
   }, [open])
@@ -54,9 +54,9 @@ export default function ExercisePicker({ open, onClose, onSelect }: ExercisePick
   if (!open) return null
 
   const query = search.trim().toLowerCase()
-  const filtered = library.filter(e => {
-    const matchMuscle = muscleFilter === 'all' || getExerciseCategory(e.muscle_group) === muscleFilter
-    const matchSearch = !query || e.name.toLowerCase().includes(query)
+  const filtered = library.filter(exercise => {
+    const matchMuscle = muscleFilter === 'all' || getExerciseCategory(exercise.muscle_group) === muscleFilter
+    const matchSearch = !query || exercise.name.toLowerCase().includes(query)
     return matchMuscle && matchSearch
   })
 
@@ -64,101 +64,118 @@ export default function ExercisePicker({ open, onClose, onSelect }: ExercisePick
     library.filter(exercise => getExerciseCategory(exercise.muscle_group) === category).length
 
   return (
-    <div className="fixed inset-y-0 left-0 right-0 z-50 flex h-screen min-h-0 flex-col overflow-hidden bg-white lg:left-[260px]">
-      <div className="flex flex-shrink-0 items-center gap-3 border-b border-gray-100 px-4 py-4">
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-          <CloseIcon />
-        </button>
-        <h2 className="font-semibold text-gray-900 flex-1">Übung auswählen</h2>
-        <Link href="/admin/exercises" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
-          Datenbank verwalten
-        </Link>
-      </div>
-
-      <div className="flex-shrink-0 space-y-3 border-b border-gray-100 px-4 py-3">
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Suchen…"
-          className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-        />
-        <div className="flex gap-2 overflow-x-auto -mx-1 px-1">
-          <button
-            onClick={() => setMuscleFilter('all')}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              muscleFilter === 'all'
-                ? 'bg-indigo-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            Alle <span className="opacity-70">{library.length}</span>
-          </button>
-          {EXERCISE_CATEGORIES.map(group => (
+    <div className="fixed inset-0 z-50 bg-black/72 backdrop-blur-md lg:left-[260px]">
+      <div className="flex h-full min-h-0 flex-col p-3 sm:p-4">
+        <div className="mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col overflow-hidden rounded-[28px] border border-white/[0.06] bg-[#050504] shadow-[0_32px_90px_-36px_rgba(0,0,0,0.92)]">
+          <div className="flex flex-shrink-0 items-center gap-3 border-b border-white/[0.06] bg-[#111318] px-4 py-4 sm:px-5">
             <button
-              key={group}
-              onClick={() => setMuscleFilter(group)}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                muscleFilter === group
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              onClick={onClose}
+              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/[0.06] bg-[#111111] text-[#797D83] transition-colors hover:border-white/[0.12] hover:text-[#EDECEA]"
             >
-              {group} <span className="opacity-70">{categoryCount(group)}</span>
+              <CloseIcon />
             </button>
-          ))}
-        </div>
-      </div>
+            <h2
+              className="flex-1 text-3xl uppercase leading-none text-[#EDECEA] sm:text-4xl"
+              style={{ fontFamily: 'var(--font-heading)' }}
+            >
+              Uebung auswaehlen
+            </h2>
+            <Link
+              href="/admin/exercises"
+              className="text-xs font-medium uppercase tracking-[0.18em] text-[#A78BFA] transition-colors hover:text-[#C4B5FD]"
+            >
+              Datenbank verwalten
+            </Link>
+          </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        {loading ? (
-          <div className="p-8 flex justify-center">
-            <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <div className="flex-shrink-0 space-y-4 border-b border-white/[0.06] bg-[#050504] px-4 py-4 sm:px-5">
+            <input
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Suchen..."
+              className="w-full rounded-2xl border border-white/[0.06] bg-[#111111] px-4 py-3 text-sm text-[#EDECEA] placeholder:text-[#797D83] focus:border-[#A78BFA]/40 focus:outline-none"
+            />
+            <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-color:rgba(167,139,250,0.32)_transparent] [scrollbar-width:thin]">
+              <button
+                onClick={() => setMuscleFilter('all')}
+                className={`flex-shrink-0 rounded-full border px-3.5 py-2 text-xs font-medium transition-colors ${
+                  muscleFilter === 'all'
+                    ? 'border-[#A78BFA] bg-[#A78BFA] text-white'
+                    : 'border-white/[0.06] bg-[#111111] text-[#EDECEA] hover:border-white/[0.12] hover:bg-[#1a1a1a]'
+                }`}
+              >
+                Alle <span className="opacity-70">{library.length}</span>
+              </button>
+              {EXERCISE_CATEGORIES.map(group => (
+                <button
+                  key={group}
+                  onClick={() => setMuscleFilter(group)}
+                  className={`flex-shrink-0 rounded-full border px-3.5 py-2 text-xs font-medium transition-colors ${
+                    muscleFilter === group
+                      ? 'border-[#A78BFA] bg-[#A78BFA] text-white'
+                      : 'border-white/[0.06] bg-[#111111] text-[#EDECEA] hover:border-white/[0.12] hover:bg-[#1a1a1a]'
+                  }`}
+                >
+                  {group} <span className="opacity-70">{categoryCount(group)}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        ) : loadError ? (
-          <div className="p-8 text-center text-sm text-red-500">
-            {loadError}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="p-8 text-center text-sm text-gray-400">
-            {library.length === 0 ? (
-              <>
-                Die Übungs-Datenbank ist leer.<br />
-                <Link href="/admin/exercises" className="text-indigo-600 hover:underline">Erste Übung anlegen →</Link>
-              </>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#050504] px-4 py-4 sm:px-5 [scrollbar-color:rgba(167,139,250,0.32)_transparent] [scrollbar-width:thin]">
+            {loading ? (
+              <div className="flex justify-center p-8">
+                <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#A78BFA] border-t-transparent" />
+              </div>
+            ) : loadError ? (
+              <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-8 text-center text-sm text-red-300">
+                {loadError}
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="rounded-3xl border border-white/[0.06] bg-[#111111] p-8 text-center text-sm text-[#797D83]">
+                {library.length === 0 ? (
+                  <>
+                    Die Uebungs-Datenbank ist leer.<br />
+                    <Link href="/admin/exercises" className="text-[#A78BFA] hover:underline">Erste Uebung anlegen -&gt;</Link>
+                  </>
+                ) : (
+                  'Keine Uebung gefunden.'
+                )}
+              </div>
             ) : (
-              'Keine Übung gefunden.'
+              <ul className="space-y-3 pb-6">
+                {filtered.map(exercise => (
+                  <li key={exercise.id}>
+                    <button
+                      onClick={() => onSelect(exercise)}
+                      className="flex w-full items-center gap-4 rounded-3xl border border-white/[0.06] bg-[#111111] px-4 py-3.5 text-left transition-colors hover:bg-[#1a1a1a] active:bg-[#1f1f1f] sm:px-5"
+                    >
+                      <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#1a1a1a] ring-1 ring-white/[0.05] sm:h-16 sm:w-16">
+                        {resolveImageUrl(exercise.image_url) ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={resolveImageUrl(exercise.image_url)!} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="text-xs text-[#797D83]">--</span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-base font-semibold text-[#EDECEA] sm:text-[17px]">{exercise.name}</div>
+                        {(exercise.muscle_group || exercise.equipment) && (
+                          <div className="mt-1 text-xs text-[#797D83] sm:text-sm">
+                            {[exercise.muscle_group, exercise.equipment].filter(Boolean).join(' - ')}
+                          </div>
+                        )}
+                      </div>
+                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-[#A78BFA] text-xl font-bold text-white shadow-[0_10px_24px_-14px_rgba(167,139,250,0.9)] transition-transform duration-200 hover:scale-105">
+                        +
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-        ) : (
-          <ul className="divide-y divide-gray-100 pb-6">
-            {filtered.map(exercise => (
-              <li key={exercise.id}>
-                <button
-                  onClick={() => onSelect(exercise)}
-                  className="w-full flex items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-gray-50 active:bg-gray-100"
-                >
-                  <div className="w-14 h-14 rounded-xl bg-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                    {resolveImageUrl(exercise.image_url) ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={resolveImageUrl(exercise.image_url)!} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-gray-300 text-xs">—</span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-900 text-sm">{exercise.name}</div>
-                    {(exercise.muscle_group || exercise.equipment) && (
-                      <div className="text-xs text-gray-400 mt-0.5">
-                        {[exercise.muscle_group, exercise.equipment].filter(Boolean).join(' · ')}
-                      </div>
-                    )}
-                  </div>
-                  <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg font-bold flex-shrink-0">+</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        </div>
       </div>
     </div>
   )

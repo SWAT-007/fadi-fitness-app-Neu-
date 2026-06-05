@@ -324,6 +324,93 @@ plansRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
   }
 });
 
+plansRouter.patch("/:id/days/reorder", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (!req.user || !isTrainerOrAdmin(req.user.role)) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const planIdParam = req.params.id;
+  const planId = Array.isArray(planIdParam) ? planIdParam[0] : planIdParam;
+  if (!planId) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  const dayIdsInput = req.body?.dayIds;
+  if (
+    !Array.isArray(dayIdsInput) ||
+    dayIdsInput.length === 0 ||
+    !dayIdsInput.every((value) => typeof value === "string" && value.length > 0)
+  ) {
+    return res.status(400).json({ message: "dayIds must be a non-empty string array" });
+  }
+  const dayIds = dayIdsInput as string[];
+
+  if (new Set(dayIds).size !== dayIds.length) {
+    return res.status(400).json({ message: "dayIds must be unique" });
+  }
+
+  try {
+    const scope = await resolveScope(req.user);
+
+    const existingPlan = await prisma.workoutPlan.findFirst({
+      where: {
+        id: planId,
+        ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
+      },
+      select: { id: true },
+    });
+    if (!existingPlan) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const planDays = await prisma.workoutDay.findMany({
+      where: { planId: existingPlan.id },
+      select: { id: true },
+    });
+    const planDayIds = new Set(planDays.map((day) => day.id));
+    if (dayIds.length !== planDayIds.size || !dayIds.every((dayId) => planDayIds.has(dayId))) {
+      return res.status(400).json({ message: "dayIds must match exactly the days of this plan" });
+    }
+
+    await prisma.$transaction(
+      dayIds.map((dayId, index) =>
+        prisma.workoutDay.update({
+          where: { id: dayId },
+          data: { sortOrder: index },
+        }),
+      ),
+    );
+
+    const reorderedDays = await prisma.workoutDay.findMany({
+      where: { planId: existingPlan.id },
+      orderBy: { sortOrder: "asc" },
+      select: {
+        id: true,
+        planId: true,
+        name: true,
+        description: true,
+        sortOrder: true,
+        createdAt: true,
+      },
+    });
+
+    return res.json({
+      ok: true,
+      days: reorderedDays.map((day) => ({
+        id: day.id,
+        planId: day.planId,
+        name: day.name,
+        description: day.description,
+        sortOrder: day.sortOrder,
+        createdAt: day.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error("[plans:reorder-days] error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 // Save the WHOLE edited plan in one transaction (draft-mode commit).
 // Diff/upsert: existing ids are updated, missing ids deleted, null/tmp ids created.
 // Exercises are upserted (NOT delete+recreate) so kept exercises retain their

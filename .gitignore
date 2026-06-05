@@ -55,3 +55,8 @@ review-*.png
 
 # IDE
 .idea/
+
+# Android signing — NEVER commit
+key.properties
+*.jks
+*.keystore

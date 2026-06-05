@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from 'react'
 
-type ToastKind = 'success' | 'info' | 'danger'
+export type ToastKind = 'success' | 'info' | 'danger'
 
 type Toast = {
   id: number
@@ -26,10 +26,22 @@ type ToastContextValue = {
 
 const ToastContext = createContext<ToastContextValue | null>(null)
 
-const toastStyle: Record<ToastKind, string> = {
-  success: 'border-emerald-200 bg-emerald-600 text-white shadow-emerald-200/70',
-  info: 'border-blue-200 bg-blue-600 text-white shadow-blue-200/70',
-  danger: 'border-red-200 bg-red-600 text-white shadow-red-200/70',
+export const toastStyle: Record<ToastKind, string> = {
+  success: 'border-[#A78BFA]/30 bg-[#111111] text-[#EDECEA] shadow-[0_18px_48px_-24px_rgba(167,139,250,0.55)]',
+  info: 'border-white/[0.08] bg-[#111111] text-[#EDECEA] shadow-[0_18px_48px_-24px_rgba(0,0,0,0.75)]',
+  danger: 'border-red-500/25 bg-[#111111] text-[#EDECEA] shadow-[0_18px_48px_-24px_rgba(239,68,68,0.35)]',
+}
+
+export const toastIconStyle: Record<ToastKind, string> = {
+  success: 'border-[#A78BFA]/30 bg-[#A78BFA]/14 text-[#A78BFA]',
+  info: 'border-white/[0.08] bg-white/[0.04] text-[#797D83]',
+  danger: 'border-red-500/25 bg-red-500/10 text-red-300',
+}
+
+export const toastIconLabel: Record<ToastKind, string> = {
+  success: '✓',
+  info: 'i',
+  danger: '!',
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -53,9 +65,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map(toast => (
           <div
             key={toast.id}
-            className={`motion-toast pointer-events-auto rounded-2xl border px-4 py-3 text-sm font-semibold shadow-xl ${toastStyle[toast.kind]}`}
+            className={`motion-toast pointer-events-auto flex items-center gap-3 rounded-lg border px-4 py-3 text-sm font-semibold shadow-xl ${toastStyle[toast.kind]}`}
           >
-            {toast.message}
+            <span className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border text-xs font-bold ${toastIconStyle[toast.kind]}`}>
+              {toastIconLabel[toast.kind]}
+            </span>
+            <span>{toast.message}</span>
           </div>
         ))}
       </div>
@@ -191,7 +206,7 @@ export function SuccessButton({
   return (
     <button
       {...props}
-      className={`${className} ${success ? 'motion-success-pulse bg-emerald-600 text-white ring-4 ring-emerald-200' : ''}`}
+      className={`${className} ${success ? 'motion-success-pulse bg-[#A78BFA] text-[#050504] ring-4 ring-[#A78BFA]/20' : ''}`}
     >
       {success ? successLabel : children}
     </button>

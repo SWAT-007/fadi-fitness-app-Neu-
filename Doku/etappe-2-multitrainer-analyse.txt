@@ -1,0 +1,1042 @@
+Etappe 2 Multi-Trainer - Analyse
+Projekt: C:\Users\Fadi\Documents\fitness-app
+Status: Reine Analyse, keine Codeaenderung fuer diese Auswertung
+
+========================================================================
+1. TRAINER-ID AUFLOESUNG
+========================================================================
+
+Es gibt aktuell keine zentrale systemweite Scope-/Ownership-Schicht fuer
+trainerId-Filterung.
+
+Teilweise zentral in clients.ts:
+
+Datei: server/src/routes/clients.ts
+Zeilen: 76-83
+Code:
+const resolveTrainerProfile = async (userId: string) => {
+  return prisma.trainerProfile.findUnique({
+    where: { userId },
+    select: {
+      id: true,
+      userId: true,
+    },
+  });
+};
+
+Datei: server/src/routes/clients.ts
+Zeilen: 86-94
+Code:
+const resolveOwnedClientProfile = async (trainerId: string, clientId: string) => {
+  return prisma.clientProfile.findFirst({
+    where: { id: clientId, trainerId },
+    select: {
+      id: true,
+      userId: true,
+      fullName: true,
+      email: true,
+      status: true,
+    },
+  });
+};
+
+Ausserhalb von clients.ts wird trainerId bzw. TrainerProfile in vielen
+Routen pro Handler erneut geladen.
+
+Wichtige Aufloesungsstellen:
+
+Datei: server/src/routes/clientLinkTokens.ts
+Zeilen: 69-72
+Code:
+const trainerProfile = await prisma.trainerProfile.findUnique({
+  where: { userId: req.user.userId },
+  select: { id: true },
+});
+
+Datei: server/src/routes/me.ts
+Zeilen: 72-84
+Code:
+const trainerProfile = await prisma.trainerProfile.findUnique({
+  where: { userId: req.user.userId },
+  select: {
+    id: true,
+    userId: true,
+    user: {
+      select: {
+        email: true,
+        fullName: true,
+      },
+    },
+  },
+});
+
+Datei: server/src/routes/notifications.ts
+Zeilen: 179-182
+Code:
+const trainerProfile = await prisma.trainerProfile.findUnique({
+  where: { userId: trainerUserId },
+  select: { id: true },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeilen: 84-87
+Code:
+const trainerProfile = await prisma.trainerProfile.findUnique({
+  where: { userId: req.user.userId },
+  select: { id: true },
+});
+
+Datei: server/src/routes/plans.ts
+Zeilen: 150-153
+Code:
+const trainerProfile = await prisma.trainerProfile.findUnique({
+  where: { userId: req.user.userId },
+  select: { id: true },
+});
+
+Sonderfall Rezepte:
+
+Datei: server/src/routes/nutrition.ts
+Zeilen: 1388-1408
+Code:
+let trainerId: string | null = null;
+
+if (isTrainerOrAdmin(req.user.role)) {
+  const trainerProfile = await prisma.trainerProfile.findUnique({
+    where: { userId: req.user.userId },
+    select: { id: true },
+  });
+  if (!trainerProfile) return res.status(500).json({ message: "Internal server error" });
+  trainerId = trainerProfile.id;
+} else {
+  const clientProfile = await prisma.clientProfile.findUnique({
+    where: { userId: req.user.userId },
+    select: { trainerId: true },
+  });
+  if (!clientProfile) return res.status(500).json({ message: "Internal server error" });
+  trainerId = clientProfile.trainerId;
+}
+
+Bewertung:
+- clients.ts hat zwei lokale Helper.
+- Sonst wird TrainerProfile meist pro Route erneut geladen.
+- Es gibt derzeit keine zentrale Scope-Entscheidung fuer TRAINER vs ADMIN.
+
+========================================================================
+2. ALLE PRISMA-QUERIES MIT trainerId ALS FILTER
+========================================================================
+
+Gesamtzahl der trainerId-Filter-Query-Stellen: 66
+
+----------------------------------------------------------------------
+clientLinkTokens.ts - 1 Stelle
+----------------------------------------------------------------------
+
+Datei: server/src/routes/clientLinkTokens.ts
+Zeile: 188
+Code:
+const existingClientProfile = await tx.clientProfile.findFirst({
+  where: {
+    trainerId: invite.trainerId,
+    email,
+  },
+});
+
+----------------------------------------------------------------------
+clients.ts - 12 Stellen
+----------------------------------------------------------------------
+
+Datei: server/src/routes/clients.ts
+Zeile: 86
+Code:
+prisma.clientProfile.findFirst({
+  where: { id: clientId, trainerId },
+});
+
+Datei: server/src/routes/clients.ts
+Zeile: 116
+Code:
+prisma.exerciseChangeRequest.findMany({
+  where: {
+    ...(whereStatus ? { status: whereStatus } : {}),
+    client: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/clients.ts
+Zeile: 202
+Code:
+prisma.exerciseChangeRequest.findFirst({
+  where: {
+    id: requestId,
+    client: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/clients.ts
+Zeile: 408
+Code:
+prisma.clientProfile.findMany({
+  where: { trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/clients.ts
+Zeile: 439
+Code:
+prisma.clientProfile.findMany({
+  where: { trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/clients.ts
+Zeile: 827
+Code:
+prisma.clientProfile.findFirst({
+  where: {
+    id: clientId,
+    trainerId: trainerProfile.id,
+  },
+});
+
+Datei: server/src/routes/clients.ts
+Zeile: 1011
+Code:
+prisma.clientProfile.findFirst({
+  where: {
+    id: clientId,
+    trainerId: trainerProfile.id,
+  },
+});
+
+Datei: server/src/routes/clients.ts
+Zeile: 1123
+Code:
+prisma.clientProfile.findFirst({
+  where: {
+    id: clientId,
+    trainerId: trainerProfile.id,
+  },
+});
+
+Datei: server/src/routes/clients.ts
+Zeile: 1177
+Code:
+prisma.clientProfile.findFirst({
+  where: {
+    id: clientId,
+    trainerId: trainerProfile.id,
+  },
+});
+
+Datei: server/src/routes/clients.ts
+Zeile: 1268
+Code:
+prisma.assignedPlan.findFirst({
+  where: {
+    id: assignmentId,
+    client: { trainerId: trainerProfile.id },
+    plan: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/clients.ts
+Zeile: 1340
+Code:
+prisma.assignedPlan.findFirst({
+  where: {
+    id: assignmentId,
+    client: { trainerId: trainerProfile.id },
+    plan: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/clients.ts
+Zeile: 1403
+Code:
+prisma.clientProfile.findFirst({
+  where: { id: clientId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/clients.ts
+Zeile: 1465
+Code:
+prisma.clientProfile.findFirst({
+  where: { id: clientId, trainerId: trainerProfile.id },
+});
+
+----------------------------------------------------------------------
+me.ts - 11 Stellen
+----------------------------------------------------------------------
+
+Trainer-Dashboard:
+
+Datei: server/src/routes/me.ts
+Zeile: 100
+Code:
+prisma.clientProfile.count({
+  where: { trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/me.ts
+Zeile: 103
+Code:
+prisma.clientProfile.count({
+  where: {
+    trainerId: trainerProfile.id,
+    status: { equals: "active", mode: "insensitive" },
+  },
+});
+
+Datei: server/src/routes/me.ts
+Zeile: 109
+Code:
+prisma.workoutPlan.count({
+  where: { trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/me.ts
+Zeile: 112
+Code:
+prisma.assignedPlan.count({
+  where: {
+    active: true,
+    client: { trainerId: trainerProfile.id },
+    plan: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/me.ts
+Zeile: 119
+Code:
+prisma.nutritionPlan.count({
+  where: { trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/me.ts
+Zeile: 122
+Code:
+prisma.exerciseChangeRequest.count({
+  where: {
+    status: { equals: "pending", mode: "insensitive" },
+    client: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/me.ts
+Zeile: 134
+Code:
+prisma.clientProfile.findMany({
+  where: { trainerId: trainerProfile.id },
+  orderBy: { createdAt: "desc" },
+  take: 5,
+});
+
+Client-Nutrition:
+
+Datei: server/src/routes/me.ts
+Zeile: 1217
+Code:
+prisma.food.findMany({
+  where: {
+    OR: [
+      { trainerId: clientProfile.trainerId },
+      { trainerId: null },
+    ],
+  },
+});
+
+Datei: server/src/routes/me.ts
+Zeile: 1259
+Code:
+prisma.drink.findMany({
+  where: { OR: [{ trainerId: clientProfile.trainerId }, { trainerId: null }] },
+});
+
+Datei: server/src/routes/me.ts
+Zeile: 1308
+Code:
+prisma.food.findFirst({
+  where: {
+    id: foodId,
+    OR: [{ trainerId: clientProfile.trainerId }, { trainerId: null }],
+  },
+});
+
+Datei: server/src/routes/me.ts
+Zeile: 1376
+Code:
+prisma.food.findFirst({
+  where: {
+    id: body.foodId as string,
+    OR: [{ trainerId: clientProfile.trainerId }, { trainerId: null }],
+  },
+});
+
+----------------------------------------------------------------------
+notifications.ts - 4 Stellen
+----------------------------------------------------------------------
+
+Datei: server/src/routes/notifications.ts
+Zeile: 186
+Code:
+prisma.clientProfile.findFirst({
+  where: { id: clientProfileId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/notifications.ts
+Zeile: 213
+Code:
+prisma.message.findMany({
+  where: {
+    receiverId: trainerUserId,
+    sender: { clientProfile: { trainerId: trainerProfile.id } },
+  },
+});
+
+Datei: server/src/routes/notifications.ts
+Zeile: 270
+Code:
+prisma.workoutLog.findMany({
+  where: {
+    client: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/notifications.ts
+Zeile: 297
+Code:
+prisma.weeklyCheckin.findMany({
+  where: {
+    client: { trainerId: trainerProfile.id },
+  },
+});
+
+----------------------------------------------------------------------
+nutrition.ts - 22 Stellen
+----------------------------------------------------------------------
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 93
+Code:
+prisma.food.findMany({
+  where: {
+    OR: [{ trainerId: trainerProfile.id }, { trainerId: null }],
+  },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 330
+Code:
+prisma.food.findFirst({
+  where: { id: foodId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 394
+Code:
+prisma.food.findFirst({
+  where: { id: foodId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 439
+Code:
+prisma.drink.findMany({
+  where: { OR: [{ trainerId: trainerProfile.id }, { trainerId: null }] },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 542
+Code:
+prisma.drink.findFirst({
+  where: { id: drinkId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 583
+Code:
+prisma.drink.findFirst({
+  where: { id: drinkId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 614
+Code:
+prisma.nutritionPlan.findMany({
+  where: { trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 718
+Code:
+prisma.nutritionPlan.findFirst({
+  where: { id: planId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 762
+Code:
+prisma.nutritionPlan.findFirst({
+  where: { id: planId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 796
+Code:
+prisma.assignedNutritionPlan.findMany({
+  where: {
+    client: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 816
+Code:
+prisma.clientProfile.findMany({
+  where: { trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 878
+Code:
+prisma.nutritionPlan.findFirst({
+  where: { id: planId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 939
+Code:
+prisma.nutritionPlan.findFirst({
+  where: { id: planId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 1044
+Code:
+prisma.nutritionMeal.findFirst({
+  where: { id: mealId, plan: { trainerId: trainerProfile.id } },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 1088
+Code:
+prisma.nutritionMeal.findFirst({
+  where: { id: mealId, plan: { trainerId: trainerProfile.id } },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 1142
+Code:
+prisma.nutritionPlan.findFirst({
+  where: { id: planId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 1146
+Code:
+prisma.clientProfile.findFirst({
+  where: { id: clientId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 1226
+Code:
+prisma.assignedNutritionPlan.findFirst({
+  where: {
+    id: assignmentId,
+    client: { trainerId: trainerProfile.id },
+    plan: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 1271
+Code:
+prisma.assignedNutritionPlan.findFirst({
+  where: {
+    id: assignmentId,
+    client: { trainerId: trainerProfile.id },
+    plan: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 1342
+Code:
+prisma.recipe.findFirst({
+  where: { trainerId: trainerProfile.id, sourcePdf: r.source_pdf, name: r.name },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 1406
+Code:
+prisma.recipe.findMany({
+  where: {
+    OR: [{ trainerId }, { trainerId: null }],
+  },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 1503
+Code:
+prisma.recipe.findFirst({
+  where: { id: recipeId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/nutrition.ts
+Zeile: 1578
+Code:
+prisma.recipe.findFirst({
+  where: { id: recipeId, trainerId: trainerProfile.id },
+});
+
+----------------------------------------------------------------------
+plans.ts - 16 Stellen
+----------------------------------------------------------------------
+
+Datei: server/src/routes/plans.ts
+Zeile: 238
+Code:
+prisma.workoutPlan.findMany({
+  where: { trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 285
+Code:
+prisma.workoutPlan.findFirst({
+  where: { id: planId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 389
+Code:
+prisma.workoutPlan.findFirst({
+  where: { id: planId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 511
+Code:
+prisma.exerciseChangeRequest.findFirst({
+  where: {
+    id: requestId,
+    day: { planId },
+    client: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 543
+Code:
+prisma.workoutPlan.findFirst({
+  where: { id: planId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 638
+Code:
+prisma.workoutPlan.findFirst({
+  where: { id: planId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 701
+Code:
+prisma.workoutPlan.findFirst({
+  where: { id: planId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 761
+Code:
+prisma.workoutPlan.findFirst({
+  where: { id: planId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 883
+Code:
+prisma.workoutPlan.findFirst({
+  where: { id: planId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 898
+Code:
+prisma.clientProfile.findFirst({
+  where: { id: clientId, trainerId: trainerProfile.id },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 1026
+Code:
+prisma.workoutDay.findFirst({
+  where: {
+    id: dayId,
+    plan: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 1095
+Code:
+prisma.workoutDay.findFirst({
+  where: {
+    id: dayId,
+    plan: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 1196
+Code:
+prisma.workoutDay.findFirst({
+  where: {
+    id: dayId,
+    plan: { trainerId: trainerProfile.id },
+  },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 1294
+Code:
+prisma.workoutDay.findFirst({
+  where: { id: dayId, plan: { trainerId: trainerProfile.id } },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 1689
+Code:
+prisma.exercise.findFirst({
+  where: {
+    id: exerciseId,
+    day: {
+      plan: {
+        trainerId: trainerProfile.id,
+      },
+    },
+  },
+});
+
+Datei: server/src/routes/plans.ts
+Zeile: 1768
+Code:
+prisma.exercise.findFirst({
+  where: {
+    id: exerciseId,
+    day: {
+      plan: {
+        trainerId: trainerProfile.id,
+      },
+    },
+  },
+});
+
+========================================================================
+3. TRAINER-DASHBOARD (/me/trainer-dashboard)
+========================================================================
+
+Datei: server/src/routes/me.ts
+Zeilen: 66-145
+
+Dashboard-Flow:
+1. TrainerProfile des eingeloggten Users laden
+2. Danach mehrere Count-/List-Queries mit trainerId-Filter
+
+TrainerProfile-Lookup:
+Datei: server/src/routes/me.ts
+Zeilen: 72-84
+Code:
+const trainerProfile = await prisma.trainerProfile.findUnique({
+  where: { userId: req.user.userId },
+  select: {
+    id: true,
+    userId: true,
+    user: {
+      select: {
+        email: true,
+        fullName: true,
+      },
+    },
+  },
+});
+
+Gefilterte Dashboard-Queries:
+
+Datei: server/src/routes/me.ts
+Zeilen: 100-145
+Code:
+prisma.clientProfile.count({
+  where: { trainerId: trainerProfile.id },
+}),
+prisma.clientProfile.count({
+  where: {
+    trainerId: trainerProfile.id,
+    status: { equals: "active", mode: "insensitive" },
+  },
+}),
+prisma.workoutPlan.count({
+  where: { trainerId: trainerProfile.id },
+}),
+prisma.assignedPlan.count({
+  where: {
+    active: true,
+    client: { trainerId: trainerProfile.id },
+    plan: { trainerId: trainerProfile.id },
+  },
+}),
+prisma.nutritionPlan.count({
+  where: { trainerId: trainerProfile.id },
+}),
+prisma.exerciseChangeRequest.count({
+  where: {
+    status: { equals: "pending", mode: "insensitive" },
+    client: { trainerId: trainerProfile.id },
+  },
+}),
+prisma.clientProfile.findMany({
+  where: { trainerId: trainerProfile.id },
+  orderBy: { createdAt: "desc" },
+  take: 5,
+}),
+
+Bewertung:
+- Das aktuelle Dashboard ist komplett auf einen einzelnen Trainer-Scope gebaut.
+- Fuer ADMIN reicht "Role erlauben" nicht; die Queries selbst muessen global
+  werden oder es braucht eine getrennte Admin-Dashboard-Route.
+
+========================================================================
+4. ADMIN-DASHBOARD - WAS MUESSTE ADMIN ZUSAETZLICH SEHEN?
+========================================================================
+
+Heutiger Stand:
+- Es gibt nur ein trainergebundenes Dashboard.
+- Kein Admin-spezifisches globales Statistikmodell vorhanden.
+
+Sinnvolle Admin-Dashboard-Daten:
+- Liste aller Trainer
+- Anzahl Kunden pro Trainer
+- Anzahl aktive Kunden pro Trainer
+- Anzahl Trainingsplaene pro Trainer
+- Anzahl Ernaehrungsplaene pro Trainer
+- Anzahl offener Requests pro Trainer
+- Gesamtzahlen systemweit
+- Optional: neueste Trainer, neueste Kunden, Drilldown pro Trainer
+
+Technische Auswirkung:
+- Entweder neue Admin-Dashboard-Route
+- Oder bestehende /me/trainer-dashboard Route verzweigt:
+  - TRAINER => trainerId-Filter wie heute
+  - ADMIN => globale Queries ohne trainerId-Filter oder mit Gruppierung pro Trainer
+
+========================================================================
+5. TRAINER ERSTELLEN
+========================================================================
+
+Ein neuer Trainer braucht aktuell:
+- User mit role=TRAINER
+- TrainerProfile mit userId
+
+Bestehender Register-Flow:
+
+Datei: server/src/routes/auth.ts
+Zeilen: 46-76
+Code:
+authRouter.post("/register", async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  const password = normalizePassword(req.body?.password);
+  const role = normalizeRole(req.body?.role);
+
+  if (!email || !password || password.length < 6 || !role) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  if (role === "client") {
+    return res.status(403).json({ message: "Client registration requires an invitation link" });
+  }
+
+  try {
+    const passwordHash = await bcrypt.hash(password, 12);
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        role: roleToUserRole[role],
+        fullName: fallbackFullNameFromEmail(email),
+        ...(role === "trainer" && {
+          trainerProfile: { create: {} },
+        }),
+      },
+    });
+
+Bewertung:
+- Ja, Register legt fuer TRAINER bereits User + TrainerProfile an.
+- Das ist konzeptionell wiederverwendbar.
+- Fuer Admin-CRUD waere eine eigene Admin-Route sicherer als /auth/register,
+  weil Admin-CRUD typischerweise mehr Felder, klare Berechtigungen und
+  spaeter Update/Delete/Freigabe-Logik braucht.
+
+========================================================================
+6. ADMIN-SEITEN UNTER app/admin/ UND IHRE API-CALLS
+========================================================================
+
+Aktuelle Seiten:
+- app/admin/layout.tsx
+- app/admin/page.tsx
+- app/admin/backend-login/page.tsx
+- app/admin/clients/page.tsx
+- app/admin/clients/new/page.tsx
+- app/admin/clients/[id]/page.tsx
+- app/admin/exercises/page.tsx
+- app/admin/messages/page.tsx
+- app/admin/nutrition/page.tsx
+- app/admin/nutrition/drinks/page.tsx
+- app/admin/nutrition/foods/page.tsx
+- app/admin/nutrition/new/page.tsx
+- app/admin/nutrition/[id]/page.tsx
+- app/admin/plans/page.tsx
+- app/admin/plans/new/page.tsx
+- app/admin/plans/[id]/page.tsx
+- app/admin/recipes/page.tsx
+- app/admin/requests/page.tsx
+
+Wichtige API-Calls:
+
+layout.tsx
+- /api/backend/auth/me
+- /api/backend/messages/clients
+- /api/backend/clients/exercise-change-requests?status=pending
+- /api/backend/auth/logout
+
+page.tsx
+- /api/backend/me/trainer-dashboard
+
+backend-login/page.tsx
+- /api/backend/auth/login
+
+clients/page.tsx
+- /api/backend/clients
+- DELETE /api/backend/clients/:id
+
+clients/new/page.tsx
+- POST /api/backend/clients
+
+clients/[id]/page.tsx
+- /api/backend/clients/:id
+- /api/backend/clients/:id/assignments
+- /api/backend/plans
+- /api/backend/clients/:id/nutrition-assignments
+- /api/backend/clients/:id/workout-logs
+- /api/backend/clients/:id/progress-logs
+- /api/backend/clients/:id/checkins
+- POST /api/backend/plans/:id/assignments
+- PATCH/DELETE /api/backend/client-assignments/:id
+- PATCH /api/backend/clients/:id
+- POST /api/backend/clients/:id/reset-password
+- POST /api/backend/clients/:id/app-access
+
+exercises/page.tsx
+- /api/backend/exercises/library
+- POST /api/backend/exercises/library/:id/image
+- POST/PATCH /api/backend/exercises/library
+- DELETE /api/backend/exercises/library/:id
+
+messages/page.tsx
+- /api/backend/messages/clients
+- /api/backend/clients/:id/messages/read
+- /api/backend/clients/:id/messages
+
+nutrition/*
+- /api/backend/nutrition/plans
+- /api/backend/nutrition/plans/:id
+- /api/backend/nutrition/plans/:id/meals
+- /api/backend/nutrition/meals/:mealId
+- /api/backend/nutrition/plans/:id/assignments
+- /api/backend/nutrition/assignments/:id
+- /api/backend/nutrition/drinks
+- /api/backend/nutrition/foods
+
+plans/*
+- /api/backend/plans
+- /api/backend/clients
+- /api/backend/plans/:id
+- /api/backend/plans/:id/full
+- /api/backend/plans/:id/assignments
+
+recipes/page.tsx
+- /api/backend/nutrition/recipes
+- /api/backend/nutrition/recipes/:id
+- /api/backend/nutrition/recipes/import-pdfs
+
+requests/page.tsx
+- /api/backend/clients/exercise-change-requests
+- /api/backend/clients/exercise-change-requests/:id
+
+Welche davon heute trainergefiltert sind?
+- Praktisch alle echten Daten-Seiten, weil ihre Backend-Routen trainerId-
+  basierte Ownership-Checks oder trainerId-where-Bedingungen verwenden.
+- Ausnahmen sind nur reine Auth-/Logout-Faelle.
+
+========================================================================
+EINSCHAETZUNG
+========================================================================
+
+Komplexitaet:
+- Mittel bis eher hoch
+- Grund: trainerId-Filter sind breit verteilt
+- Gesamtzahl der trainerId-Filter-Query-Stellen: 66
+- Keine zentrale Scope-Schicht fuer TRAINER vs ADMIN
+
+Sicherster Ansatz:
+- Nicht nur ueber Middleware loesen
+- Stattdessen zentrale Scope-Helper im Backend einfuehren, z.B.:
+  - resolveAccessScope(user)
+  - resolveTrainerScope(userId, role)
+  - Hilfsfunktionen fuer optionalen trainerId-Filter
+
+Warum?
+- Middleware kennt nur die Rolle
+- Aber die eigentliche Daten-Sichtbarkeit entsteht in den Prisma-Queries
+- Genau diese Queries muessen fuer ADMIN global und fuer TRAINER scoped bleiben
+
+========================================================================
+EMPFOHLENE REIHENFOLGE DER AENDERUNGEN
+========================================================================
+
+1. Zentrale Scope-Helfer bauen
+   - ADMIN => global
+   - TRAINER => trainerProfile.id
+
+2. Trainer-Dashboard umbauen
+   - entweder bestehende Route mit Role-Verzweigung
+   - oder neue Admin-Dashboard-Route
+
+3. clients.ts zuerst umbauen
+   - hier sitzt bereits die meiste Ownership-Logik
+   - resolveTrainerProfile/resolveOwnedClientProfile koennen erweitert werden
+
+4. plans.ts und nutrition.ts anpassen
+   - viele Listen/Details/Assignments haengen direkt an trainerId
+
+5. notifications.ts und clientLinkTokens.ts nachziehen
+
+6. Neues Trainer-CRUD Backend fuer ADMIN
+   - Trainer erstellen
+   - Trainer listen
+   - Trainer bearbeiten
+   - optional deaktivieren/loeschen
+
+7. Frontend/Admin-Seiten erweitern
+   - Admin-Dashboard
+   - Trainer-Verwaltung
+   - Bestehende Seiten fuer globale Admin-Sicht absichern
+
+========================================================================
+KURZFAZIT
+========================================================================
+
+Etappe 2 ist kein kleiner Role-Check-Umbau, sondern ein Scope-Umbau:
+- TRAINER bleibt trainergebunden
+- ADMIN muss global lesen koennen
+- Das sollte ueber zentrale Scope-Helfer plus gezielte Query-Anpassungen
+  umgesetzt werden, nicht nur ueber einzelne Inline-Checks.

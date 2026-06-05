@@ -12,6 +12,7 @@ import RecipeSuggestions from './RecipeSuggestions'
 import MealDrinks from './MealDrinks'
 import type { MealHistoryEntry, HistoryIngredient, DrinkLog } from '@/lib/types'
 import { EmptyState } from '@/components/ui/client-ui'
+import { toastIconLabel, toastIconStyle, toastStyle, type ToastKind } from '@/components/Motion'
 
 type FullPlan = NutritionPlan & { nutrition_meals: NutritionMeal[] }
 
@@ -86,7 +87,7 @@ function Collapsible({ open, children }: { open: boolean; children: React.ReactN
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
-interface Toast { id: number; type: 'success' | 'info' | 'error'; message: string }
+interface Toast { id: number; type: ToastKind; message: string }
 
 // ─── UI helpers ──────────────────────────────────────────────────────────────
 
@@ -393,9 +394,9 @@ export default function ClientNutritionPage() {
         body: JSON.stringify({ mealId, foodId: food.id, category: cat, amountG: 30, isExtra: true }),
       })
       const data = await res.json().catch(() => null) as { clientMealFood?: { id: string } } | null
-      if (!res.ok || !data?.clientMealFood) { showToast('error', 'Fehler beim Hinzufügen'); return }
+      if (!res.ok || !data?.clientMealFood) { showToast('danger', 'Fehler beim Hinzufügen'); return }
       setExtraSlot(mealId, cat, { id: data.clientMealFood.id, food, grams: '30' })
-    } catch { showToast('error', 'Fehler beim Hinzufügen') }
+    } catch { showToast('danger', 'Fehler beim Hinzufügen') }
   }
 
   // Food der bestehenden Zusatzquelle tauschen (Gramm bleiben).
@@ -409,9 +410,9 @@ export default function ClientNutritionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ foodId: food.id, category: cat }),
       })
-      if (!res.ok) { showToast('error', 'Fehler beim Ändern'); return }
+      if (!res.ok) { showToast('danger', 'Fehler beim Ändern'); return }
       setExtraSlot(mealId, cat, { ...existing, food })
-    } catch { showToast('error', 'Fehler beim Ändern') }
+    } catch { showToast('danger', 'Fehler beim Ändern') }
   }
 
   // Eingegebene Gramm persistieren (on blur).
@@ -426,7 +427,7 @@ export default function ClientNutritionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amountG: grams }),
       })
-    } catch { showToast('error', 'Fehler beim Speichern') }
+    } catch { showToast('danger', 'Fehler beim Speichern') }
   }
 
   // Zusatzquelle entfernen (DB-Zeile löschen + aus State).
@@ -437,7 +438,7 @@ export default function ClientNutritionPage() {
     if (!existing) return
     try {
       await fetch(`/api/backend/me/nutrition/client-meal-foods/${existing.id}`, { method: 'DELETE' })
-    } catch { showToast('error', 'Fehler beim Entfernen') }
+    } catch { showToast('danger', 'Fehler beim Entfernen') }
   }
 
   // Collapsible state — Set of open meal IDs (plan meals + history entries)
@@ -610,9 +611,9 @@ export default function ClientNutritionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mealId, foodId: food.id, category: slotCat, amountG: 0 }),
       })
-      if (!res.ok) { showToast('error', 'Fehler beim Speichern'); return }
+      if (!res.ok) { showToast('danger', 'Fehler beim Speichern'); return }
       const data = (await res.json().catch(() => null)) as { clientMealFood?: BackendCmf } | null
-      if (!data?.clientMealFood) { showToast('error', 'Fehler beim Speichern'); return }
+      if (!data?.clientMealFood) { showToast('danger', 'Fehler beim Speichern'); return }
       setCmf(prev => [
         ...prev
           .filter(c => !(c.meal_id === mealId && c.food.category === slotCat))
@@ -621,7 +622,7 @@ export default function ClientNutritionPage() {
       ])
       setOpenPicker(null)
     } catch {
-      showToast('error', 'Fehler beim Speichern')
+      showToast('danger', 'Fehler beim Speichern')
     }
   }
 
@@ -650,7 +651,7 @@ export default function ClientNutritionPage() {
           .map(c => c.meal_id === mealId ? { ...c, amount_g: 0 } : c),
       ])
     } catch {
-      showToast('error', 'Fehler beim Entfernen')
+      showToast('danger', 'Fehler beim Entfernen')
     }
   }
 
@@ -749,7 +750,7 @@ export default function ClientNutritionPage() {
       setCalculatedMeals(prev => { const s = new Set(prev); s.add(mealId); return s })
       showToast('success', 'Berechnet ✓')
     } catch {
-      showToast('error', 'Fehler beim Berechnen')
+      showToast('danger', 'Fehler beim Berechnen')
     }
   }
 
@@ -776,15 +777,15 @@ export default function ClientNutritionPage() {
           fat: Math.round(totals.f),
         }),
       })
-      if (!res.ok) { showToast('error', 'Fehler beim Speichern'); return }
+      if (!res.ok) { showToast('danger', 'Fehler beim Speichern'); return }
       const data = (await res.json().catch(() => null)) as { mealHistoryItem?: BackendMealHistory } | null
-      if (!data?.mealHistoryItem) { showToast('error', 'Fehler beim Speichern'); return }
+      if (!data?.mealHistoryItem) { showToast('danger', 'Fehler beim Speichern'); return }
       setMealHistory(prev => [mapMealHistory(data.mealHistoryItem!), ...prev])
       setSavedMealIds(prev => { const s = new Set(prev); s.add(mealId); return s })
       setSaveFlash(prev => { const s = new Set(prev); s.add(mealId); return s })
       setTimeout(() => setSaveFlash(prev => { const s = new Set(prev); s.delete(mealId); return s }), 1500)
     } catch {
-      showToast('error', 'Fehler beim Speichern')
+      showToast('danger', 'Fehler beim Speichern')
     } finally {
       setSavingHistoryId(null)
     }
@@ -1335,7 +1336,7 @@ export default function ClientNutritionPage() {
             onDelete={async (id) => {
                 await fetch(`/api/backend/me/nutrition/meal-history/${id}`, { method: 'DELETE' })
                 setMealHistory(prev => prev.filter(e => e.id !== id))
-                showToast('error', 'Eintrag gelöscht')
+                showToast('danger', 'Eintrag gelöscht')
               }}
           />
         </div>
@@ -1352,10 +1353,12 @@ export default function ClientNutritionPage() {
         {toasts.map(t => (
           <div
             key={t.id}
-            className={`px-4 py-2.5 rounded-2xl text-sm font-semibold text-white shadow-lg transition-all duration-300 pointer-events-none
-              ${t.type === 'success' ? 'bg-[#A78BFA]/100' : t.type === 'info' ? 'bg-[#111111] border border-white/[0.06]0' : 'bg-red-500/100'}`}
+            className={`motion-toast pointer-events-none flex items-center gap-3 rounded-lg border px-4 py-3 text-sm font-semibold shadow-xl transition-all duration-300 ${toastStyle[t.type]}`}
           >
-            {t.message}
+            <span className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border text-xs font-bold ${toastIconStyle[t.type]}`}>
+              {toastIconLabel[t.type]}
+            </span>
+            <span>{t.message}</span>
           </div>
         ))}
       </div>
@@ -1363,3 +1366,4 @@ export default function ClientNutritionPage() {
     </div>
   )
 }
+

@@ -51,6 +51,19 @@ type BackendPlanDetailResponse = {
   }>
 }
 
+type BackendDayReorderResponse = {
+  ok?: boolean
+  message?: string
+  days?: Array<{
+    id: string
+    planId: string
+    name: string
+    description: string | null
+    sortOrder: number
+    createdAt: string
+  }>
+}
+
 export default function PlanBuilderPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -102,10 +115,15 @@ export default function PlanBuilderPage() {
   const [linkedRequestResolved, setLinkedRequestResolved] = useState(false)
   const [dirty, setDirty] = useState(false)   // unsaved draft changes
   const [saving, setSaving] = useState(false)
+  const [reorderingDayId, setReorderingDayId] = useState<string | null>(null)
   const deepLinkNoticeShownRef = useRef(false)
   const deepLinkExerciseKeyRef = useRef<string | null>(null)
   const deepLinkMissingTargetKeyRef = useRef<string | null>(null)
   const exerciseRefs = useRef<Record<string, HTMLLIElement | null>>({})
+
+  const normalizeDayOrder = useCallback((dayList: WorkoutDay[]) => (
+    dayList.map((day, index) => ({ ...day, sort_order: index }))
+  ), [])
 
   // Map a backend plan response into local state. Shared by load() and the
   // batch-save response so tmp ids get replaced by real ids. Clears the dirty flag.
@@ -412,7 +430,8 @@ export default function PlanBuilderPage() {
     setExpandedDayId(dayId)
     setPickerDayId(dayId)
   }
-  const openEditEx = (ex: Exercise) => {
+
+  function openEditEx(ex: Exercise) {
     setExpandedDayId(ex.day_id)
     setExModal({ open: true, dayId: ex.day_id, editing: ex })
     setExForm({
@@ -541,6 +560,61 @@ export default function PlanBuilderPage() {
     setExpandedDayId(prev => (prev === dayId ? null : dayId))
   }
 
+  const moveDay = async (index: number, direction: -1 | 1) => {
+    if (reorderingDayId) return
+
+    const targetIndex = index + direction
+    if (targetIndex < 0 || targetIndex >= days.length) return
+
+    const previousDays = days
+    const reorderedDays = [...days]
+    const [movedDay] = reorderedDays.splice(index, 1)
+    reorderedDays.splice(targetIndex, 0, movedDay)
+
+    const normalizedDays = normalizeDayOrder(reorderedDays)
+    const hadDirty = dirty
+    const hasTmpDays = normalizedDays.some(day => isTmp(day.id))
+
+    setDays(normalizedDays)
+
+    if (hasTmpDays) {
+      setDirty(true)
+      showToast('Reihenfolge wird mit dem naechsten Speichern uebernommen.', 'info')
+      return
+    }
+
+    setReorderingDayId(movedDay.id)
+    try {
+      const response = await fetch(`/api/backend/plans/${id}/days/reorder`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dayIds: normalizedDays.map(day => day.id) }),
+      })
+
+      const payload = (await response.json().catch(() => null)) as BackendDayReorderResponse | null
+      if (!response.ok || !payload?.ok) {
+        setDays(previousDays)
+        setDirty(hadDirty)
+        const message =
+          response.status === 401
+            ? 'Backend-Login erforderlich.'
+            : payload?.message || 'Reihenfolge konnte nicht gespeichert werden.'
+        showToast(message, 'danger')
+        return
+      }
+
+      setDays(normalizedDays)
+      setDirty(hadDirty)
+      showToast('Reihenfolge gespeichert.', 'success')
+    } catch {
+      setDays(previousDays)
+      setDirty(hadDirty)
+      showToast('Reihenfolge konnte nicht gespeichert werden.', 'danger')
+    } finally {
+      setReorderingDayId(null)
+    }
+  }
+
   // ── Input class helpers ────────────────────────────────────────────────────
   const inputCls = 'w-full px-4 py-2.5 bg-[#0b0c0f] border border-white/[0.08] text-white rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent transition placeholder:text-[#555A61]'
   const labelCls = 'block text-sm font-medium text-[#797D83] mb-1.5'
@@ -633,6 +707,24 @@ export default function PlanBuilderPage() {
                 <span>{exercises[day.id]?.length ?? 0} Übungen</span>
               </div>
               <div className="flex items-center gap-1 ml-2">
+                <button
+                  onClick={e => { e.stopPropagation(); void moveDay(di, -1) }}
+                  disabled={di === 0 || reorderingDayId !== null}
+                  title="Tag nach oben"
+                  aria-label="Tag nach oben"
+                  className="p-1.5 text-[#797D83] hover:text-[#A78BFA] hover:bg-[#A78BFA]/10 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#797D83]"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6" /></svg>
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); void moveDay(di, 1) }}
+                  disabled={di === days.length - 1 || reorderingDayId !== null}
+                  title="Tag nach unten"
+                  aria-label="Tag nach unten"
+                  className="p-1.5 text-[#797D83] hover:text-[#A78BFA] hover:bg-[#A78BFA]/10 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#797D83]"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                </button>
                 <button onClick={e => { e.stopPropagation(); openEditDay(day) }} className="p-1.5 text-[#797D83] hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors">✏️</button>
                 <button onClick={e => { e.stopPropagation(); deleteDay(day.id) }} className="p-1.5 text-[#797D83] hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">🗑️</button>
               </div>
