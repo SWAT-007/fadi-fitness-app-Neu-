@@ -61,6 +61,20 @@ export default function ExerciseLibraryPage() {
   const [saving, setSaving] = useState(false)
   const [imageUploading, setImageUploading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // For the "new exercise" form: a device file held until the exercise exists.
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [pendingPreview, setPendingPreview] = useState<string | null>(null)
+
+  const pickPendingFile = (file: File | null) => {
+    setPendingFile(file)
+    setPendingPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return file ? URL.createObjectURL(file) : null
+    })
+  }
+
+  // Release the last object URL on unmount.
+  useEffect(() => () => { if (pendingPreview) URL.revokeObjectURL(pendingPreview) }, [pendingPreview])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -97,12 +111,13 @@ export default function ExerciseLibraryPage() {
     return matchSearch && matchGroup
   })
 
-  const resetForm = () => { setForm(emptyForm()); setError(null) }
+  const resetForm = () => { setForm(emptyForm()); setError(null); pickPendingFile(null) }
   const openAdd = () => { setEditItem(null); resetForm(); setShowForm(true) }
   const openEdit = (item: ExerciseLibraryItem) => {
     setEditItem(item)
     setForm({ name: item.name, muscle_group: item.muscle_group ?? '', equipment: item.equipment ?? '', image_url: item.image_url ?? '' })
     setError(null)
+    pickPendingFile(null)
     setShowForm(true)
   }
 
@@ -166,7 +181,27 @@ export default function ExerciseLibraryPage() {
         setSaving(false)
         return
       }
+
+      // New exercise + a device file picked → upload it now that we have an id.
+      const newId = !editItem ? (payload?.exercise?.id as string | undefined) : undefined
+      if (newId && pendingFile) {
+        const fd = new FormData()
+        fd.append('image', pendingFile)
+        const up = await fetch(`/api/backend/exercises/library/${newId}/image`, { method: 'POST', body: fd })
+        if (!up.ok) {
+          const upPayload = await up.json().catch(() => null) as { message?: string } | null
+          // The exercise was created; only the image failed — surface it, then refresh.
+          setError(upPayload?.message ?? 'Übung erstellt, aber Bild-Upload fehlgeschlagen.')
+          setSaving(false)
+          setShowForm(false)
+          pickPendingFile(null)
+          await load()
+          return
+        }
+      }
+
       setShowForm(false)
+      pickPendingFile(null)
       await load()
     } catch {
       setError('Backend nicht erreichbar.')
@@ -301,15 +336,49 @@ export default function ExerciseLibraryPage() {
               </div>
             )}
 
+            {!editItem && (
+              <div>
+                <label className={labelCls}>Bild vom Gerät</label>
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 rounded-xl bg-white/[0.04] border border-white/[0.06] overflow-hidden flex-shrink-0 flex items-center justify-center">
+                    {pendingPreview ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={pendingPreview} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-[#797D83] text-xs">—</span>
+                    )}
+                  </div>
+                  <label className="flex flex-col gap-1.5 cursor-pointer">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl border bg-white/[0.06] border-white/[0.08] text-[#EDECEA] hover:bg-white/[0.10] cursor-pointer select-none transition-colors">
+                      {pendingFile ? 'Bild ändern' : 'Bild vom Gerät wählen'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                      className="sr-only"
+                      onChange={(e) => pickPendingFile(e.target.files?.[0] ?? null)}
+                    />
+                    <span className="text-xs text-[#797D83]">
+                      {pendingFile
+                        ? `${pendingFile.name} · wird nach dem Hinzufügen hochgeladen`
+                        : 'Max. 10 MB · JPG, PNG, WebP, HEIC'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+            )}
+
             <div>
-              <label className={labelCls}>Bild-URL</label>
+              <label className={labelCls}>Bild-URL {!editItem && <span className="text-[#797D83] font-normal">(optional)</span>}</label>
               <input
                 value={form.image_url}
                 onChange={(e) => setForm((p) => ({ ...p, image_url: e.target.value }))}
                 placeholder="https://... oder /uploads/exercises/..."
                 className={inputCls}
               />
-              <p className="text-xs text-[#797D83] mt-1">Oder URL manuell eingeben / korrigieren.</p>
+              <p className="text-xs text-[#797D83] mt-1">
+                {editItem ? 'Oder URL manuell eingeben / korrigieren.' : 'Alternativ zur Datei: URL manuell eingeben.'}
+              </p>
             </div>
 
             {error && (
