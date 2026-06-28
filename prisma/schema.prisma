@@ -42,6 +42,7 @@ model User {
   trainerProfile          TrainerProfile?
   clientProfile           ClientProfile?
   notifications           Notification[]
+  pushSubscriptions       PushSubscription[]
   sentMessages            Message[]       @relation("MessageSender")
   receivedMessages        Message[]       @relation("MessageReceiver")
 }
@@ -500,4 +501,29 @@ model CheckinImage {
   legacySupabaseCheckinImageId  String?       @unique
 
   @@index([checkinId])
+}
+
+// Web Push (VAPID) device subscriptions. One user can have many devices.
+// platform distinguishes PWA/browser (WEB_PWA/IOS_PWA) from native (ANDROID_APK,
+// reserved for a later FCM phase). endpoint is unique so re-subscribes upsert.
+enum PushPlatform {
+  WEB_PWA
+  ANDROID_APK
+  IOS_PWA
+}
+
+model PushSubscription {
+  id         String       @id @default(cuid())
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform   PushPlatform
+  endpoint   String       @unique
+  p256dh     String?
+  auth       String?
+  userAgent  String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  lastUsedAt DateTime     @default(now())
+
+  @@index([userId])
 }

@@ -9,6 +9,7 @@ import { meRouter } from "./routes/me";
 import { notificationsRouter } from "./routes/notifications";
 import { nutritionRouter } from "./routes/nutrition";
 import { exercisesRouter, plansRouter, workoutDaysRouter } from "./routes/plans";
+import { pushRouter } from "./routes/push";
 import { trainersRouter } from "./routes/trainers";
 
 const app = express();
@@ -47,6 +48,7 @@ app.use("/api/v1/plans", plansRouter);
 app.use("/api/v1/workout-days", workoutDaysRouter);
 app.use("/api/v1/exercises", exercisesRouter);
 app.use("/api/v1/client-assignments", clientAssignmentsRouter);
+app.use("/api/v1/push", pushRouter);
 
 app.get("/health", (_req, res) => {
   res.json({

@@ -14,6 +14,11 @@ type SetLog = {
   completed: boolean
 }
 
+type LastPerformance = {
+  weightKg: number | null
+  reps: string | null
+}
+
 type BackendExercise = {
   id: string
   dayId: string
@@ -27,6 +32,7 @@ type BackendExercise = {
   sortOrder: number
   imageUrl: string | null
   libraryId: string | null
+  lastPerformance: LastPerformance | null
 }
 
 type BackendDay = {
@@ -79,6 +85,19 @@ function calc1RM(weight: string, reps: string): string {
   return (w * (1 + r / 30)).toFixed(1)
 }
 
+// Show the trainer's rep target exactly as stored. Pure numbers / ranges / "12+"
+// get a "Wdh." suffix; free text like "AMRAP" or "bis failure" stays as-is.
+function formatRepGoal(reps: string): string {
+  const trimmed = (reps ?? '').trim()
+  if (!trimmed) return '—'
+  if (/^\d+\s*(-\s*\d+|\+)?$/.test(trimmed)) return `${trimmed} Wdh.`
+  return trimmed
+}
+
+function formatKg(n: number): string {
+  return n.toLocaleString('de-DE', { maximumFractionDigits: 2 })
+}
+
 export default function WorkoutPlayerPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -109,6 +128,8 @@ export default function WorkoutPlayerPage() {
   const [bulkKgOpen, setBulkKgOpen] = useState(false)
   const [bulkKgValue, setBulkKgValue] = useState('')
   const autosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Guards against double-completion (rapid clicks / effect re-runs).
+  const completingRef = useRef(false)
 
   useEffect(() => {
     if (complete) return
@@ -170,9 +191,11 @@ export default function WorkoutPlayerPage() {
           initialLogs[exercise.id] = Array.from({ length: setCount }, (_, index) => {
             const setNumber = index + 1
             const previousSet = previous.find(log => log.setsDone === setNumber) ?? previous[index]
+            // Resume keeps the client's real entries; a fresh start stays empty so the
+            // KG/WDH placeholders (last performance / trainer goal) can act as suggestions.
             return {
-              weight: previousSet?.actualWeight?.toString() ?? exercise.targetWeightKg?.toString() ?? '',
-              reps: previousSet?.actualReps ?? exercise.reps,
+              weight: previousSet?.actualWeight?.toString() ?? '',
+              reps: previousSet?.actualReps ?? '',
               completed: previousSet?.completed ?? false,
             }
           })
@@ -245,60 +268,75 @@ export default function WorkoutPlayerPage() {
     }
   }, [logs, workoutLogId, loading, complete, saving, persistProgress])
 
-  const saveWorkout = async () => {
+  // Network finalize: runs the two completion requests in parallel and drives the
+  // save status on the (already visible) completion screen. Safe to retry.
+  const finalizeWorkout = useCallback(async (durationSeconds: number) => {
     if (!workoutLogId) return
-
     setSaving(true)
     setError('')
+
+    const sets = exercises.flatMap(exercise =>
+      (logs[exercise.id] ?? []).map((set, index) => ({
+        exerciseId: exercise.id,
+        setsDone: index + 1,
+        actualWeight: set.weight ? parseFloat(set.weight) : null,
+        actualReps: set.reps || null,
+        completed: set.completed,
+        note: null,
+      })),
+    )
+
+    // Final set flush and completion are independent writes → run them together
+    // instead of sequentially. The PATCH is the authoritative "completed" write.
+    const [putResult, patchResult] = await Promise.allSettled([
+      fetch(`/api/backend/me/workout-logs/${workoutLogId}/exercise-logs`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sets }),
+      }),
+      fetch(`/api/backend/me/workout-logs/${workoutLogId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ durationSeconds }),
+      }),
+    ])
+
+    // 404 = log was already completed (e.g. a retry after a partial success) → treat as done.
+    const patchOk = patchResult.status === 'fulfilled'
+      && (patchResult.value.ok || patchResult.value.status === 404)
+
+    if (!patchOk) {
+      console.error('Failed to complete workout', patchResult)
+      setError('Workout konnte nicht gespeichert werden.')
+      setSaving(false)
+      return
+    }
+
+    if (putResult.status !== 'fulfilled' || !putResult.value.ok) {
+      // Best-effort: prior autosaves already persisted the sets; don't block completion.
+      console.warn('Final set flush failed; relying on autosaved progress.')
+    }
+
+    setSaving(false)
+    showToast('Workout gespeichert ✓', 'success')
+  }, [workoutLogId, exercises, logs, showToast])
+
+  // Triggered when the last set is checked. Switches to the completion screen
+  // immediately (optimistic), then saves in the background.
+  const saveWorkout = useCallback(() => {
+    if (!workoutLogId || completingRef.current) return
+    completingRef.current = true
 
     const completedAtMs = Date.now()
     const durationSeconds = startedAtRef.current > 0
       ? Math.floor((completedAtMs - startedAtRef.current) / 1000)
       : elapsed
 
-    try {
-      // Final flush of all sets before completing
-      const sets = exercises.flatMap(exercise =>
-        (logs[exercise.id] ?? []).map((set, index) => ({
-          exerciseId: exercise.id,
-          setsDone: index + 1,
-          actualWeight: set.weight ? parseFloat(set.weight) : null,
-          actualReps: set.reps || null,
-          completed: set.completed,
-          note: null,
-        })),
-      )
-
-      await fetch(`/api/backend/me/workout-logs/${workoutLogId}/exercise-logs`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sets }),
-      })
-
-      const patchRes = await fetch(`/api/backend/me/workout-logs/${workoutLogId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ durationSeconds }),
-      })
-
-      if (!patchRes.ok) {
-        const errData = await patchRes.json().catch(() => ({})) as { message?: string }
-        setError(errData.message ?? 'Fehler beim Speichern.')
-        setSaving(false)
-        return
-      }
-
-      setFinalDurationSeconds(durationSeconds)
-      setSaving(false)
-      setComplete(true)
-      void successBuzz()
-      showToast('Workout gespeichert ✓', 'success')
-    } catch (err) {
-      console.error('Failed to save workout', err)
-      setError('Workout konnte nicht gespeichert werden.')
-      setSaving(false)
-    }
-  }
+    setFinalDurationSeconds(durationSeconds)
+    setComplete(true)
+    void successBuzz()
+    void finalizeWorkout(durationSeconds)
+  }, [workoutLogId, elapsed, finalizeWorkout])
 
   const handleSwapRequest = async () => {
     if (!exercise || !swapReason.trim()) return
@@ -390,6 +428,13 @@ export default function WorkoutPlayerPage() {
   const progress = exercises.length > 0 ? (currentExerciseIndex / exercises.length) * 100 : 0
   const activeSetIndex = exerciseSets.findIndex(s => !s.completed)
 
+  // Suggestions shown as input placeholders (not real values). KG falls back to "—",
+  // WDH falls back to the trainer's rep goal. Same value for all set rows for now.
+  const kgPlaceholder = exercise?.lastPerformance?.weightKg != null
+    ? formatKg(exercise.lastPerformance.weightKg)
+    : '—'
+  const repsPlaceholder = exercise?.lastPerformance?.reps?.trim() || exercise?.reps || '—'
+
   const applyBulkKg = () => {
     if (!exercise) return
     exerciseSets.forEach((_, i) => updateSet(exercise.id, i, 'weight', bulkKgValue))
@@ -427,7 +472,21 @@ export default function WorkoutPlayerPage() {
 
         <p className="text-white/70 text-xs font-bold uppercase tracking-widest mb-2">Geschafft!</p>
         <h1 className="text-3xl font-bold text-center mb-1">Training abgeschlossen</h1>
-        <p className="text-white/70 text-sm mb-10">{workout?.name}</p>
+        <p className="text-white/70 text-sm mb-6">{workout?.name}</p>
+
+        {/* Save status — instant feedback while the background requests run */}
+        <div className="h-6 mb-4 flex items-center justify-center">
+          {saving ? (
+            <span className="flex items-center gap-2 text-white/80 text-sm font-medium">
+              <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              Workout wird gespeichert…
+            </span>
+          ) : error ? (
+            <span className="text-white text-sm font-semibold">{error}</span>
+          ) : (
+            <span className="text-white text-sm font-semibold">Workout gespeichert ✓</span>
+          )}
+        </div>
 
         <div className="w-full max-w-sm bg-white/15 rounded-3xl p-6 grid grid-cols-2 gap-5 mb-4 border border-white/20">
           <div className="text-center">
@@ -445,12 +504,26 @@ export default function WorkoutPlayerPage() {
         </div>
 
         <div className="w-full max-w-sm mt-6">
-          <Link
-            href="/client"
-            className="w-full py-4 bg-[#050504] text-[#A78BFA] font-bold rounded-2xl text-center block hover:bg-[#111111] transition-colors"
-          >
-            Zurück zum Dashboard
-          </Link>
+          {error ? (
+            <button
+              type="button"
+              onClick={() => finalizeWorkout(finalDurationSeconds)}
+              className="w-full py-4 bg-[#050504] text-[#A78BFA] font-bold rounded-2xl text-center block hover:bg-[#111111] transition-colors"
+            >
+              Erneut versuchen
+            </button>
+          ) : (
+            <Link
+              href="/client"
+              aria-disabled={saving}
+              tabIndex={saving ? -1 : undefined}
+              className={`w-full py-4 bg-[#050504] text-[#A78BFA] font-bold rounded-2xl text-center block transition-colors ${
+                saving ? 'opacity-50 pointer-events-none' : 'hover:bg-[#111111]'
+              }`}
+            >
+              Zurück zum Dashboard
+            </Link>
+          )}
         </div>
       </div>
     )
@@ -540,10 +613,12 @@ export default function WorkoutPlayerPage() {
         {/* Exercise name + trainer targets */}
         <div className="bg-[#111111] rounded-2xl border border-white/[0.06] px-5 py-4">
           <h1 className="text-2xl font-bold text-[#EDECEA] mb-1">{exercise.name}</h1>
+
+          {/* Kompakte, ruhige Zielzeile — letzte Werte stehen als Placeholder in der Tabelle */}
           <p className="text-[#A78BFA] text-sm font-medium">
-            {exercise.sets} Sätze × {exercise.reps}
-            {exercise.targetWeightKg ? ` · ${exercise.targetWeightKg} kg` : ''}
+            {exercise.sets} Sätze · Ziel {formatRepGoal(exercise.reps)}
           </p>
+
           {exercise.note && (
             <p className="text-[#797D83] text-sm mt-2">💡 {exercise.note}</p>
           )}
@@ -639,10 +714,18 @@ export default function WorkoutPlayerPage() {
                       min="0"
                       value={set.weight}
                       onChange={e => updateSet(exercise.id, setIndex, 'weight', e.target.value)}
-                      placeholder="—"
-                      className="w-full px-2 py-2 bg-white/[0.07] rounded-xl text-sm text-center font-bold text-[#EDECEA] tabular-nums border border-white/[0.08] focus:ring-2 focus:ring-[#A78BFA]/40 focus:border-[#A78BFA]/30 focus:outline-none"
+                      placeholder={kgPlaceholder}
+                      className="w-full px-2 py-2 bg-white/[0.07] rounded-xl text-sm text-center font-bold text-[#EDECEA] tabular-nums border border-white/[0.08] focus:ring-2 focus:ring-[#A78BFA]/40 focus:border-[#A78BFA]/30 focus:outline-none placeholder:text-[#797D83] placeholder:font-normal"
                     />
-                    <span className="text-sm font-bold text-[#EDECEA] text-center tabular-nums">{set.reps}</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      value={set.reps}
+                      onChange={e => updateSet(exercise.id, setIndex, 'reps', e.target.value)}
+                      placeholder={repsPlaceholder}
+                      className="w-full px-1.5 py-2 bg-white/[0.07] rounded-xl text-sm text-center font-bold text-[#EDECEA] tabular-nums border border-white/[0.08] focus:ring-2 focus:ring-[#A78BFA]/40 focus:border-[#A78BFA]/30 focus:outline-none placeholder:text-[#797D83] placeholder:font-normal"
+                    />
                     <span className="text-xs font-medium text-[#A78BFA] text-center tabular-nums">{orm}</span>
                     <button
                       type="button"
@@ -664,7 +747,7 @@ export default function WorkoutPlayerPage() {
                   >
                     <span className="text-sm font-semibold text-[#A78BFA] text-center tabular-nums">{setIndex + 1}</span>
                     <span className="text-sm text-[#797D83] text-center tabular-nums">{set.weight || '—'}</span>
-                    <span className="text-sm text-[#797D83] text-center tabular-nums">{set.reps}</span>
+                    <span className="text-sm text-[#797D83] text-center tabular-nums">{set.reps || '—'}</span>
                     <span className="text-xs text-[#797D83] text-center tabular-nums">{orm}</span>
                     <button
                       type="button"
@@ -691,10 +774,18 @@ export default function WorkoutPlayerPage() {
                     min="0"
                     value={set.weight}
                     onChange={e => updateSet(exercise.id, setIndex, 'weight', e.target.value)}
-                    placeholder="—"
-                    className="w-full px-2 py-2 bg-white/[0.03] border border-white/[0.06] rounded-xl text-sm text-center text-[#797D83] tabular-nums focus:ring-1 focus:ring-[#A78BFA]/30 focus:outline-none"
+                    placeholder={kgPlaceholder}
+                    className="w-full px-2 py-2 bg-white/[0.03] border border-white/[0.06] rounded-xl text-sm text-center text-[#797D83] tabular-nums focus:ring-1 focus:ring-[#A78BFA]/30 focus:outline-none placeholder:text-[#797D83]/60"
                   />
-                  <span className="text-sm text-[#797D83] text-center tabular-nums">{set.reps}</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    value={set.reps}
+                    onChange={e => updateSet(exercise.id, setIndex, 'reps', e.target.value)}
+                    placeholder={repsPlaceholder}
+                    className="w-full px-1.5 py-2 bg-white/[0.03] border border-white/[0.06] rounded-xl text-sm text-center text-[#797D83] tabular-nums focus:ring-1 focus:ring-[#A78BFA]/30 focus:outline-none placeholder:text-[#797D83]/60"
+                  />
                   <span className="text-xs text-[#797D83]/40 text-center">—</span>
                   <button
                     type="button"

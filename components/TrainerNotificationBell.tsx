@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
+import PushEnableHint from '@/components/PushEnableHint'
 
 const trainerBellTypes = ['message', 'workout', 'checkin', 'training_plan', 'workout_plan', 'nutrition_plan', 'request', 'system'] as const
 type TrainerBellType = typeof trainerBellTypes[number]
@@ -293,6 +294,8 @@ export default function TrainerNotificationBell({
               </button>
             </div>
           </div>
+
+          <PushEnableHint />
 
           {/* List */}
           <div className="overflow-y-auto flex-1">

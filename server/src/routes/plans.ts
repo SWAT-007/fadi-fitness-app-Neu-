@@ -5,7 +5,7 @@ import fs from "fs";
 import { prisma } from "../db";
 import { resolveScope } from "../lib/scope";
 import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
-import { buildExerciseChangeLink, createRequestAcceptedNotification } from "./notificationHelpers";
+import { buildExerciseChangeLink, createRequestAcceptedNotification, pushNotify, PUSH_TEXTS } from "./notificationHelpers";
 
 const plansRouter = Router();
 const workoutDaysRouter = Router();
@@ -885,8 +885,13 @@ plansRouter.post("/:id/days", requireAuth, async (req: AuthenticatedRequest, res
         notificationCount = created.count;
       }
 
-      return { day, notificationCount };
+      return { day, notificationCount, recipientUserIds };
     });
+
+    // Push outside the transaction (network I/O), fire-and-forget.
+    for (const recipientUserId of result.recipientUserIds) {
+      pushNotify(recipientUserId, PUSH_TEXTS.trainingPlan, "/client/plan", "training_plan");
+    }
 
     return res.status(201).json({
       day: {
@@ -1024,6 +1029,10 @@ plansRouter.post("/:id/assignments", requireAuth, async (req: AuthenticatedReque
 
       return { assignment, notificationCreated };
     });
+
+    if (result.notificationCreated && client.userId) {
+      pushNotify(client.userId, PUSH_TEXTS.trainingPlan, "/client/plan", "training_plan");
+    }
 
     return res.status(200).json(result);
   } catch (error) {

@@ -179,11 +179,11 @@ export default function PlansPage() {
               setAssignClientId(e.target.value)
               setAssignSuccess('')
             }}
-            className="px-3 py-2.5 border border-white/[0.08] rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/30 focus:border-transparent"
+            className="px-3 py-2.5 bg-[#0b0c0f] border border-white/[0.08] rounded-xl text-sm text-[#EDECEA] focus:ring-2 focus:ring-[#A78BFA]/40 focus:border-[#A78BFA]/30 focus:outline-none transition"
           >
-            <option value="">Client auswaehlen</option>
+            <option value="" className="bg-[#111111] text-[#EDECEA]">Client auswaehlen</option>
             {clients.map(client => (
-              <option key={client.id} value={client.id}>{client.displayName ?? client.name ?? 'Unbenannt'}</option>
+              <option key={client.id} value={client.id} className="bg-[#111111] text-[#EDECEA]">{client.displayName ?? client.name ?? 'Unbenannt'}</option>
             ))}
           </select>
 
@@ -193,11 +193,11 @@ export default function PlansPage() {
               setAssignPlanId(e.target.value)
               setAssignSuccess('')
             }}
-            className="px-3 py-2.5 border border-white/[0.08] rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/30 focus:border-transparent"
+            className="px-3 py-2.5 bg-[#0b0c0f] border border-white/[0.08] rounded-xl text-sm text-[#EDECEA] focus:ring-2 focus:ring-[#A78BFA]/40 focus:border-[#A78BFA]/30 focus:outline-none transition"
           >
-            <option value="">Plan auswaehlen</option>
+            <option value="" className="bg-[#111111] text-[#EDECEA]">Plan auswaehlen</option>
             {plans.map(plan => (
-              <option key={plan.id} value={plan.id}>{plan.name}</option>
+              <option key={plan.id} value={plan.id} className="bg-[#111111] text-[#EDECEA]">{plan.name}</option>
             ))}
           </select>
 

@@ -4,6 +4,7 @@ import { prisma } from "../db";
 import { resolveScope } from "../lib/scope";
 import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { parseAllPdfsInDir, type ParsedRecipe } from "../../../lib/recipeParser";
+import { pushNotify, PUSH_TEXTS } from "./notificationHelpers";
 
 const nutritionRouter = Router();
 
@@ -1119,6 +1120,10 @@ nutritionRouter.post("/plans/:id/assignments", requireAuth, async (req: Authenti
 
       return { assignmentId: upserted.id, notificationCreated };
     });
+
+    if (notificationCreated && client.userId) {
+      pushNotify(client.userId, PUSH_TEXTS.nutritionPlan, "/client/nutrition", "nutrition_plan");
+    }
 
     const assignment = await prisma.assignedNutritionPlan.findUnique({
       where: { id: assignmentId },

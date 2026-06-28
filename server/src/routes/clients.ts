@@ -6,7 +6,7 @@ import { resolveScope } from "../lib/scope";
 import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { unexpectedErrorResponse } from "../utils/errors";
 import { clampDuration } from "../utils/duration";
-import { buildExerciseChangeLink, createRequestAcceptedNotification } from "./notificationHelpers";
+import { buildExerciseChangeLink, createRequestAcceptedNotification, pushNotify, PUSH_TEXTS } from "./notificationHelpers";
 
 const clientsRouter = Router();
 
@@ -250,6 +250,7 @@ clientsRouter.patch(
                 link: buildExerciseChangeLink(existing.dayId, existing.exercise ? existing.exerciseId : null),
               });
               notificationCreated = true;
+              pushNotify(existing.client.userId, PUSH_TEXTS.request, "/client/plan", "request");
             }
           } else {
             // rejected — unchanged behaviour (no deep link)
@@ -262,6 +263,7 @@ clientsRouter.patch(
               },
             });
             notificationCreated = true;
+            pushNotify(existing.client.userId, PUSH_TEXTS.request, "/client/plan", "request");
           }
         } catch (notifError) {
           console.error("[clients:exercise-change-requests:update] notification error:", notifError);
@@ -914,6 +916,7 @@ clientsRouter.post("/:clientId/messages", requireAuth, async (req: Authenticated
         },
       });
       notificationCreated = true;
+      pushNotify(clientProfile.userId, PUSH_TEXTS.newMessage, "/client/messages", "message");
     } catch (notifError) {
       console.error("[clients:messages:create] notification error:", notifError);
     }

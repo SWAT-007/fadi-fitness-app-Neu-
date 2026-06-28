@@ -14,6 +14,8 @@ import {
   markAllNotificationsReadForUser,
   markNotificationReadForUser,
   parseNotificationLimit,
+  pushNotify,
+  PUSH_TEXTS,
 } from "./notificationHelpers";
 
 const meRouter = Router();
@@ -711,7 +713,48 @@ meRouter.get("/workouts/:dayId/play", requireAuth, async (req: AuthenticatedRequ
         })
       : [];
 
-    const exercises = day.exercises.map((ex) => ({ ...ex, libraryId: null }));
+    // Last performance: for each exercise, the last completed working set of the
+    // most recently completed session of this client. Read-only over existing logs.
+    const exerciseIds = day.exercises.map((ex) => ex.id);
+    const historyLogs = exerciseIds.length
+      ? await prisma.exerciseLog.findMany({
+          where: {
+            exerciseId: { in: exerciseIds },
+            completed: true,
+            workoutLog: {
+              clientId: clientProfile.id,
+              completedAt: { not: null },
+            },
+          },
+          orderBy: [
+            { workoutLog: { completedAt: "desc" } },
+            { setsDone: "desc" },
+          ],
+          select: {
+            exerciseId: true,
+            actualWeight: true,
+            actualReps: true,
+          },
+        })
+      : [];
+
+    const lastPerformanceByExercise: Record<
+      string,
+      { weightKg: number | null; reps: string | null }
+    > = {};
+    for (const log of historyLogs) {
+      if (lastPerformanceByExercise[log.exerciseId]) continue;
+      lastPerformanceByExercise[log.exerciseId] = {
+        weightKg: log.actualWeight,
+        reps: log.actualReps,
+      };
+    }
+
+    const exercises = day.exercises.map((ex) => ({
+      ...ex,
+      libraryId: null,
+      lastPerformance: lastPerformanceByExercise[ex.id] ?? null,
+    }));
 
     return res.json({
       day: { ...day, exercises },
@@ -938,6 +981,7 @@ meRouter.patch("/workout-logs/:logId", requireAuth, async (req: AuthenticatedReq
           },
         });
         notificationCreated = true;
+        pushNotify(clientProfile.trainer.userId, PUSH_TEXTS.workoutCompleted, "/admin/clients", "workout");
       } catch (notifError) {
         console.error("[me:workout-logs:complete] notification error:", notifError);
       }
@@ -1103,6 +1147,7 @@ meRouter.post("/exercise-change-requests", requireAuth, async (req: Authenticate
           },
         });
         notificationCreated = true;
+        pushNotify(clientProfile.trainer.userId, PUSH_TEXTS.request, "/admin/requests", "request");
       } catch (notifError) {
         console.error("[me:exercise-change-requests:create] notification error:", notifError);
       }
@@ -1891,6 +1936,7 @@ meRouter.post("/checkins", requireAuth, async (req: AuthenticatedRequest, res) =
           },
         });
         notificationCreated = true;
+        pushNotify(clientProfile.trainer.userId, PUSH_TEXTS.checkin, "/admin/clients", "checkin");
       } catch (notifError) {
         console.error("[me:checkins:upsert] notification error:", notifError);
       }
@@ -2160,6 +2206,7 @@ meRouter.post("/messages", requireAuth, async (req: AuthenticatedRequest, res) =
         },
       });
       notificationCreated = true;
+      pushNotify(clientProfile.trainer.userId, PUSH_TEXTS.newMessage, "/admin/messages", "message");
     } catch (notifError) {
       console.error("[me:messages:create] notification error:", notifError);
     }

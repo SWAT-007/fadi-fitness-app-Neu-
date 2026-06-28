@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import PushEnableHint from '@/components/PushEnableHint'
 
 const clientNotificationTypes = ['workout_plan', 'nutrition_plan', 'request'] as const
 type ClientNotificationType = typeof clientNotificationTypes[number]
@@ -179,6 +180,8 @@ export default function NotificationBell({
               Alle als gelesen markieren
             </button>
           </div>
+
+          <PushEnableHint />
 
           <div className="max-h-[min(24rem,calc(100vh-8rem))] overflow-y-auto">
             {notifications.length === 0 ? (

@@ -4,10 +4,17 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "MilaCoach",
   description: "Fitness Coaching App",
+  applicationName: "MilaCoach",
   manifest: "/manifest.json",
   icons: {
     icon: "/icons/icon-192.png",
     apple: "/icons/icon-192.png",
+  },
+  // Lets iOS Safari launch the home-screen entry standalone (no browser chrome).
+  appleWebApp: {
+    capable: true,
+    title: "MilaCoach",
+    statusBarStyle: "black-translucent",
   },
 };
 

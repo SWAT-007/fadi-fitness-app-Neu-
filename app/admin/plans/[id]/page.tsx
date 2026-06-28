@@ -890,7 +890,8 @@ export default function PlanBuilderPage() {
                 </div>
                 <div>
                   <label className={labelCls}>Wiederholungen</label>
-                  <input value={exForm.reps} onChange={e => setExForm(f => ({ ...f, reps: e.target.value }))} placeholder="10 oder 8-12" className={inputCls} />
+                  <input type="text" value={exForm.reps} onChange={e => setExForm(f => ({ ...f, reps: e.target.value }))} placeholder="z.B. 10 oder 15-20" className={inputCls} />
+                  <p className="text-xs text-[#555A61] mt-1.5">Du kannst auch Bereiche wie 8-12 oder AMRAP eingeben.</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">

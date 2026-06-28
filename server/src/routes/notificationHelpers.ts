@@ -1,5 +1,30 @@
 import { NotificationType, type Prisma } from "@prisma/client";
 import { prisma } from "../db";
+import { sendPushToUser, type PushPayload } from "../utils/pushDispatcher";
+
+// Generic, privacy-safe push texts. Keyed by scenario (not NotificationType),
+// because NotificationType.WORKOUT is reused for two different situations
+// (plan updated for a client vs. workout completed by a client). No sensitive
+// message content ever goes into a push body.
+export const PUSH_TEXTS = {
+  newMessage: { title: "Neue Nachricht", body: "Du hast eine neue Nachricht in MilaCoach." },
+  trainingPlan: { title: "Trainingsplan aktualisiert", body: "Dein Trainingsplan wurde aktualisiert." },
+  nutritionPlan: { title: "Ernährungsplan aktualisiert", body: "Dein Ernährungsplan wurde aktualisiert." },
+  request: { title: "Neue Anfrage", body: "Es gibt eine neue Anfrage in MilaCoach." },
+  workoutCompleted: { title: "Workout abgeschlossen", body: "Ein Kunde hat ein Workout abgeschlossen." },
+  checkin: { title: "Neuer Check-in", body: "Ein Kunde hat einen Check-in gesendet." },
+} as const;
+
+// Fire-and-forget push wrapper. Never throws — safe to `void` from any route so
+// a push failure can never break the API response or the in-app notification.
+export const pushNotify = (
+  userId: string,
+  text: { title: string; body: string },
+  url: string,
+  type: string,
+): void => {
+  void sendPushToUser(userId, { ...text, url, type } satisfies PushPayload);
+};
 
 export const notificationSelect = {
   id: true,
