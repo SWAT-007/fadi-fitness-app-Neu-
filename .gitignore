@@ -60,3 +60,7 @@ review-*.png
 key.properties
 *.jks
 *.keystore
+
+# Firebase service-account credentials — NEVER commit
+Duko/
+*firebase-adminsdk*.json

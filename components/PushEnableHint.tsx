@@ -1,35 +1,76 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { enablePushNotifications, isPushSupported, pushPermission } from '@/lib/pushNotifications'
+import { enableNativePush, initNativePush, isNativeAndroid, nativePushPermission } from '@/lib/nativePush'
 
-// Small, non-nagging hint shown inside the notification dropdown. Only appears
-// when push is supported and permission is still "default". When already
-// granted it silently (re)registers the subscription and renders nothing.
+// Small, non-nagging hint shown inside the notification dropdown. Picks the right
+// transport per runtime: native FCM inside the Capacitor Android WebView, Web
+// Push (VAPID) in the browser/PWA. The two flows never overlap — no double
+// registration, and web push is never triggered inside the native shell.
 export default function PushEnableHint() {
-  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('unsupported')
+  const router = useRouter()
+  const [visible, setVisible] = useState(false)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
+  const [native, setNative] = useState(false)
 
   useEffect(() => {
-    setPermission(pushPermission())
-  }, [])
+    let cancelled = false
 
-  useEffect(() => {
-    if (permission === 'granted') {
-      void enablePushNotifications().catch(() => undefined)
+    const init = async () => {
+      // ── Capacitor Android (native FCM) ──
+      if (isNativeAndroid()) {
+        setNative(true)
+        // Bind deep-link/registration listeners as early as possible.
+        await initNativePush((url) => router.push(url))
+        const perm = await nativePushPermission()
+        if (cancelled) return
+        if (perm === 'granted') {
+          // Already granted → silently (re)register the FCM token.
+          void enableNativePush().catch(() => undefined)
+          setVisible(false)
+        } else if (perm === 'prompt' || perm === 'prompt-with-rationale') {
+          setVisible(true)
+        } else {
+          setVisible(false)
+        }
+        return
+      }
+
+      // ── Browser / PWA (Web Push) ──
+      if (!isPushSupported()) {
+        setVisible(false)
+        return
+      }
+      const perm = pushPermission()
+      if (perm === 'granted') {
+        void enablePushNotifications().catch(() => undefined)
+        setVisible(false)
+      } else if (perm === 'default') {
+        setVisible(true)
+      } else {
+        setVisible(false)
+      }
     }
-  }, [permission])
 
-  if (!isPushSupported()) return null
-  if (done || permission !== 'default') return null
+    void init()
+    return () => {
+      cancelled = true
+    }
+  }, [router])
+
+  if (done || !visible) return null
 
   const handleEnable = async () => {
     setBusy(true)
-    const ok = await enablePushNotifications().catch(() => false)
+    const ok = native
+      ? await enableNativePush().catch(() => false)
+      : await enablePushNotifications().catch(() => false)
     setBusy(false)
-    setPermission(pushPermission())
     if (ok) setDone(true)
+    else setVisible(false) // denied → stop nagging
   }
 
   return (
