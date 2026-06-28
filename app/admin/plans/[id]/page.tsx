@@ -105,6 +105,9 @@ export default function PlanBuilderPage() {
 
   // Exercise modal
   const [exModal, setExModal] = useState<{ open: boolean; dayId: string; editing: Exercise | null }>({ open: false, dayId: '', editing: null })
+  // Set when the edit modal was auto-opened for a freshly picked database exercise
+  // that the trainer hasn't confirmed yet. Cancelling removes that exercise again.
+  const [pendingNewExId, setPendingNewExId] = useState<string | null>(null)
   const [exForm, setExForm] = useState<ExerciseForm>(emptyExForm)
   const [pickerDayId, setPickerDayId] = useState<string | null>(null)
   const [replaceTarget, setReplaceTarget] = useState<Exercise | null>(null)
@@ -440,7 +443,9 @@ export default function PlanBuilderPage() {
     })
   }
 
-  // Local draft only — appends a new exercise with a tmp id.
+  // Local draft only — appends a new exercise with a tmp id, then immediately
+  // opens the edit modal so the trainer sets sets/reps/weight/rest/note. dirty is
+  // only set on Übernehmen (saveEx); Abbrechen removes the unconfirmed exercise.
   const addPickedExercise = (exercise: LibraryExercise) => {
     const dayId = pickerDayId
     if (!dayId) return
@@ -462,7 +467,20 @@ export default function PlanBuilderPage() {
     } as Exercise
     setExercises(prev => ({ ...prev, [dayId]: [...(prev[dayId] ?? []), newEx] }))
     setPickerDayId(null)
-    setDirty(true)
+
+    // Auto-open "Übung bearbeiten" on the freshly picked exercise (name prefilled).
+    setPendingNewExId(newEx.id)
+    setExpandedDayId(dayId)
+    setExModal({ open: true, dayId, editing: newEx })
+    setExForm({
+      name: newEx.name,
+      description: '',
+      sets: newEx.sets,
+      reps: newEx.reps,
+      target_weight: '',
+      rest_seconds: String(newEx.rest_seconds ?? 60),
+      note: '',
+    })
   }
 
   const openReplaceEx = (ex: Exercise) => {
@@ -540,7 +558,26 @@ export default function PlanBuilderPage() {
       setExercises(prev => ({ ...prev, [dayId]: [...(prev[dayId] ?? []), newEx] }))
     }
     setExModal({ open: false, dayId: '', editing: null })
+    setPendingNewExId(null)
     setDirty(true)
+  }
+
+  // Cancel the exercise modal. If it was auto-opened for a freshly picked database
+  // exercise that wasn't confirmed yet, remove it so no half-finished exercise
+  // stays in the plan. Normal edits just close without touching the exercise.
+  const cancelExModal = () => {
+    const removeId = pendingNewExId
+    if (removeId) {
+      setExercises(prev => {
+        const next: Record<string, Exercise[]> = {}
+        for (const [dayId, list] of Object.entries(prev)) {
+          next[dayId] = list.filter(ex => ex.id !== removeId)
+        }
+        return next
+      })
+      setPendingNewExId(null)
+    }
+    setExModal({ open: false, dayId: '', editing: null })
   }
 
   // Local draft only — removes the exercise from state.
@@ -682,7 +719,23 @@ export default function PlanBuilderPage() {
                 </p>
               )}
             </div>
-            <button onClick={() => setEditingPlan(true)} className="text-sm text-[#A78BFA] hover:text-[#B79FFB] px-3 py-1.5 rounded-lg hover:bg-[#A78BFA]/10 flex-shrink-0 transition-colors">Bearbeiten</button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* Always-visible save status: shows progress and lets the trainer
+                  commit the local draft (reuses commitSave — no duplicate path). */}
+              <button
+                type="button"
+                onClick={commitSave}
+                disabled={saving || !dirty}
+                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-60 ${
+                  dirty
+                    ? 'bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] shadow-[0_4px_16px_-4px_rgba(167,139,250,0.45)]'
+                    : 'bg-white/[0.04] text-[#797D83] cursor-default'
+                }`}
+              >
+                {saving ? 'Speichert…' : dirty ? 'Speichern' : 'Gespeichert ✓'}
+              </button>
+              <button onClick={() => setEditingPlan(true)} className="text-sm text-[#A78BFA] hover:text-[#B79FFB] px-3 py-1.5 rounded-lg hover:bg-[#A78BFA]/10 transition-colors">Bearbeiten</button>
+            </div>
           </div>
         )}
       </div>
@@ -890,7 +943,7 @@ export default function PlanBuilderPage() {
                 </div>
                 <div>
                   <label className={labelCls}>Wiederholungen</label>
-                  <input type="text" value={exForm.reps} onChange={e => setExForm(f => ({ ...f, reps: e.target.value }))} placeholder="z.B. 10 oder 15-20" className={inputCls} />
+                  <input type="text" value={exForm.reps} onChange={e => setExForm(f => ({ ...f, reps: e.target.value }))} placeholder="z.B. 10 oder 8-12" className={inputCls} />
                   <p className="text-xs text-[#555A61] mt-1.5">Du kannst auch Bereiche wie 8-12 oder AMRAP eingeben.</p>
                 </div>
               </div>
@@ -909,7 +962,7 @@ export default function PlanBuilderPage() {
                 <input value={exForm.note} onChange={e => setExForm(f => ({ ...f, note: e.target.value }))} placeholder="Hinweis, Technik-Tipp…" className={inputCls} />
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setExModal({ open: false, dayId: '', editing: null })} className="flex-1 py-2.5 border border-white/[0.08] text-[#797D83] text-sm font-medium rounded-xl hover:bg-white/[0.04] transition-colors">Abbrechen</button>
+                <button type="button" onClick={cancelExModal} className="flex-1 py-2.5 border border-white/[0.08] text-[#797D83] text-sm font-medium rounded-xl hover:bg-white/[0.04] transition-colors">Abbrechen</button>
                 <button type="submit" className="flex-1 py-2.5 bg-[#A78BFA] hover:bg-[#B79FFB] text-[#050504] text-sm font-semibold rounded-xl transition-colors">Übernehmen</button>
               </div>
             </form>
