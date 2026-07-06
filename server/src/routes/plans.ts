@@ -6,6 +6,7 @@ import { prisma } from "../db";
 import { resolveScope } from "../lib/scope";
 import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { buildExerciseChangeLink, createRequestAcceptedNotification, pushNotify, PUSH_TEXTS } from "./notificationHelpers";
+import { createErrorId, errorResponse, logError } from "../utils/errors";
 
 const plansRouter = Router();
 const workoutDaysRouter = Router();
@@ -449,6 +450,12 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
   const requestId =
     typeof requestIdInput === "string" && requestIdInput.length > 0 ? requestIdInput : null;
 
+  // Counters for error logging (populated as the payload is processed).
+  let statsDays = 0;
+  let statsExercises = 0;
+  let statsNewExercises = 0;
+  let statsUpdatedExercises = 0;
+
   try {
     const scope = await resolveScope(req.user);
 
@@ -459,24 +466,49 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
           id: planId,
           ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
         },
-        select: { id: true },
+        select: { id: true, name: true },
       });
       if (!existingPlan) {
         throw httpError(404, "Not found");
       }
 
-      // Current DB structure (for diff + ownership validation)
+      // Full current tree in one query — used for ownership validation AND to
+      // diff against the payload so unchanged rows produce no UPDATE at all.
+      // This keeps the write count proportional to what actually changed instead
+      // of the total plan size (large plans previously overran the transaction
+      // timeout and rolled back with a 500).
       const dbDays = await tx.workoutDay.findMany({
         where: { planId },
-        select: { id: true, exercises: { select: { id: true } } },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          sortOrder: true,
+          exercises: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              sets: true,
+              reps: true,
+              targetWeightKg: true,
+              restSeconds: true,
+              note: true,
+              imageUrl: true,
+              sortOrder: true,
+            },
+          },
+        },
       });
-      const dbDayIds = new Set(dbDays.map((d) => d.id));
-      const dbExByDay = new Map<string, Set<string>>(
-        dbDays.map((d) => [d.id, new Set(d.exercises.map((e) => e.id))]),
+      const dbDayById = new Map(dbDays.map((d) => [d.id, d]));
+      const dbExById = new Map(
+        dbDays.flatMap((d) => d.exercises.map((e) => [e.id, { ...e, dayId: d.id }] as const)),
       );
 
-      // Update plan name
-      await tx.workoutPlan.update({ where: { id: planId }, data: { name: planName } });
+      // Update plan name only when it actually changed
+      if (existingPlan.name !== planName) {
+        await tx.workoutPlan.update({ where: { id: planId }, data: { name: planName } });
+      }
 
       // Validate provided day ids + compute which existing days to keep
       const keepDayIds: string[] = [];
@@ -484,19 +516,23 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
         const dayObj = (rawDay ?? {}) as { id?: unknown };
         if (!isNewId(dayObj.id)) {
           const dayId = asStr(dayObj.id);
-          if (!dbDayIds.has(dayId)) {
+          if (!dbDayById.has(dayId)) {
             throw httpError(400, `Unknown dayId: ${dayId}`);
           }
           keepDayIds.push(dayId);
         }
       }
 
-      // Delete removed days (cascades their exercises + logs — intended when a day is removed)
-      await tx.workoutDay.deleteMany({
-        where: { planId, id: { notIn: keepDayIds } },
-      });
+      // Delete removed days (cascades their exercises + logs — intended when a
+      // day is removed). Skipped entirely when no day was removed.
+      if (keepDayIds.length < dbDays.length) {
+        await tx.workoutDay.deleteMany({
+          where: { planId, id: { notIn: keepDayIds } },
+        });
+      }
 
       // Upsert days + their exercises, sortOrder = array index
+      statsDays = daysInput.length;
       for (let dayIndex = 0; dayIndex < daysInput.length; dayIndex += 1) {
         const rawDay = (daysInput[dayIndex] ?? {}) as {
           id?: unknown;
@@ -510,6 +546,7 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
         }
         const dayDescription = asNullableStr(rawDay.description);
         const exercisesInput = Array.isArray(rawDay.exercises) ? (rawDay.exercises as unknown[]) : [];
+        statsExercises += exercisesInput.length;
 
         let dayId: string;
         if (isNewId(rawDay.id)) {
@@ -520,13 +557,22 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
           dayId = createdDay.id;
         } else {
           dayId = asStr(rawDay.id);
-          await tx.workoutDay.update({
-            where: { id: dayId },
-            data: { name: dayName, description: dayDescription, sortOrder: dayIndex },
-          });
+          const dbDay = dbDayById.get(dayId);
+          const dayChanged =
+            !dbDay ||
+            dbDay.name !== dayName ||
+            dbDay.description !== dayDescription ||
+            dbDay.sortOrder !== dayIndex;
+          if (dayChanged) {
+            await tx.workoutDay.update({
+              where: { id: dayId },
+              data: { name: dayName, description: dayDescription, sortOrder: dayIndex },
+            });
+          }
         }
 
-        const existingExIds = dbExByDay.get(dayId) ?? new Set<string>();
+        const existingDay = dbDayById.get(dayId);
+        const existingExIds = new Set(existingDay?.exercises.map((e) => e.id) ?? []);
 
         // Validate provided exercise ids + compute which to keep (update)
         const keepExIds: string[] = [];
@@ -541,12 +587,29 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
           }
         }
 
-        // Delete only the exercises actually removed (kept ones retain their logs)
-        await tx.exercise.deleteMany({
-          where: { dayId, id: { notIn: keepExIds } },
-        });
+        // Delete only the exercises actually removed (kept ones retain their logs).
+        // Skipped when nothing was removed.
+        if (keepExIds.length < existingExIds.size) {
+          await tx.exercise.deleteMany({
+            where: { dayId, id: { notIn: keepExIds } },
+          });
+        }
 
-        // Upsert exercises, sortOrder = array index
+        // Diff exercises: update only changed rows, collect new rows for one
+        // batched createMany per day.
+        const newExRows: {
+          dayId: string;
+          name: string;
+          description: string | null;
+          sets: number;
+          reps: string;
+          targetWeightKg: number | null;
+          restSeconds: number | null;
+          note: string | null;
+          imageUrl: string | null;
+          sortOrder: number;
+        }[] = [];
+
         for (let exIndex = 0; exIndex < exercisesInput.length; exIndex += 1) {
           const rawEx = (exercisesInput[exIndex] ?? {}) as Record<string, unknown>;
           const exName = asStr(rawEx.name).trim();
@@ -565,10 +628,31 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
             sortOrder: exIndex,
           };
           if (isNewId(rawEx.id)) {
-            await tx.exercise.create({ data: { dayId, ...exData } });
+            newExRows.push({ dayId, ...exData });
           } else {
-            await tx.exercise.update({ where: { id: asStr(rawEx.id) }, data: exData });
+            const exId = asStr(rawEx.id);
+            const dbEx = dbExById.get(exId);
+            const exChanged =
+              !dbEx ||
+              dbEx.name !== exData.name ||
+              dbEx.description !== exData.description ||
+              dbEx.sets !== exData.sets ||
+              dbEx.reps !== exData.reps ||
+              dbEx.targetWeightKg !== exData.targetWeightKg ||
+              dbEx.restSeconds !== exData.restSeconds ||
+              dbEx.note !== exData.note ||
+              dbEx.imageUrl !== exData.imageUrl ||
+              dbEx.sortOrder !== exData.sortOrder;
+            if (exChanged) {
+              statsUpdatedExercises += 1;
+              await tx.exercise.update({ where: { id: exId }, data: exData });
+            }
           }
+        }
+
+        if (newExRows.length > 0) {
+          statsNewExercises += newExRows.length;
+          await tx.exercise.createMany({ data: newExRows });
         }
       }
 
@@ -608,6 +692,11 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
           });
         }
       }
+    }, {
+      // Explicit budget: the Prisma defaults (maxWait 2s, timeout 5s) caused
+      // P2028 rollbacks (→ 500) on larger plans under production latency.
+      maxWait: 10_000,
+      timeout: 30_000,
     });
 
     // Return the freshly saved plan tree (with REAL ids) — same shape as GET /:id
@@ -665,8 +754,21 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
     if (httpStatus !== 500) {
       return res.status(httpStatus).json({ message: (error as Error).message });
     }
-    console.error("[plans:save-full] error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    const errorId = createErrorId();
+    logError(errorId, "plans:save-full", error, {
+      planId,
+      userId: req.user?.userId,
+      role: req.user?.role,
+      dayCount: statsDays,
+      exerciseCount: statsExercises,
+      newExercises: statsNewExercises,
+      updatedExercises: statsUpdatedExercises,
+      prismaCode:
+        error && typeof error === "object" && "code" in error
+          ? (error as { code: unknown }).code
+          : undefined,
+    });
+    return errorResponse(res, 500, "Plan konnte nicht gespeichert werden.", errorId);
   }
 });
 

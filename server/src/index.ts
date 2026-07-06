@@ -35,7 +35,9 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json());
+// 1mb: full-plan saves (all days + exercises with descriptions/notes) can
+// exceed the express default of 100kb, which fails as an opaque 413.
+app.use(express.json({ limit: "1mb" }));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/client-link-tokens", clientLinkTokensRouter);

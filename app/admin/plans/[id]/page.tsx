@@ -325,26 +325,57 @@ export default function PlanBuilderPage() {
     if (saving) return
     const requestIdToSend = deepLinkRequestId && !linkedRequestResolved ? deepLinkRequestId : undefined
 
-    const body = {
-      name: plan?.name ?? planName,
-      days: days.map(day => ({
-        id: isTmp(day.id) ? null : day.id,
-        name: day.name,
-        description: day.description ?? null,
-        exercises: (exercises[day.id] ?? []).map(ex => ({
+    // Normalize the draft into a clean DTO: trimmed strings, finite numbers,
+    // tmp ids → null (backend creates those rows), no UI-only fields. Invalid
+    // required fields abort before any request goes out.
+    const asFiniteNum = (v: unknown): number | null =>
+      typeof v === 'number' && Number.isFinite(v) ? v : null
+    const planNameOut = (plan?.name ?? planName).trim()
+    if (!planNameOut) { showToast('Plan-Name darf nicht leer sein.', 'danger'); return }
+
+    let newCount = 0
+    const bodyDays = []
+    for (const day of days) {
+      const dayNameOut = day.name.trim()
+      if (!dayNameOut) { showToast('Ein Trainingstag hat keinen Namen.', 'danger'); return }
+      const bodyExercises = []
+      for (const ex of exercises[day.id] ?? []) {
+        const exNameOut = ex.name.trim()
+        if (!exNameOut) { showToast(`Eine Übung in "${dayNameOut}" hat keinen Namen.`, 'danger'); return }
+        if (isTmp(ex.id)) newCount += 1
+        const sets = asFiniteNum(ex.sets)
+        bodyExercises.push({
           id: isTmp(ex.id) ? null : ex.id,
-          name: ex.name,
-          description: ex.description ?? null,
-          sets: ex.sets,
-          reps: ex.reps,
-          targetWeightKg: ex.target_weight ?? null,
-          restSeconds: ex.rest_seconds ?? null,
-          note: ex.note ?? null,
+          name: exNameOut,
+          description: ex.description?.trim() || null,
+          sets: sets && sets >= 1 ? Math.floor(sets) : 3,
+          reps: typeof ex.reps === 'string' && ex.reps.trim() ? ex.reps.trim() : '10',
+          targetWeightKg: asFiniteNum(ex.target_weight),
+          restSeconds: asFiniteNum(ex.rest_seconds),
+          note: ex.note?.trim() || null,
           imageUrl: ex.image_url ?? null,
-        })),
-      })),
+        })
+      }
+      if (isTmp(day.id)) newCount += 1
+      bodyDays.push({
+        id: isTmp(day.id) ? null : day.id,
+        name: dayNameOut,
+        description: day.description?.trim() || null,
+        exercises: bodyExercises,
+      })
+    }
+
+    const body = {
+      name: planNameOut,
+      days: bodyDays,
       ...(requestIdToSend ? { requestId: requestIdToSend } : {}),
     }
+    console.log('[admin/plans] save', {
+      planId: id,
+      days: bodyDays.length,
+      exercises: bodyDays.reduce((sum, d) => sum + d.exercises.length, 0),
+      newRows: newCount,
+    })
 
     setSaving(true)
     try {
@@ -353,13 +384,14 @@ export default function PlanBuilderPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const payload = await response.json().catch(() => null) as BackendPlanDetailResponse | { message?: string } | null
+      const payload = await response.json().catch(() => null) as BackendPlanDetailResponse | { message?: string; errorId?: string } | null
       if (!response.ok || !payload || !('plan' in payload) || !payload.plan) {
-        const msg =
+        const reason =
           response.status === 401
             ? 'Backend-Login erforderlich.'
-            : (payload && 'message' in payload && typeof payload.message === 'string' && payload.message) || 'Änderungen konnten nicht gespeichert werden.'
-        showToast(msg, 'danger')
+            : (payload && 'message' in payload && typeof payload.message === 'string' && payload.message) || `Serverfehler (${response.status})`
+        const errorId = payload && 'errorId' in payload && typeof payload.errorId === 'string' ? ` [${payload.errorId}]` : ''
+        showToast(`Speichern fehlgeschlagen: ${reason}${errorId}`, 'danger')
         return
       }
       applyPlanPayload(payload)
@@ -369,7 +401,7 @@ export default function PlanBuilderPage() {
         'success',
       )
     } catch {
-      showToast('Änderungen konnten nicht gespeichert werden.', 'danger')
+      showToast('Speichern fehlgeschlagen: Server nicht erreichbar.', 'danger')
     } finally {
       setSaving(false)
     }
@@ -435,6 +467,9 @@ export default function PlanBuilderPage() {
   }
 
   function openEditEx(ex: Exercise) {
+    // Opening a normal edit must never leave a stale "freshly picked" marker
+    // behind — otherwise Abbrechen would delete an unrelated exercise.
+    setPendingNewExId(prev => (prev === ex.id ? prev : null))
     setExpandedDayId(ex.day_id)
     setExModal({ open: true, dayId: ex.day_id, editing: ex })
     setExForm({
