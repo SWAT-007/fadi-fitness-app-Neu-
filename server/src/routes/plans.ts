@@ -675,21 +675,36 @@ plansRouter.put("/:id/full", requireAuth, async (req: AuthenticatedRequest, res)
             client: { select: { userId: true } },
           },
         });
+
         if (!request) {
-          throw httpError(400, "requestId does not belong to this plan");
-        }
-        const alreadyResolved = request.status === "resolved";
-        await tx.exerciseChangeRequest.update({
-          where: { id: requestId },
-          data: { status: "resolved" },
-        });
-        // Notify the client once (idempotent) with a deep link to the exercise.
-        if (!alreadyResolved && request.client.userId) {
-          await createRequestAcceptedNotification(tx, {
-            userId: request.client.userId,
-            exerciseName: request.exercise?.name ?? null,
-            link: buildExerciseChangeLink(request.dayId, request.exercise ? request.exerciseId : null),
+          // Distinguish "gone" from "foreign": deleting the requested exercise in
+          // this very save cascades the request row away (onDelete: Cascade) —
+          // that must NOT roll back the plan save. A request that still exists
+          // but belongs to another plan/trainer stays a hard error.
+          const requestExists = await tx.exerciseChangeRequest.findFirst({
+            where: { id: requestId },
+            select: { id: true },
           });
+          if (requestExists) {
+            throw httpError(400, "requestId does not belong to this plan");
+          }
+          console.warn("[plans:save-full] linked request no longer exists, skipping:", requestId);
+        } else if (request.status !== "pending") {
+          // Terminal states (resolved/rejected) are final: no re-resolve, no
+          // duplicate "accepted" notification. Saving the plan is still fine.
+        } else {
+          await tx.exerciseChangeRequest.update({
+            where: { id: request.id },
+            data: { status: "resolved" },
+          });
+          // Notify the client once with a deep link to the exercise.
+          if (request.client.userId) {
+            await createRequestAcceptedNotification(tx, {
+              userId: request.client.userId,
+              exerciseName: request.exercise?.name ?? null,
+              link: buildExerciseChangeLink(request.dayId, request.exercise ? request.exerciseId : null),
+            });
+          }
         }
       }
     }, {

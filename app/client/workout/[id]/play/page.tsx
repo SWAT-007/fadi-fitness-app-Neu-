@@ -286,35 +286,49 @@ export default function WorkoutPlayerPage() {
       })),
     )
 
-    // Final set flush and completion are independent writes → run them together
-    // instead of sequentially. The PATCH is the authoritative "completed" write.
-    const [putResult, patchResult] = await Promise.allSettled([
-      fetch(`/api/backend/me/workout-logs/${workoutLogId}/exercise-logs`, {
+    // The final flush MUST land before the completion PATCH: the flush endpoint
+    // only accepts open logs (completedAt: null), and the just-checked last set
+    // exists only in this flush (the debounced autosave is cancelled on
+    // completion). Running them in parallel could drop the last set.
+    try {
+      const putRes = await fetch(`/api/backend/me/workout-logs/${workoutLogId}/exercise-logs`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sets }),
-      }),
-      fetch(`/api/backend/me/workout-logs/${workoutLogId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ durationSeconds }),
-      }),
-    ])
-
-    // 404 = log was already completed (e.g. a retry after a partial success) → treat as done.
-    const patchOk = patchResult.status === 'fulfilled'
-      && (patchResult.value.ok || patchResult.value.status === 404)
-
-    if (!patchOk) {
-      console.error('Failed to complete workout', patchResult)
-      setError('Workout konnte nicht gespeichert werden.')
+      })
+      // 404 = log already completed (retry after the PATCH landed but its
+      // response was lost) — the pre-completion flush already succeeded then.
+      if (!putRes.ok && putRes.status !== 404) {
+        console.error('Final set flush failed', putRes.status)
+        setError('Letzter Satz konnte nicht gespeichert werden.')
+        setSaving(false)
+        return
+      }
+    } catch (err) {
+      console.error('Final set flush failed', err)
+      setError('Letzter Satz konnte nicht gespeichert werden.')
       setSaving(false)
       return
     }
 
-    if (putResult.status !== 'fulfilled' || !putResult.value.ok) {
-      // Best-effort: prior autosaves already persisted the sets; don't block completion.
-      console.warn('Final set flush failed; relying on autosaved progress.')
+    try {
+      const patchRes = await fetch(`/api/backend/me/workout-logs/${workoutLogId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ durationSeconds }),
+      })
+      // 404 = already completed (idempotent retry) → treat as done.
+      if (!patchRes.ok && patchRes.status !== 404) {
+        console.error('Failed to complete workout', patchRes.status)
+        setError('Workout konnte nicht gespeichert werden.')
+        setSaving(false)
+        return
+      }
+    } catch (err) {
+      console.error('Failed to complete workout', err)
+      setError('Workout konnte nicht gespeichert werden.')
+      setSaving(false)
+      return
     }
 
     setSaving(false)
