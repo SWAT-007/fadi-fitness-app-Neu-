@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { Prisma, UserRole } from "@prisma/client";
 import { prisma } from "../db";
+import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { errorResponse, unexpectedErrorResponse } from "../utils/errors";
 
 const authRouter = Router();
@@ -43,7 +44,16 @@ const createToken = (userId: string, role: RegisterRole): string | null => {
   return jwt.sign({ sub: userId, role }, jwtSecret, { expiresIn: "30d" });
 };
 
-authRouter.post("/register", async (req, res) => {
+// Account creation is admin-only. There is no public signup: trainers are
+// provisioned by an admin (see also trainers.ts), clients join exclusively via
+// invitation links. The role can only be chosen by an authenticated admin, and
+// no session token is issued for the created account — the new user logs in
+// with their own credentials.
+authRouter.post("/register", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "admin") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
   const email = normalizeEmail(req.body?.email);
   const password = normalizePassword(req.body?.password);
   const role = normalizeRole(req.body?.role);
@@ -75,13 +85,7 @@ authRouter.post("/register", async (req, res) => {
       },
     });
 
-    const token = createToken(user.id, role);
-    if (!token) {
-      return errorResponse(res, 500, "Interner Serverfehler.");
-    }
-
     return res.status(201).json({
-      token,
       user: {
         id: user.id,
         email: user.email,
