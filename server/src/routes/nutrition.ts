@@ -21,10 +21,52 @@ const normalizeOptionalNumber = (value: unknown) => {
   return null;
 };
 
+const nutritionGoals = ["cut", "bulk", "maintain"] as const;
+type NutritionGoal = (typeof nutritionGoals)[number];
+type NutritionPlanTargetKey =
+  | "targetCalories"
+  | "targetProtein"
+  | "targetCarbs"
+  | "targetFat";
+
+const nutritionPlanTargetKeys: NutritionPlanTargetKey[] = [
+  "targetCalories",
+  "targetProtein",
+  "targetCarbs",
+  "targetFat",
+];
+
+const isNutritionGoal = (value: unknown): value is NutritionGoal =>
+  typeof value === "string" && nutritionGoals.includes(value as NutritionGoal);
+
+const isNullableNonNegativeNumber = (value: unknown) =>
+  value === null
+  || value === ""
+  || (typeof value === "number" && Number.isFinite(value) && value >= 0);
+
+const normalizeNullableNonNegativeNumber = (value: unknown): number | null =>
+  value === null || value === ""
+    ? null
+    : value as number;
+
+// Persisted daily targets are shared by list, detail, create, and update responses.
+const nutritionPlanTargetSelect = {
+  goal: true,
+  targetCalories: true,
+  targetProtein: true,
+  targetCarbs: true,
+  targetFat: true,
+} as const;
+
 const mapNutritionPlan = (plan: {
   id: string;
   name: string;
   description: string | null;
+  goal: string;
+  targetCalories: number | null;
+  targetProtein: number | null;
+  targetCarbs: number | null;
+  targetFat: number | null;
   createdAt: Date;
   updatedAt: Date;
   _count: {
@@ -35,6 +77,11 @@ const mapNutritionPlan = (plan: {
   id: plan.id,
   name: plan.name,
   description: plan.description,
+  goal: plan.goal,
+  targetCalories: plan.targetCalories,
+  targetProtein: plan.targetProtein,
+  targetCarbs: plan.targetCarbs,
+  targetFat: plan.targetFat,
   createdAt: plan.createdAt,
   updatedAt: plan.updatedAt,
   mealCount: plan._count.meals,
@@ -45,12 +92,22 @@ const mapNutritionPlanDetail = (plan: {
   id: string;
   name: string;
   description: string | null;
+  goal: string;
+  targetCalories: number | null;
+  targetProtein: number | null;
+  targetCarbs: number | null;
+  targetFat: number | null;
   createdAt: Date;
   updatedAt: Date;
 }) => ({
   id: plan.id,
   name: plan.name,
   description: plan.description,
+  goal: plan.goal,
+  targetCalories: plan.targetCalories,
+  targetProtein: plan.targetProtein,
+  targetCarbs: plan.targetCarbs,
+  targetFat: plan.targetFat,
   createdAt: plan.createdAt,
   updatedAt: plan.updatedAt,
 });
@@ -580,6 +637,7 @@ nutritionRouter.get("/plans", requireAuth, async (req: AuthenticatedRequest, res
         id: true,
         name: true,
         description: true,
+        ...nutritionPlanTargetSelect,
         createdAt: true,
         updatedAt: true,
         _count: {
@@ -611,8 +669,17 @@ nutritionRouter.post("/plans", requireAuth, async (req: AuthenticatedRequest, re
       : typeof descriptionInput === "string"
         ? descriptionInput
         : null;
+  const body = (req.body as Record<string, unknown>) ?? {};
+  const goal = body.goal === undefined ? "maintain" : body.goal;
 
-  if (!name) {
+  if (
+    !name
+    || !isNutritionGoal(goal)
+    || nutritionPlanTargetKeys.some(
+      (key) => Object.prototype.hasOwnProperty.call(body, key)
+        && !isNullableNonNegativeNumber(body[key]),
+    )
+  ) {
     return res.status(400).json({ message: "Invalid request" });
   }
 
@@ -628,11 +695,18 @@ nutritionRouter.post("/plans", requireAuth, async (req: AuthenticatedRequest, re
         trainerId: ownedTrainerId,
         name,
         description,
+        goal,
+        ...Object.fromEntries(
+          nutritionPlanTargetKeys
+            .filter((key) => Object.prototype.hasOwnProperty.call(body, key))
+            .map((key) => [key, normalizeNullableNonNegativeNumber(body[key])]),
+        ),
       },
       select: {
         id: true,
         name: true,
         description: true,
+        ...nutritionPlanTargetSelect,
         createdAt: true,
         updatedAt: true,
         _count: {
@@ -711,6 +785,7 @@ nutritionRouter.get("/plans/:id", requireAuth, async (req: AuthenticatedRequest,
         id: true,
         name: true,
         description: true,
+        ...nutritionPlanTargetSelect,
         createdAt: true,
         updatedAt: true,
       },
@@ -796,7 +871,15 @@ nutritionRouter.patch("/plans/:id", requireAuth, async (req: AuthenticatedReques
     return res.status(404).json({ message: "Not found" });
   }
 
-  const data: { name?: string; description?: string | null } = {};
+  const data: {
+    name?: string;
+    description?: string | null;
+    goal?: NutritionGoal;
+    targetCalories?: number | null;
+    targetProtein?: number | null;
+    targetCarbs?: number | null;
+    targetFat?: number | null;
+  } = {};
 
   if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "name")) {
     const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
@@ -812,6 +895,22 @@ nutritionRouter.patch("/plans/:id", requireAuth, async (req: AuthenticatedReques
       return res.status(400).json({ message: "Invalid request" });
     }
     data.description = typeof desc === "string" ? desc.trim() || null : null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "goal")) {
+    if (!isNutritionGoal(req.body?.goal)) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data.goal = req.body.goal;
+  }
+
+  for (const key of nutritionPlanTargetKeys) {
+    if (!Object.prototype.hasOwnProperty.call(req.body ?? {}, key)) continue;
+    const value = req.body?.[key];
+    if (!isNullableNonNegativeNumber(value)) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    data[key] = normalizeNullableNonNegativeNumber(value);
   }
 
   try {
@@ -836,6 +935,7 @@ nutritionRouter.patch("/plans/:id", requireAuth, async (req: AuthenticatedReques
         id: true,
         name: true,
         description: true,
+        ...nutritionPlanTargetSelect,
         createdAt: true,
         updatedAt: true,
       },
@@ -1530,4 +1630,3 @@ nutritionRouter.delete("/recipes/:id", requireAuth, async (req: AuthenticatedReq
 });
 
 export { nutritionRouter };
-

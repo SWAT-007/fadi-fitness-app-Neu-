@@ -28,6 +28,10 @@ type BackendMealLog = {
   date: string
   mealType: string | null
   notes: string | null
+  calories: number | null
+  protein: number | null
+  carbs: number | null
+  fat: number | null
   createdAt: string
   updatedAt: string
 }
@@ -37,11 +41,10 @@ function mapMealLog(m: BackendMealLog): MealLog {
     id: m.id,
     client_id: m.clientId,
     meal_name: m.mealType ?? '',
-    // calories / protein_g / carbs_g / fat_g not in backend model — deferred
-    calories: null,
-    protein_g: null,
-    carbs_g: null,
-    fat_g: null,
+    calories: m.calories,
+    protein_g: m.protein,
+    carbs_g: m.carbs,
+    fat_g: m.fat,
     logged_at: m.createdAt,
   }
 }
@@ -145,10 +148,17 @@ export default function MealsPage() {
     setError('')
 
     try {
+      const optionalNumber = (value: string) => value.trim() === '' ? null : Number(value)
       const res = await fetch('/api/backend/me/nutrition/meal-logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mealType: form.meal_name.trim() }),
+        body: JSON.stringify({
+          mealType: form.meal_name.trim(),
+          calories: optionalNumber(form.calories),
+          protein: optionalNumber(form.protein_g),
+          carbs: optionalNumber(form.carbs_g),
+          fat: optionalNumber(form.fat_g),
+        }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => null)

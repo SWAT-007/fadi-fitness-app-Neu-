@@ -450,8 +450,6 @@ export default function ClientNutritionPage() {
       return next
     })
 
-  const DEFERRED_WRITE_MESSAGE = 'Diese Aktion wird im nächsten Migrationsschritt auf das Backend umgestellt.'
-
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -468,6 +466,11 @@ export default function ClientNutritionPage() {
             id: string
             name: string
             description: string | null
+            goal: string
+            targetCalories: number | null
+            targetProtein: number | null
+            targetCarbs: number | null
+            targetFat: number | null
             meals: Array<{
               id: string; planId: string; name: string; sortOrder: number
               targetProtein: number | null
@@ -535,11 +538,14 @@ export default function ClientNutritionPage() {
         trainer_id: '',
         name: anp.plan.name,
         description: anp.plan.description,
-        goal: 'maintain',
-        target_calories: dayTargetProtein * 4 + dayTargetCarbs * 4 + dayTargetFat * 9,
-        target_protein: dayTargetProtein,
-        target_carbs: dayTargetCarbs,
-        target_fat: dayTargetFat,
+        goal: (['cut', 'bulk', 'maintain'] as const).includes(anp.plan.goal as NutritionGoal)
+          ? anp.plan.goal as NutritionGoal
+          : 'maintain',
+        target_calories: anp.plan.targetCalories
+          ?? dayTargetProtein * 4 + dayTargetCarbs * 4 + dayTargetFat * 9,
+        target_protein: anp.plan.targetProtein ?? dayTargetProtein,
+        target_carbs: anp.plan.targetCarbs ?? dayTargetCarbs,
+        target_fat: anp.plan.targetFat ?? dayTargetFat,
         created_at: anp.assignedAt,
         nutrition_meals: mappedMeals,
       }
@@ -793,8 +799,48 @@ export default function ClientNutritionPage() {
 
   // ─── Meal History: reuse ──────────────────────────────────────────────────
 
-  const reuseFromHistory = async (_entry: MealHistoryEntry) => {
-    showToast('info', DEFERRED_WRITE_MESSAGE)
+  const reuseFromHistory = async (entry: MealHistoryEntry) => {
+    const totals = entry.ingredients.reduce(
+      (sum, ingredient) => ({
+        amountG: sum.amountG + (ingredient.grams ?? 0),
+        calories: sum.calories + (ingredient.calories ?? 0),
+        protein: sum.protein + (ingredient.protein ?? 0),
+        carbs: sum.carbs + (ingredient.carbs ?? 0),
+        fat: sum.fat + (ingredient.fat ?? 0),
+      }),
+      { amountG: 0, calories: 0, protein: 0, carbs: 0, fat: 0 },
+    )
+
+    setReusingHistoryId(entry.id)
+    try {
+      const response = await fetch('/api/backend/me/nutrition/meal-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: entry.meal_name,
+          category: entry.ingredients[0]?.category ?? null,
+          amountG: totals.amountG || null,
+          calories: entry.total_calories ?? totals.calories,
+          protein: totals.protein,
+          carbs: totals.carbs,
+          fat: totals.fat,
+        }),
+      })
+      const payload = (await response.json().catch(() => null)) as {
+        mealHistoryItem?: BackendMealHistory
+        message?: string
+      } | null
+      if (!response.ok || !payload?.mealHistoryItem) {
+        showToast('danger', payload?.message ?? 'Mahlzeit konnte nicht übernommen werden')
+        return
+      }
+      setMealHistory(prev => [mapMealHistory(payload.mealHistoryItem!), ...prev])
+      showToast('success', 'Mahlzeit für heute übernommen ✓')
+    } catch {
+      showToast('danger', 'Mahlzeit konnte nicht übernommen werden')
+    } finally {
+      setReusingHistoryId(null)
+    }
   }
 
   // ─── Macro met tracking ───────────────────────────────────────────────────

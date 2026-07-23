@@ -9,6 +9,12 @@ import { isTrainerOrAdmin, requireAuth, type AuthenticatedRequest } from "../mid
 import { unexpectedErrorResponse } from "../utils/errors";
 import { clampDuration } from "../utils/duration";
 import {
+  buildLastPerformanceByExercise,
+  countRemainingRequiredSets,
+  normalizeExerciseName,
+  type HistoricalWorkout,
+} from "../../../lib/workout-player";
+import {
   listNotificationsForUser,
   mapNotification,
   markAllNotificationsReadForUser,
@@ -620,11 +626,52 @@ meRouter.get("/workout-logs/week", requireAuth, async (req: AuthenticatedRequest
     return res.status(403).json({ message: "Forbidden" });
   }
 
-  return res.json({
-    completedDayIds: [],
-    activeDayIds: [],
-    activeLogs: [],
-  });
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+
+    const [completedLogs, activeLogs] = await Promise.all([
+      prisma.workoutLog.findMany({
+        where: {
+          clientId: clientProfile.id,
+          completedAt: { not: null },
+          date: { gte: getCurrentWeekStartKey() },
+        },
+        orderBy: { completedAt: "desc" },
+        select: {
+          id: true,
+          dayId: true,
+          date: true,
+          completedAt: true,
+          durationSeconds: true,
+        },
+      }),
+      prisma.workoutLog.findMany({
+        where: {
+          clientId: clientProfile.id,
+          completedAt: null,
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          dayId: true,
+          date: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    return res.json({
+      completedDayIds: [...new Set(completedLogs.map((log) => log.dayId))],
+      activeDayIds: [...new Set(activeLogs.map((log) => log.dayId))],
+      activeLogs,
+    });
+  } catch (error) {
+    return unexpectedErrorResponse(res, "me:workout-logs:week", error);
+  }
 });
 
 // ── Workout playback ──────────────────────────────────────────────────────────
@@ -713,13 +760,50 @@ meRouter.get("/workouts/:dayId/play", requireAuth, async (req: AuthenticatedRequ
         })
       : [];
 
-    // Last performance: for each exercise, the last completed working set of the
-    // most recently completed session of this client. Read-only over existing logs.
-    const exerciseIds = day.exercises.map((ex) => ex.id);
-    const historyLogs = exerciseIds.length
+    const currentExercises = day.exercises.map((exercise) => ({
+      ...exercise,
+      // Exercise currently has no persisted ExerciseLibrary relation. Keeping the
+      // nullable identity in the contract makes the matching priority explicit and
+      // ready for data sources that can provide it without changing this schema.
+      libraryId: null,
+    }));
+    const currentExerciseIds = new Set(currentExercises.map((exercise) => exercise.id));
+    const normalizedCurrentNames = new Set(
+      currentExercises.map((exercise) => normalizeExerciseName(exercise.name)),
+    );
+
+    // Resolve historical identities first so the log query only reads exercises
+    // that can match by stable Exercise.id or normalized-name fallback.
+    const historicalExerciseIdentities = currentExercises.length
+      ? await prisma.exercise.findMany({
+          where: {
+            exerciseLogs: {
+              some: {
+                completed: true,
+                workoutLog: {
+                  clientId: clientProfile.id,
+                  completedAt: { not: null },
+                },
+              },
+            },
+          },
+          select: {
+            id: true,
+            name: true,
+          },
+        })
+      : [];
+    const candidateHistoricalExerciseIds = historicalExerciseIdentities
+      .filter((exercise) => (
+        currentExerciseIds.has(exercise.id)
+        || normalizedCurrentNames.has(normalizeExerciseName(exercise.name))
+      ))
+      .map((exercise) => exercise.id);
+
+    const historyLogs = candidateHistoricalExerciseIds.length
       ? await prisma.exerciseLog.findMany({
           where: {
-            exerciseId: { in: exerciseIds },
+            exerciseId: { in: candidateHistoricalExerciseIds },
             completed: true,
             workoutLog: {
               clientId: clientProfile.id,
@@ -728,31 +812,62 @@ meRouter.get("/workouts/:dayId/play", requireAuth, async (req: AuthenticatedRequ
           },
           orderBy: [
             { workoutLog: { completedAt: "desc" } },
-            { setsDone: "desc" },
+            { workoutLog: { createdAt: "desc" } },
+            { setsDone: "asc" },
+            { createdAt: "asc" },
           ],
           select: {
+            workoutLogId: true,
             exerciseId: true,
             actualWeight: true,
             actualReps: true,
+            setsDone: true,
+            createdAt: true,
+            workoutLog: {
+              select: {
+                id: true,
+                completedAt: true,
+                createdAt: true,
+              },
+            },
+            exercise: {
+              select: {
+                name: true,
+              },
+            },
           },
         })
       : [];
 
-    const lastPerformanceByExercise: Record<
-      string,
-      { weightKg: number | null; reps: string | null }
-    > = {};
+    const historyByWorkoutId = new Map<string, HistoricalWorkout>();
     for (const log of historyLogs) {
-      if (lastPerformanceByExercise[log.exerciseId]) continue;
-      lastPerformanceByExercise[log.exerciseId] = {
+      const completedAt = log.workoutLog.completedAt?.toISOString();
+      if (!completedAt) continue;
+
+      const workout = historyByWorkoutId.get(log.workoutLogId) ?? {
+        id: log.workoutLog.id,
+        completedAt,
+        createdAt: log.workoutLog.createdAt.toISOString(),
+        exerciseLogs: [],
+      };
+      workout.exerciseLogs.push({
+        exerciseId: log.exerciseId,
+        libraryId: null,
+        exerciseName: log.exercise.name,
+        setNumber: log.setsDone,
         weightKg: log.actualWeight,
         reps: log.actualReps,
-      };
+        createdAt: log.createdAt.toISOString(),
+      });
+      historyByWorkoutId.set(log.workoutLogId, workout);
     }
 
-    const exercises = day.exercises.map((ex) => ({
+    const lastPerformanceByExercise = buildLastPerformanceByExercise(
+      currentExercises,
+      [...historyByWorkoutId.values()],
+    );
+    const exercises = currentExercises.map((ex) => ({
       ...ex,
-      libraryId: null,
       lastPerformance: lastPerformanceByExercise[ex.id] ?? null,
     }));
 
@@ -949,6 +1064,41 @@ meRouter.patch("/workout-logs/:logId", requireAuth, async (req: AuthenticatedReq
       include: { day: { select: { name: true } } },
     });
     if (!workoutLog) return res.status(404).json({ message: "Not found" });
+
+    // The player awaits its final exercise-log PUT before this PATCH. Validate
+    // the persisted result as a second line of defense so no client can complete
+    // a workout while required sets are still open.
+    const [requiredExercises, completedSetLogs] = await Promise.all([
+      prisma.exercise.findMany({
+        where: { dayId: workoutLog.dayId },
+        select: { id: true, sets: true },
+      }),
+      prisma.exerciseLog.findMany({
+        where: {
+          workoutLogId: logId,
+          completed: true,
+          setsDone: { not: null },
+        },
+        select: { exerciseId: true, setsDone: true },
+      }),
+    ]);
+    const completedSetKeys = new Set(
+      completedSetLogs
+        .filter((log): log is { exerciseId: string; setsDone: number } => (
+          Number.isInteger(log.setsDone) && (log.setsDone ?? 0) > 0
+        ))
+        .map((log) => `${log.exerciseId}:${log.setsDone}`),
+    );
+    const remainingRequiredSets = countRemainingRequiredSets(
+      requiredExercises,
+      (exerciseId, setIndex) => completedSetKeys.has(`${exerciseId}:${setIndex + 1}`),
+    );
+    if (remainingRequiredSets > 0) {
+      return res.status(409).json({
+        message: "Workout has incomplete required sets",
+        remainingSets: remainingRequiredSets,
+      });
+    }
 
     const resolvedCompletedAt = completedAt ? new Date(completedAt) : new Date();
     const resolvedDurationSeconds = typeof durationSeconds === "number" ? durationSeconds : null;
@@ -1254,6 +1404,11 @@ meRouter.get("/nutrition", requireAuth, async (req: AuthenticatedRequest, res) =
               id: true,
               name: true,
               description: true,
+              goal: true,
+              targetCalories: true,
+              targetProtein: true,
+              targetCarbs: true,
+              targetFat: true,
               meals: {
                 orderBy: { sortOrder: "asc" },
                 select: {
@@ -1716,6 +1871,10 @@ const mealLogSelect = {
   date: true,
   mealType: true,
   notes: true,
+  calories: true,
+  protein: true,
+  carbs: true,
+  fat: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -1767,6 +1926,21 @@ meRouter.post("/nutrition/meal-logs", requireAuth, async (req: AuthenticatedRequ
     typeof req.body?.mealType === "string" ? req.body.mealType.trim() || null : null;
   const notes =
     typeof req.body?.notes === "string" ? req.body.notes.trim() || null : null;
+  const macroFields = ["calories", "protein", "carbs", "fat"] as const;
+  const macros: Partial<Record<(typeof macroFields)[number], number | null>> = {};
+
+  for (const field of macroFields) {
+    if (!Object.prototype.hasOwnProperty.call(req.body ?? {}, field)) continue;
+    const value = req.body?.[field];
+    if (value === null || value === "") {
+      macros[field] = null;
+      continue;
+    }
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    macros[field] = value;
+  }
 
   try {
     const clientProfile = await prisma.clientProfile.findUnique({
@@ -1776,7 +1950,7 @@ meRouter.post("/nutrition/meal-logs", requireAuth, async (req: AuthenticatedRequ
     if (!clientProfile) return res.status(404).json({ message: "Not found" });
 
     const mealLog = await prisma.mealLog.create({
-      data: { clientId: clientProfile.id, date, mealType, notes },
+      data: { clientId: clientProfile.id, date, mealType, notes, ...macros },
       select: mealLogSelect,
     });
 
@@ -2429,4 +2603,3 @@ meRouter.post(
 );
 
 export { meRouter };
-

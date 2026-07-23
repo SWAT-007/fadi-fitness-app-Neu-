@@ -17,6 +17,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    ".claude/**",
+    ".playwright-mcp/**",
+    "android/**/build/**",
+    "graphify-out/**",
+    "screenshots/**",
+    "uploads/**",
   ]),
 ]);
 

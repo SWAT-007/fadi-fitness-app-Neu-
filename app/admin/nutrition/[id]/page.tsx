@@ -7,6 +7,7 @@ import {
   type Client, type FoodCategory,
   type NutritionGoal, type NutritionMeal, type NutritionPlan,
 } from '@/lib/types'
+import { distributeNutritionTarget } from '@/lib/nutrition-targets'
 
 // ─── Local types ──────────────────────────────────────────────────────────────
 
@@ -207,19 +208,6 @@ export default function NutritionEditorPage() {
   const [loadError, setLoadError] = useState('')
 
   const newMealRef = useRef<HTMLInputElement>(null)
-  const DEFERRED_WRITE_MESSAGE = 'Diese Aktion wird im nächsten Migrationsschritt auf das Backend umgestellt.'
-
-  const showDeferredWriteMessage = (target: 'settings' | 'assign' | 'all' = 'all') => {
-    if (target === 'settings' || target === 'all') {
-      setSettingsMsg(DEFERRED_WRITE_MESSAGE)
-      setTimeout(() => setSettingsMsg(''), 4000)
-    }
-    if (target === 'assign' || target === 'all') {
-      setAssignMsg(DEFERRED_WRITE_MESSAGE)
-      setTimeout(() => setAssignMsg(''), 4000)
-    }
-  }
-
   // ─── Load ────────────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
@@ -237,6 +225,11 @@ export default function NutritionEditorPage() {
               id: string
               name: string
               description: string | null
+              goal: string
+              targetCalories: number | null
+              targetProtein: number | null
+              targetCarbs: number | null
+              targetFat: number | null
               createdAt: string
             }
             meals?: Array<{
@@ -292,27 +285,39 @@ export default function NutritionEditorPage() {
         return
       }
 
+      const mealTargetProtein = (payload.meals ?? []).reduce((sum, meal) => sum + (meal.targetProtein ?? 0), 0)
+      const mealTargetCarbs = (payload.meals ?? []).reduce((sum, meal) => sum + (meal.targetCarbs ?? 0), 0)
+      const mealTargetFat = (payload.meals ?? []).reduce((sum, meal) => sum + (meal.targetFat ?? 0), 0)
+      const loadedGoal = (['cut', 'bulk', 'maintain'] as const).includes(payload.plan.goal as NutritionGoal)
+        ? payload.plan.goal as NutritionGoal
+        : 'maintain'
+      const loadedProtein = payload.plan.targetProtein ?? mealTargetProtein
+      const loadedCarbs = payload.plan.targetCarbs ?? mealTargetCarbs
+      const loadedFat = payload.plan.targetFat ?? mealTargetFat
+      const loadedCalories = payload.plan.targetCalories
+        ?? loadedProtein * 4 + loadedCarbs * 4 + loadedFat * 9
+
       const planData: NutritionPlan = {
         id: payload.plan.id,
         trainer_id: '',
         name: payload.plan.name,
         description: payload.plan.description,
-        goal: 'maintain',
-        target_calories: 2000,
-        target_protein: 150,
-        target_carbs: 200,
-        target_fat: 70,
+        goal: loadedGoal,
+        target_calories: loadedCalories,
+        target_protein: loadedProtein,
+        target_carbs: loadedCarbs,
+        target_fat: loadedFat,
         created_at: payload.plan.createdAt,
       }
 
       setPlan(planData)
       setName(payload.plan.name)
       setDesc(payload.plan.description ?? '')
-      setGoal('maintain')
-      setTCal('2000')
-      setTP('150')
-      setTK('200')
-      setTF('70')
+      setGoal(loadedGoal)
+      setTCal(String(loadedCalories))
+      setTP(String(loadedProtein))
+      setTK(String(loadedCarbs))
+      setTF(String(loadedFat))
 
       const mappedMeals: NutritionMeal[] = (payload.meals ?? []).map((meal) => {
         const target_protein = meal.targetProtein ?? 0
@@ -378,13 +383,32 @@ export default function NutritionEditorPage() {
       setSettingsMsg('Name ist erforderlich.')
       return
     }
+    const targetCalories = Number(tCal)
+    const targetProtein = Number(tP)
+    const targetCarbs = Number(tK)
+    const targetFat = Number(tF)
+    if (
+      ![targetCalories, targetProtein, targetCarbs, targetFat]
+        .every(value => Number.isFinite(value) && value >= 0)
+    ) {
+      setSettingsMsg('Zielwerte müssen gültige, nicht-negative Zahlen sein.')
+      return
+    }
     setSavingSettings(true)
     setSettingsMsg('')
     try {
       const response = await fetch(`/api/backend/nutrition/plans/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), description: desc.trim() || null }),
+        body: JSON.stringify({
+          name: name.trim(),
+          description: desc.trim() || null,
+          goal,
+          targetCalories,
+          targetProtein,
+          targetCarbs,
+          targetFat,
+        }),
       })
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
@@ -392,9 +416,29 @@ export default function NutritionEditorPage() {
         setSavingSettings(false)
         return
       }
-      const updated = payload?.plan as { id: string; name: string; description: string | null; createdAt: string; updatedAt: string } | undefined
+      const updated = payload?.plan as {
+        id: string
+        name: string
+        description: string | null
+        goal: NutritionGoal
+        targetCalories: number | null
+        targetProtein: number | null
+        targetCarbs: number | null
+        targetFat: number | null
+        createdAt: string
+        updatedAt: string
+      } | undefined
       if (updated) {
-        setPlan((prev) => prev ? { ...prev, name: updated.name, description: updated.description } : prev)
+        setPlan((prev) => prev ? {
+          ...prev,
+          name: updated.name,
+          description: updated.description,
+          goal: updated.goal,
+          target_calories: updated.targetCalories ?? 0,
+          target_protein: updated.targetProtein ?? 0,
+          target_carbs: updated.targetCarbs ?? 0,
+          target_fat: updated.targetFat ?? 0,
+        } : prev)
         setName(updated.name)
         setDesc(updated.description ?? '')
       }
@@ -446,13 +490,74 @@ export default function NutritionEditorPage() {
     }
   }
 
-  // distributeRest writes to macro target fields not stored in backend — deferred.
   const distributeRest = async (
     targets: Array<'protein' | 'carbs' | 'fat'>,
   ) => {
-    void targets
     if (meals.length === 0) return
-    showDeferredWriteMessage('settings')
+    const planTargets = {
+      protein: Number(tP) || 0,
+      carbs: Number(tK) || 0,
+      fat: Number(tF) || 0,
+    }
+    const fields = {
+      protein: 'target_protein',
+      carbs: 'target_carbs',
+      fat: 'target_fat',
+    } as const
+    const nextMeals = meals.map(meal => ({ ...meal }))
+
+    for (const target of targets) {
+      const field = fields[target]
+      const values = distributeNutritionTarget(
+        planTargets[target],
+        meals.map(meal => meal[field] ?? 0),
+      )
+      nextMeals.forEach((meal, index) => {
+        meal[field] = values[index]
+        meal.target_kcal =
+          meal.target_protein * 4
+          + meal.target_carbs * 4
+          + meal.target_fat * 9
+      })
+    }
+
+    setSavingSettings(true)
+    setSettingsMsg('')
+    try {
+      const responses = await Promise.all(nextMeals.map((meal, index) => {
+        const patch: Partial<NutritionMeal> = {}
+        for (const target of targets) {
+          const field = fields[target]
+          if (meal[field] !== meals[index][field]) patch[field] = meal[field]
+        }
+        return Object.keys(patch).length === 0
+          ? Promise.resolve(null)
+          : fetch(`/api/backend/nutrition/meals/${meal.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...(patch.target_protein !== undefined && { targetProtein: patch.target_protein }),
+                ...(patch.target_carbs !== undefined && { targetCarbs: patch.target_carbs }),
+                ...(patch.target_fat !== undefined && { targetFat: patch.target_fat }),
+              }),
+            })
+      }))
+
+      if (responses.some(response => response && !response.ok)) {
+        await load()
+        setSettingsMsg('Verteilung konnte nicht vollständig gespeichert werden.')
+        return
+      }
+
+      setMeals(nextMeals)
+      setSettingsMsg('✓ Zielwerte verteilt und gespeichert')
+      setTimeout(() => setSettingsMsg(''), 3000)
+    } catch {
+      await load()
+      setSettingsMsg('Backend nicht erreichbar.')
+    } finally {
+      setSavingSettings(false)
+    }
   }
 
   const updateMeal = async (mealId: string, patch: Partial<NutritionMeal>) => {

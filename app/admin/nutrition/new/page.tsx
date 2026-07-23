@@ -10,6 +10,11 @@ type BackendCreatedPlan = {
   id: string
   name: string
   description: string | null
+  goal: string
+  targetCalories: number | null
+  targetProtein: number | null
+  targetCarbs: number | null
+  targetFat: number | null
   createdAt: string
   updatedAt: string
   mealCount: number
@@ -59,15 +64,17 @@ export default function NewNutritionPlanPage() {
     setError(null)
     setSaving(true)
     try {
-      // NutritionPlan has no macro columns in the schema, so the macros are
-      // persisted as a readable summary in the plan description (no schema change).
-      const macroSummary = `Tagesziele: ${kcal} kcal · ${fmt(proteinG)} g Eiweiß · ${fmt(fatG)} g Fett · ${fmt(carbGrams)} g Kohlenhydrate`
       const response = await fetch('/api/backend/nutrition/plans', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
-          description: macroSummary,
+          description: null,
+          goal: 'maintain',
+          targetCalories: kcal,
+          targetProtein: proteinG,
+          targetCarbs: carbGrams,
+          targetFat: fatG,
         }),
       })
 

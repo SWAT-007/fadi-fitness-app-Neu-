@@ -7,16 +7,17 @@ import { useToast } from '@/components/Motion'
 import { EmptyState } from '@/components/ui/client-ui'
 import { resolveImageUrl } from '@/lib/exercises'
 import { tapLight, successBuzz } from '@/lib/haptics'
+import {
+  countRemainingRequiredSets,
+  findNextIncompleteExerciseIndex,
+  getSuggestedPerformanceForSet,
+  type LastPerformance,
+} from '@/lib/workout-player'
 
 type SetLog = {
   weight: string
   reps: string
   completed: boolean
-}
-
-type LastPerformance = {
-  weightKg: number | null
-  reps: string | null
 }
 
 type BackendExercise = {
@@ -317,6 +318,19 @@ export default function WorkoutPlayerPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ durationSeconds }),
       })
+      if (patchRes.status === 409) {
+        const payload = await patchRes.json().catch(() => null) as { remainingSets?: number } | null
+        const remainingSets = payload?.remainingSets
+        completingRef.current = false
+        setComplete(false)
+        setError(
+          typeof remainingSets === 'number'
+            ? `Noch ${remainingSets} ${remainingSets === 1 ? 'Satz' : 'Sätze'} offen.`
+            : 'Noch nicht alle Übungen abgeschlossen.',
+        )
+        setSaving(false)
+        return
+      }
       // 404 = already completed (idempotent retry) → treat as done.
       if (!patchRes.ok && patchRes.status !== 404) {
         console.error('Failed to complete workout', patchRes.status)
@@ -335,8 +349,9 @@ export default function WorkoutPlayerPage() {
     showToast('Workout gespeichert ✓', 'success')
   }, [workoutLogId, exercises, logs, showToast])
 
-  // Triggered when the last set is checked. Switches to the completion screen
-  // immediately (optimistic), then saves in the background.
+  // Triggered only after the final still-open required set across the whole
+  // workout is checked. Switches to the completion screen immediately, then
+  // saves in the background.
   const saveWorkout = useCallback(() => {
     if (!workoutLogId || completingRef.current) return
     completingRef.current = true
@@ -405,7 +420,8 @@ export default function WorkoutPlayerPage() {
 
   useEffect(() => { setBulkKgOpen(false) }, [currentExerciseIndex])
 
-  // Auto-advance when all sets done
+  // Auto-advance when the visible exercise is done. Completion is independent
+  // of exercise order and requires every expected set of every exercise.
   useEffect(() => {
     if (loading || complete || saving) return
     const exercise = exercises[currentExerciseIndex]
@@ -414,17 +430,28 @@ export default function WorkoutPlayerPage() {
     if (!sets || sets.length === 0) return
     if (!sets.every(s => s.completed)) return
 
-    if (currentExerciseIndex >= exercises.length - 1) {
+    const remainingRequiredSets = countRemainingRequiredSets(
+      exercises,
+      (exerciseId, setIndex) => logs[exerciseId]?.[setIndex]?.completed === true,
+    )
+
+    if (remainingRequiredSets === 0) {
       saveWorkout()
     } else {
+      const nextExerciseIndex = findNextIncompleteExerciseIndex(
+        exercises,
+        currentExerciseIndex,
+        (exerciseId, setIndex) => logs[exerciseId]?.[setIndex]?.completed === true,
+      )
+      if (nextExerciseIndex === -1) return
+
       const t = setTimeout(() => {
-        setCurrentExerciseIndex(i => i + 1)
+        setCurrentExerciseIndex(nextExerciseIndex)
         window.scrollTo({ top: 0, behavior: 'smooth' })
       }, 400)
       return () => clearTimeout(t)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logs, currentExerciseIndex, exercises, loading, complete, saving])
+  }, [logs, currentExerciseIndex, exercises, loading, complete, saving, saveWorkout])
 
   // ── Loading ──────────────────────────────────────────────────────────────
 
@@ -439,15 +466,18 @@ export default function WorkoutPlayerPage() {
   const exercise = exercises[currentExerciseIndex]
   const exerciseSets = exercise ? logs[exercise.id] ?? [] : []
   const completedCount = exerciseSets.filter(s => s.completed).length
-  const progress = exercises.length > 0 ? (currentExerciseIndex / exercises.length) * 100 : 0
   const activeSetIndex = exerciseSets.findIndex(s => !s.completed)
-
-  // Suggestions shown as input placeholders (not real values). KG falls back to "—",
-  // WDH falls back to the trainer's rep goal. Same value for all set rows for now.
-  const kgPlaceholder = exercise?.lastPerformance?.weightKg != null
-    ? formatKg(exercise.lastPerformance.weightKg)
-    : '—'
-  const repsPlaceholder = exercise?.lastPerformance?.reps?.trim() || exercise?.reps || '—'
+  const remainingRequiredSets = countRemainingRequiredSets(
+    exercises,
+    (exerciseId, setIndex) => logs[exerciseId]?.[setIndex]?.completed === true,
+  )
+  const totalRequiredSets = exercises.reduce(
+    (total, item) => total + Math.max(1, item.sets),
+    0,
+  )
+  const progress = totalRequiredSets > 0
+    ? ((totalRequiredSets - remainingRequiredSets) / totalRequiredSets) * 100
+    : 0
 
   const applyBulkKg = () => {
     if (!exercise) return
@@ -710,11 +740,19 @@ export default function WorkoutPlayerPage() {
             {exerciseSets.map((set, setIndex) => {
               const isActive = setIndex === activeSetIndex
               const orm = calc1RM(set.weight, set.reps)
+              const suggestedSet = getSuggestedPerformanceForSet(
+                exercise.lastPerformance,
+                setIndex,
+              )
+              const kgPlaceholder = suggestedSet?.weightKg != null
+                ? formatKg(suggestedSet.weightKg)
+                : '—'
+              const repsPlaceholder = suggestedSet?.reps?.trim() || exercise.reps || '—'
 
               if (isActive) {
                 return (
                   <div
-                    key={setIndex}
+                    key={`${exercise.id}:${setIndex}`}
                     className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 bg-[#A78BFA]/[0.08] rounded-2xl px-2 py-2 border border-[#A78BFA]/[0.12]"
                   >
                     <div className="relative flex items-center justify-center">
@@ -756,7 +794,7 @@ export default function WorkoutPlayerPage() {
               if (set.completed) {
                 return (
                   <div
-                    key={setIndex}
+                    key={`${exercise.id}:${setIndex}`}
                     className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 px-2 py-2"
                   >
                     <span className="text-sm font-semibold text-[#A78BFA] text-center tabular-nums">{setIndex + 1}</span>
@@ -777,7 +815,7 @@ export default function WorkoutPlayerPage() {
 
               return (
                 <div
-                  key={setIndex}
+                  key={`${exercise.id}:${setIndex}`}
                   className="grid grid-cols-[2.25rem_1fr_3.25rem_3.5rem_2.75rem] items-center gap-1.5 mx-3 px-2 py-2"
                 >
                   <span className="text-sm text-[#797D83] text-center tabular-nums">{setIndex + 1}</span>
@@ -815,9 +853,9 @@ export default function WorkoutPlayerPage() {
 
           <div className="pb-3 text-center text-xs text-[#797D83]">
             {completedCount === exerciseSets.length
-              ? (currentExerciseIndex >= exercises.length - 1
+              ? (remainingRequiredSets === 0
                   ? (saving ? 'Wird gespeichert…' : 'Workout wird abgeschlossen…')
-                  : 'Nächste Übung…')
+                  : 'Nächste offene Übung…')
               : `${completedCount} / ${exerciseSets.length} Sätze erledigt`}
           </div>
         </div>

@@ -25,6 +25,7 @@ function backendImagePattern(): RemotePattern | null {
 const prodPattern = backendImagePattern();
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: process.cwd(),
   experimental: {
     workerThreads: true,
   },
