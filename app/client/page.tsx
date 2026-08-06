@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Profile, Client, AssignedPlan, WorkoutPlan, WorkoutDay, ProgressLog } from '@/lib/types'
+import { currentLocalDateKey, parseBodyWeightInput } from '@/lib/body-weight'
 import { AnimatedNumber, StaggerItem, SuccessButton, useToast } from '@/components/Motion'
 import { EmptyState } from '@/components/ui/client-ui'
 
@@ -93,6 +94,14 @@ export default function ClientDashboard() {
       date: string
       bodyWeight: number | null
       notes?: string | null
+      createdAt?: string
+    } | null
+    latestBodyWeight?: {
+      id: string
+      date: string
+      bodyWeight: number
+      notes?: string | null
+      createdAt: string
     } | null
     hasCurrentWeekCheckin?: boolean
     unreadMessageCount?: number
@@ -149,8 +158,9 @@ export default function ClientDashboard() {
         setMonthlyStats({ workouts: monthlyWorkouts.length, seconds: monthlyWorkouts.reduce((s, l) => s + (l.durationSeconds ?? 0), 0) })
         setHasWeeklyCheckin(Boolean(payload.hasCurrentWeekCheckin))
         setUnreadMessageCount(payload.unreadMessageCount ?? 0)
-        setLastWeight(payload.latestProgressLog
-          ? { id: payload.latestProgressLog.id, client_id: payload.client.id, date: payload.latestProgressLog.date, body_weight: payload.latestProgressLog.bodyWeight, notes: payload.latestProgressLog.notes ?? null, created_at: '' }
+        const latestBodyWeight = payload.latestBodyWeight ?? payload.latestProgressLog
+        setLastWeight(latestBodyWeight
+          ? { id: latestBodyWeight.id, client_id: payload.client.id, date: latestBodyWeight.date, body_weight: latestBodyWeight.bodyWeight, notes: latestBodyWeight.notes ?? null, created_at: latestBodyWeight.createdAt ?? '' }
           : null)
       } catch (error) {
         showToast(error instanceof Error ? error.message : 'Netzwerkfehler beim Laden.', 'danger')
@@ -163,32 +173,47 @@ export default function ClientDashboard() {
 
   const handleSaveWeight = async () => {
     if (!client || !weightInput) return
-    setWeightSaving(true)
-    const today = new Date().toISOString().split('T')[0]
-    const response = await fetch('/api/backend/me/progress-logs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: today, bodyWeight: parseFloat(weightInput) }),
-    })
-    const payload = await response.json().catch(() => null) as {
-      progressLog?: { id: string; date: string; bodyWeight: number | null; notes?: string | null }
-      message?: string
-      errorId?: string
-    } | null
-    if (!response.ok) {
-      setWeightSaving(false)
-      showToast(withErrorId(payload?.message ?? 'Gewicht konnte nicht gespeichert werden.', payload?.errorId), 'danger')
+    const bodyWeight = parseBodyWeightInput(weightInput)
+    if (bodyWeight === null) {
+      showToast('Bitte gib ein gültiges Gewicht ein (z. B. 82,5 oder 82.5).', 'danger')
       return
     }
-    if (payload?.progressLog) {
-      setLastWeight({ id: payload.progressLog.id, client_id: client.id, date: payload.progressLog.date, body_weight: payload.progressLog.bodyWeight, notes: payload.progressLog.notes ?? null, created_at: '' })
+
+    setWeightSaving(true)
+    try {
+      const response = await fetch('/api/backend/me/progress-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: currentLocalDateKey(), bodyWeight }),
+      })
+      const payload = await response.json().catch(() => null) as {
+        progressLog?: { id: string; date: string; bodyWeight: number | null; notes?: string | null; createdAt: string }
+        message?: string
+        errorId?: string
+      } | null
+      if (!response.ok || !payload?.progressLog) {
+        showToast(withErrorId(payload?.message ?? 'Gewicht konnte nicht gespeichert werden.', payload?.errorId), 'danger')
+        return
+      }
+
+      setLastWeight({
+        id: payload.progressLog.id,
+        client_id: client.id,
+        date: payload.progressLog.date,
+        body_weight: payload.progressLog.bodyWeight,
+        notes: payload.progressLog.notes ?? null,
+        created_at: payload.progressLog.createdAt,
+      })
+      setWeightInput('')
+      setWeightOpen(false)
+      setWeightSaved(true)
+      showToast('Gewicht gespeichert ✓', 'success')
+      window.setTimeout(() => setWeightSaved(false), 1500)
+    } catch {
+      showToast('Gewicht konnte wegen eines Netzwerkfehlers nicht gespeichert werden.', 'danger')
+    } finally {
+      setWeightSaving(false)
     }
-    setWeightInput('')
-    setWeightOpen(false)
-    setWeightSaving(false)
-    setWeightSaved(true)
-    showToast('Gewicht gespeichert ✓', 'success')
-    window.setTimeout(() => setWeightSaved(false), 1500)
   }
 
   const greeting = (() => {
@@ -445,6 +470,7 @@ export default function ClientDashboard() {
               </label>
               <input
                 type="number"
+                inputMode="decimal"
                 step="0.1"
                 min="0"
                 value={weightInput}
@@ -528,4 +554,3 @@ function AnalyseTile({ label, sub, icon, value }: { label: string; sub: string; 
     </div>
   )
 }
-

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import type { ClientGender } from '@/lib/types'
 
 export default function NewClientPage() {
   const router = useRouter()
@@ -10,6 +11,7 @@ export default function NewClientPage() {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [gender, setGender] = useState<ClientGender | ''>('')
   const [notes, setNotes] = useState('')
   const [password, setPassword] = useState('')
   const [saving, setSaving] = useState(false)
@@ -45,6 +47,7 @@ export default function NewClientPage() {
           name: fullName.trim(),
           email: email.trim(),
           phone: phone.trim(),
+          gender: gender || null,
           notes: notes.trim(),
           ...(wantsLogin ? { password } : {}),
         }),
@@ -134,6 +137,26 @@ export default function NewClientPage() {
         </div>
 
         <div>
+          <label htmlFor="gender" className="block text-sm font-medium text-[#797D83] mb-1.5">
+            Geschlecht <span className="text-[#555A61] font-normal">(optional)</span>
+          </label>
+          <select
+            id="gender"
+            value={gender}
+            onChange={e => setGender(e.target.value as ClientGender | '')}
+            className="w-full px-4 py-2.5 bg-[#0b0c0f] border border-white/[0.08] text-[#EDECEA] rounded-xl text-sm focus:ring-2 focus:ring-[#A78BFA]/50 focus:border-transparent transition"
+          >
+            <option value="">Nicht angegeben</option>
+            <option value="FEMALE">Weiblich</option>
+            <option value="MALE">Männlich</option>
+            <option value="DIVERSE">Divers</option>
+          </select>
+          <p className="text-xs text-[#555A61] mt-1.5">
+            Bei „Weiblich“ wird in der Kunden-App das private Zyklus-Tracking freigeschaltet.
+          </p>
+        </div>
+
+        <div>
           <label htmlFor="notes" className="block text-sm font-medium text-[#797D83] mb-1.5">
             Notiz <span className="text-[#555A61] font-normal">(optional)</span>
           </label>
@@ -185,4 +208,3 @@ export default function NewClientPage() {
     </div>
   )
 }
-

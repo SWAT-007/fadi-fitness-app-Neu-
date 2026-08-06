@@ -1,4 +1,5 @@
 export type Role = 'trainer' | 'client'
+export type ClientGender = 'FEMALE' | 'MALE' | 'DIVERSE'
 
 export interface Profile {
   id: string
@@ -17,6 +18,7 @@ export interface Client {
   email: string
   phone?: string | null
   notes?: string | null
+  gender?: ClientGender | null
   created_at: string
 }
 
@@ -343,5 +345,6 @@ export interface WeeklyCheckin {
   stress?: number | null
   comment?: string | null
   created_at: string
+  updated_at?: string
   checkin_images?: CheckinImage[]
 }

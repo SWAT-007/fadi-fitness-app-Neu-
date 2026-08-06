@@ -1,4 +1,4 @@
-import { NotificationType, Prisma } from "@prisma/client";
+import { ClientGender, NotificationType, Prisma } from "@prisma/client";
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import { prisma } from "../db";
@@ -20,12 +20,27 @@ const normalizeOptionalString = (value: unknown): string | null => {
   return normalized.length > 0 ? normalized : null;
 };
 
+const CLIENT_GENDERS = new Set<ClientGender>([
+  ClientGender.FEMALE,
+  ClientGender.MALE,
+  ClientGender.DIVERSE,
+]);
+
+const normalizeClientGender = (value: unknown): ClientGender | null | undefined => {
+  const normalized = normalizeString(value).toUpperCase();
+  if (!normalized) return null;
+  return CLIENT_GENDERS.has(normalized as ClientGender)
+    ? normalized as ClientGender
+    : undefined;
+};
+
 const mapClientProfile = (client: {
   id: string;
   fullName: string;
   email: string;
   phone: string | null;
   notes: string | null;
+  gender: ClientGender | null;
   status: string;
   userId: string | null;
   createdAt: Date;
@@ -37,6 +52,7 @@ const mapClientProfile = (client: {
   email: client.email,
   phone: client.phone,
   notes: client.notes,
+  gender: client.gender,
   status: client.status,
   linked: client.userId !== null,
   active: client.status.toLowerCase() === "active",
@@ -52,6 +68,7 @@ const clientProfileSelect = {
   email: true,
   phone: true,
   notes: true,
+  gender: true,
   status: true,
   userId: true,
   createdAt: true,
@@ -298,6 +315,10 @@ clientsRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
   const emailInput = normalizeOptionalString(req.body?.email)?.toLowerCase() ?? "";
   const phone = normalizeOptionalString(req.body?.phone);
   const notes = normalizeOptionalString(req.body?.notes);
+  const gender = normalizeClientGender(req.body?.gender);
+  if (gender === undefined) {
+    return res.status(400).json({ message: "Ungültiges Geschlecht." });
+  }
 
   // Optional initial login: an empty password keeps today's behavior (profile
   // only). A non-empty password creates an app login for the client right away.
@@ -329,6 +350,7 @@ clientsRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
           email: emailInput,
           phone,
           notes,
+          gender,
         },
         select: clientProfileSelect,
       });
@@ -368,6 +390,7 @@ clientsRouter.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
           email: emailInput,
           phone,
           notes,
+          gender,
           status: "active",
           userId: user.id,
         },
@@ -398,17 +421,7 @@ clientsRouter.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
         ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
       orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        notes: true,
-        status: true,
-        userId: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: clientProfileSelect,
     });
 
     return res.json({ clients: clients.map(mapClientProfile) });
@@ -805,17 +818,7 @@ clientsRouter.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) =>
         id: clientId,
         ...(scope.filterTrainerId && { trainerId: scope.filterTrainerId }),
       },
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        notes: true,
-        status: true,
-        userId: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: clientProfileSelect,
     });
 
     if (!client) {
@@ -1043,6 +1046,7 @@ clientsRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) 
   const hasEmail = Object.prototype.hasOwnProperty.call(req.body ?? {}, "email");
   const hasPhone = Object.prototype.hasOwnProperty.call(req.body ?? {}, "phone");
   const hasNotes = Object.prototype.hasOwnProperty.call(req.body ?? {}, "notes");
+  const hasGender = Object.prototype.hasOwnProperty.call(req.body ?? {}, "gender");
   const hasStatus = Object.prototype.hasOwnProperty.call(req.body ?? {}, "status");
 
   const name = normalizeString(req.body?.name);
@@ -1053,6 +1057,10 @@ clientsRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) 
   const email = normalizeOptionalString(req.body?.email)?.toLowerCase() ?? "";
   const phone = normalizeOptionalString(req.body?.phone);
   const notes = normalizeOptionalString(req.body?.notes);
+  const gender = normalizeClientGender(req.body?.gender);
+  if (hasGender && gender === undefined) {
+    return res.status(400).json({ message: "Ungültiges Geschlecht." });
+  }
   const status = normalizeString(req.body?.status);
   if (hasStatus && !status) {
     return res.status(400).json({ message: "Invalid request" });
@@ -1063,6 +1071,7 @@ clientsRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) 
     email?: string;
     phone?: string | null;
     notes?: string | null;
+    gender?: ClientGender | null;
     status?: string;
   } = {};
 
@@ -1070,6 +1079,7 @@ clientsRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) 
   if (hasEmail) updateData.email = email;
   if (hasPhone) updateData.phone = phone;
   if (hasNotes) updateData.notes = notes;
+  if (hasGender) updateData.gender = gender ?? null;
   if (hasStatus) updateData.status = status;
 
   if (Object.keys(updateData).length === 0) {
@@ -1094,17 +1104,7 @@ clientsRouter.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) 
     const client = await prisma.clientProfile.update({
       where: { id: existing.id },
       data: updateData,
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        notes: true,
-        status: true,
-        userId: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: clientProfileSelect,
     });
 
     return res.json({ client: mapClientProfile(client) });
@@ -1410,11 +1410,15 @@ clientsRouter.get("/:clientId/progress-logs", requireAuth, async (req: Authentic
 
     const progressLogs = await prisma.progressLog.findMany({
       where: { clientId: clientProfile.id },
-      orderBy: { date: "desc" },
+      orderBy: [
+        { date: "desc" },
+        { createdAt: "desc" },
+      ],
       take: limit,
       select: progressLogSelect,
     });
 
+    res.set("Cache-Control", "private, no-store, max-age=0");
     return res.json({ progressLogs });
   } catch (error) {
         return unexpectedErrorResponse(res, "clients:progress-logs:list", error);

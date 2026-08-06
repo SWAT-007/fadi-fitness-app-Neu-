@@ -3,10 +3,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import type { CheckinImage, ProgressLog, WeeklyCheckin } from '@/lib/types'
+import type { CheckinImage, ClientGender, ProgressLog, WeeklyCheckin } from '@/lib/types'
+import {
+  buildBodyWeightHistory,
+  summarizeBodyWeightPeriod,
+  type BodyWeightPeriod,
+} from '@/lib/body-weight'
+import {
+  buildExerciseProgress,
+  type ExerciseProgressSeries,
+} from '@/lib/exercise-progress'
 import Lightbox from '@/components/Lightbox'
-import { AnimatedNumber, Collapsible, StaggerItem, useToast } from '@/components/Motion'
+import { AnimatedNumber, useToast } from '@/components/Motion'
 import { EmptyState } from '@/components/ui/client-ui'
+import PeriodTracker from './PeriodTracker'
 
 // ─── Local types ─────────────────────────────────────────────────────────────
 
@@ -21,7 +31,7 @@ type ExerciseLogItem = {
 type WorkoutLogItem = {
   id: string
   date: string
-  duration_seconds: number | null
+  completed_at: string | null
   workout_day: { name: string } | null
   exercise_logs: ExerciseLogItem[]
 }
@@ -32,6 +42,13 @@ type PersonalRecord = {
   reps: string
   date: string
 }
+
+const WEIGHT_PERIODS: { key: BodyWeightPeriod; shortLabel: string; label: string }[] = [
+  { key: 'week', shortLabel: '1 W', label: '1 Woche' },
+  { key: 'month', shortLabel: '1 M', label: '1 Monat' },
+  { key: 'quarter', shortLabel: '3 M', label: '3 Monate' },
+  { key: 'year', shortLabel: '1 J', label: '1 Jahr' },
+]
 
 // ─── Backend checkin shape ────────────────────────────────────────────────────
 
@@ -71,6 +88,7 @@ function mapCheckin(c: BackendCheckin): WeeklyCheckin {
     body_weight: c.bodyWeight,
     comment: c.comment,
     created_at: c.createdAt,
+    updated_at: c.updatedAt,
     checkin_images: c.images.map(img => ({
       id: img.id,
       checkin_id: img.checkinId,
@@ -117,7 +135,6 @@ type BackendWorkoutLog = {
   id: string
   dayId: string
   date: string
-  durationSeconds: number | null
   completedAt: string | null
   createdAt: string
   day: { id: string; name: string; plan: { id: string; name: string } } | null
@@ -128,7 +145,7 @@ function mapWorkoutLog(w: BackendWorkoutLog): WorkoutLogItem {
   return {
     id: w.id,
     date: w.date,
-    duration_seconds: w.durationSeconds,
+    completed_at: w.completedAt,
     workout_day: w.day ? { name: w.day.name } : null,
     exercise_logs: w.exerciseLogs.map(el => ({
       actual_weight: el.actualWeight,
@@ -188,49 +205,6 @@ function calcPRs(logs: WorkoutLogItem[]): PersonalRecord[] {
   return Object.values(records).sort((a, b) => a.name.localeCompare(b.name))
 }
 
-function calcWeeklyVolume(logs: WorkoutLogItem[]): { label: string; volume: number }[] {
-  const monday = new Date(getMonday(new Date()))
-  const buckets = Array.from({ length: 8 }, (_, i) => {
-    const wMon = new Date(monday)
-    wMon.setDate(monday.getDate() - (7 - i) * 7)
-    const wSun = new Date(wMon)
-    wSun.setDate(wMon.getDate() + 6)
-    return {
-      label: `${wMon.getDate().toString().padStart(2, '0')}.${(wMon.getMonth() + 1).toString().padStart(2, '0')}`,
-      mondayStr: wMon.toISOString().split('T')[0],
-      sundayStr: wSun.toISOString().split('T')[0],
-      volume: 0,
-    }
-  })
-  for (const log of logs) {
-    for (const bucket of buckets) {
-      if (log.date >= bucket.mondayStr && log.date <= bucket.sundayStr) {
-        for (const el of log.exercise_logs) {
-          if (el.completed && el.actual_weight && el.sets_done) {
-            const reps = parseInt(el.actual_reps ?? '0') || 0
-            bucket.volume += el.actual_weight * reps * el.sets_done
-          }
-        }
-        break
-      }
-    }
-  }
-  return buckets.map(({ label, volume }) => ({ label, volume }))
-}
-
-function formatVolume(v: number): string {
-  if (v >= 1000) return `${(v / 1000).toFixed(1)}t`
-  return `${Math.round(v)}`
-}
-
-function formatDuration(s: number | null | undefined): string {
-  if (!s) return ''
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m`
-  const h = Math.floor(m / 60)
-  return m % 60 > 0 ? `${h}h ${m % 60}m` : `${h}h`
-}
-
 // ─── Chart components ─────────────────────────────────────────────────────────
 
 function SvgLineChart({ data }: { data: { label: string; value: number }[] }) {
@@ -263,30 +237,129 @@ function SvgLineChart({ data }: { data: { label: string; value: number }[] }) {
   )
 }
 
-function BarChart({ data, formatValue }: {
-  data: { label: string; value: number }[]
-  formatValue: (v: number) => string
-}) {
-  const max = Math.max(...data.map(d => d.value), 1)
+function formatExerciseValue(value: number, metric: ExerciseProgressSeries['metric']): string {
+  const formatted = value.toLocaleString('de-DE', { maximumFractionDigits: 1 })
+  return metric === 'weight' ? `${formatted} kg` : `${formatted} Wdh.`
+}
+
+function ExerciseProgressChart({ series }: { series: ExerciseProgressSeries }) {
+  const data = series.points.slice(-12)
+  const width = 360
+  const height = 178
+  const padding = { top: 18, right: 12, bottom: 30, left: 42 }
+  const innerWidth = width - padding.left - padding.right
+  const innerHeight = height - padding.top - padding.bottom
+  const rawMin = Math.min(...data.map(point => point.value))
+  const rawMax = Math.max(...data.map(point => point.value))
+  const fallbackRange = Math.max(rawMax * 0.12, 1)
+  const min = rawMin === rawMax ? Math.max(0, rawMin - fallbackRange) : rawMin
+  const max = rawMin === rawMax ? rawMax + fallbackRange : rawMax
+  const range = max - min
+  const x = (index: number) => data.length === 1
+    ? padding.left + innerWidth / 2
+    : padding.left + (index / (data.length - 1)) * innerWidth
+  const y = (value: number) => padding.top + innerHeight - ((value - min) / range) * innerHeight
+  const coordinates = data.map((point, index) => ({
+    x: x(index),
+    y: y(point.value),
+    point,
+  }))
+  const linePath = coordinates.length === 1
+    ? `M${coordinates[0].x},${coordinates[0].y}`
+    : coordinates.reduce((path, coordinate, index) => {
+        if (index === 0) return `M${coordinate.x},${coordinate.y}`
+        const previous = coordinates[index - 1]
+        const middleX = (previous.x + coordinate.x) / 2
+        return `${path} C${middleX},${previous.y} ${middleX},${coordinate.y} ${coordinate.x},${coordinate.y}`
+      }, '')
+  const chartBottom = padding.top + innerHeight
+  const areaPath = coordinates.length > 1
+    ? `${linePath} L${coordinates[coordinates.length - 1].x},${chartBottom} L${coordinates[0].x},${chartBottom} Z`
+    : ''
+  const formatDate = (date: string) => new Date(date).toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+  })
+  const labelIndexes = [...new Set([0, Math.floor((data.length - 1) / 2), data.length - 1])]
+
   return (
-    <div>
-      <div className="flex items-end gap-1" style={{ height: 64 }}>
-        {data.map((d, i) => (
-          <div key={i} className="flex-1 flex flex-col items-center justify-end gap-px min-w-0">
-            {d.value > 0 && <span className="text-[9px] text-[#797D83] truncate">{formatValue(d.value)}</span>}
-            <div
-              className="w-full rounded-t-sm"
-              style={{ height: d.value > 0 ? `${Math.max(3, Math.round((d.value / max) * 52))}px` : 0, backgroundColor: '#A78BFA', opacity: 0.7 }}
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="w-full overflow-visible"
+      role="img"
+      aria-label={`Leistungsverlauf für ${series.name}`}
+    >
+      <defs>
+        <linearGradient id="exercise-progress-area" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#A78BFA" stopOpacity="0.28" />
+          <stop offset="100%" stopColor="#A78BFA" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {[0, 0.5, 1].map(ratio => {
+        const gridY = padding.top + innerHeight * ratio
+        const value = max - range * ratio
+        return (
+          <g key={ratio}>
+            <line
+              x1={padding.left}
+              y1={gridY}
+              x2={width - padding.right}
+              y2={gridY}
+              stroke="rgba(255,255,255,0.07)"
+              strokeDasharray="3 4"
             />
-          </div>
-        ))}
-      </div>
-      <div className="flex gap-1 mt-1 border-t border-white/[0.06] pt-1.5">
-        {data.map((d, i) => (
-          <p key={i} className="flex-1 text-center text-[9px] text-[#797D83] truncate">{d.label}</p>
-        ))}
-      </div>
-    </div>
+            <text
+              x={padding.left - 7}
+              y={gridY + 3}
+              textAnchor="end"
+              fontSize="9"
+              fill="#797D83"
+            >
+              {value.toLocaleString('de-DE', { maximumFractionDigits: 1 })}
+            </text>
+          </g>
+        )
+      })}
+      {areaPath && <path d={areaPath} fill="url(#exercise-progress-area)" />}
+      <path
+        d={linePath}
+        fill="none"
+        stroke="#A78BFA"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {coordinates.map(({ x: pointX, y: pointY, point }, index) => {
+        const isLatest = index === coordinates.length - 1
+        return (
+          <g key={point.workoutId}>
+            {isLatest && <circle cx={pointX} cy={pointY} r="8" fill="#A78BFA" fillOpacity="0.15" />}
+            <circle
+              cx={pointX}
+              cy={pointY}
+              r={isLatest ? 4 : 3}
+              fill={isLatest ? '#A78BFA' : '#111111'}
+              stroke="#A78BFA"
+              strokeWidth="2"
+            >
+              <title>{`${formatDate(point.date)} · ${formatExerciseValue(point.value, series.metric)}`}</title>
+            </circle>
+          </g>
+        )
+      })}
+      {labelIndexes.map(index => (
+        <text
+          key={index}
+          x={x(index)}
+          y={height - 6}
+          textAnchor={index === 0 ? 'start' : index === data.length - 1 ? 'end' : 'middle'}
+          fontSize="9"
+          fill="#797D83"
+        >
+          {formatDate(data[index].date)}
+        </text>
+      ))}
+    </svg>
   )
 }
 
@@ -331,7 +404,7 @@ function RatingBadge({ value, label }: { value: number | null | undefined; label
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'checkin' | 'records'
+type Tab = 'overview' | 'exercises' | 'cycle' | 'checkin' | 'records'
 
 export default function ProgressPage() {
   const router = useRouter()
@@ -340,12 +413,14 @@ export default function ProgressPage() {
   const [clientId, setClientId] = useState<string | null>(null)
   const [clientTrainerId, setClientTrainerId] = useState<string | null>(null)
   const [clientName, setClientName] = useState<string>('')
+  const [clientGender, setClientGender] = useState<ClientGender | null>(null)
   const [progressLogs, setProgressLogs] = useState<ProgressLog[]>([])
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLogItem[]>([])
   const [checkins, setCheckins] = useState<WeeklyCheckin[]>([])
   const [totalWorkouts, setTotalWorkouts] = useState(0)
   const [tab, setTab] = useState<Tab>('overview')
-  const [showRecentWorkouts, setShowRecentWorkouts] = useState(true)
+  const [selectedExerciseName, setSelectedExerciseName] = useState('')
+  const [weightPeriod, setWeightPeriod] = useState<BodyWeightPeriod>('month')
 
   // Check-in form
   const [showCheckinForm, setShowCheckinForm] = useState(false)
@@ -374,9 +449,9 @@ export default function ProgressPage() {
   const load = useCallback(async () => {
     try {
       const [summaryFetch, progressFetch, checkinsFetch] = await Promise.all([
-        fetch('/api/backend/me/progress-summary'),
-        fetch('/api/backend/me/progress-logs?limit=30'),
-        fetch('/api/backend/me/checkins'),
+        fetch('/api/backend/me/progress-summary?limit=100', { cache: 'no-store' }),
+        fetch('/api/backend/me/progress-logs?limit=500', { cache: 'no-store' }),
+        fetch('/api/backend/me/checkins?limit=60', { cache: 'no-store' }),
       ])
 
       const summaryData = summaryFetch.ok ? await summaryFetch.json().catch(() => null) : null
@@ -384,6 +459,7 @@ export default function ProgressPage() {
       setClientId(summaryData.client.id)
       setClientTrainerId(summaryData.client.trainerId ?? null)
       setClientName(summaryData.client.fullName ?? '')
+      setClientGender(summaryData.client.gender ?? null)
       setTotalWorkouts(summaryData.workoutSummary?.completedWorkoutCount ?? 0)
       setWorkoutLogs(((summaryData.workoutSummary?.recentWorkouts ?? []) as BackendWorkoutLog[]).map(mapWorkoutLog))
 
@@ -406,19 +482,73 @@ export default function ProgressPage() {
 
   const streak = useMemo(() => calcStreak(workoutLogs.map(l => l.date)), [workoutLogs])
   const prs = useMemo(() => calcPRs(workoutLogs), [workoutLogs])
-  const weeklyVolume = useMemo(() => calcWeeklyVolume(workoutLogs), [workoutLogs])
+  const exerciseProgress = useMemo(
+    () => buildExerciseProgress(workoutLogs.map(log => ({
+      id: log.id,
+      date: log.date,
+      completedAt: log.completed_at,
+      workoutName: log.workout_day?.name ?? null,
+      exerciseLogs: log.exercise_logs.map(exerciseLog => ({
+        weight: exerciseLog.actual_weight,
+        reps: exerciseLog.actual_reps,
+        completed: exerciseLog.completed,
+        exerciseName: exerciseLog.exercise?.name ?? null,
+      })),
+    }))),
+    [workoutLogs],
+  )
+  const selectedExercise = useMemo(
+    () => exerciseProgress.find(series => series.name === selectedExerciseName) ?? exerciseProgress[0] ?? null,
+    [exerciseProgress, selectedExerciseName],
+  )
+  const bodyWeightHistory = useMemo(
+    () => buildBodyWeightHistory(
+      progressLogs.map(log => ({
+        id: log.id,
+        date: log.date,
+        bodyWeight: log.body_weight,
+        createdAt: log.created_at,
+        notes: log.notes,
+      })),
+      checkins.map(checkin => ({
+        id: checkin.id,
+        bodyWeight: checkin.body_weight,
+        createdAt: checkin.created_at,
+        updatedAt: checkin.updated_at,
+      })),
+    ),
+    [checkins, progressLogs],
+  )
+  const visibleProgressLogs = useMemo<ProgressLog[]>(
+    () => bodyWeightHistory.map(entry => ({
+      id: entry.id,
+      client_id: clientId ?? '',
+      date: entry.date,
+      body_weight: entry.bodyWeight,
+      notes: entry.notes,
+      created_at: entry.createdAt,
+    })),
+    [bodyWeightHistory, clientId],
+  )
+  const weightPeriodSummary = useMemo(
+    () => summarizeBodyWeightPeriod(bodyWeightHistory, weightPeriod),
+    [bodyWeightHistory, weightPeriod],
+  )
   const chartData = useMemo(
-    () => [...progressLogs].reverse().map(l => ({ label: l.date, value: l.body_weight ?? 0 })).filter(d => d.value > 0),
-    [progressLogs]
+    () => [...weightPeriodSummary.entries].reverse().map(entry => ({
+      label: entry.date,
+      value: entry.bodyWeight,
+    })),
+    [weightPeriodSummary],
   )
 
   const thisWeekStart = getMonday(new Date())
   const alreadyCheckedIn = checkins.some(c => c.week_start === thisWeekStart)
   const thisWeekCheckin = checkins.find(c => c.week_start === thisWeekStart)
 
-  const latestWeight = progressLogs[0]?.body_weight
-  const firstWeight = progressLogs[progressLogs.length - 1]?.body_weight
-  const weightChange = latestWeight && firstWeight ? latestWeight - firstWeight : null
+  const latestWeight = visibleProgressLogs[0]?.body_weight
+  const weightChange = weightPeriodSummary.change
+  const weightPeriodLabel = WEIGHT_PERIODS.find(period => period.key === weightPeriod)?.label ?? 'Zeitraum'
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
@@ -572,6 +702,8 @@ export default function ProgressPage() {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'overview', label: 'Übersicht' },
+    { key: 'exercises', label: 'Übungen' },
+    ...(clientGender === 'FEMALE' ? [{ key: 'cycle' as const, label: 'Zyklus' }] : []),
     { key: 'checkin', label: 'Check-in' },
     { key: 'records', label: 'Rekorde' },
   ]
@@ -635,12 +767,36 @@ export default function ProgressPage() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="font-semibold text-[#EDECEA] text-[13px]">Gewichtsverlauf</h3>
-                {weightChange !== null && (
+                {weightChange !== null ? (
                   <p className={`text-[11px] mt-0.5 font-medium ${weightChange < 0 ? 'text-[#A78BFA]' : weightChange > 0 ? 'text-red-400' : 'text-[#797D83]'}`}>
-                    Gesamt: {weightChange > 0 ? '+' : ''}{weightChange.toFixed(1)} kg
+                    {weightChange < 0
+                      ? `${Math.abs(weightChange).toFixed(1)} kg verloren`
+                      : weightChange > 0
+                        ? `+${weightChange.toFixed(1)} kg`
+                        : 'Keine Veränderung'}{' · '}{weightPeriodLabel}
                   </p>
+                ) : (
+                  <p className="text-[11px] mt-0.5 text-[#797D83]">Noch kein Vergleich · {weightPeriodLabel}</p>
                 )}
               </div>
+            </div>
+            <div className="grid grid-cols-4 gap-1 bg-[#080808] border border-white/[0.05] rounded-xl p-1 mb-4" aria-label="Zeitraum für Gewichtsverlauf">
+              {WEIGHT_PERIODS.map(period => (
+                <button
+                  key={period.key}
+                  type="button"
+                  onClick={() => setWeightPeriod(period.key)}
+                  aria-pressed={weightPeriod === period.key}
+                  aria-label={period.label}
+                  className={`press py-2 rounded-lg text-[11px] font-semibold transition-all ${
+                    weightPeriod === period.key
+                      ? 'bg-[#A78BFA] text-[#050504] shadow-[0_3px_10px_rgba(167,139,250,0.2)]'
+                      : 'text-[#797D83] hover:text-[#EDECEA] hover:bg-white/[0.04]'
+                  }`}
+                >
+                  {period.shortLabel}
+                </button>
+              ))}
             </div>
             {chartData.length >= 2 ? (
               <SvgLineChart data={chartData} />
@@ -648,80 +804,20 @@ export default function ProgressPage() {
               <EmptyState
                 icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="M7 14l3-3 3 3 4-5" /></svg>}
                 title="Zu wenig Daten"
-                subtext="Mindestens 2 Einträge für den Verlauf nötig."
+                subtext={`Mindestens 2 Einträge für ${weightPeriodLabel} nötig.`}
               />
             )}
           </div>
 
-          {/* Volume bar chart */}
-          {weeklyVolume.some(w => w.volume > 0) && (
-            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-5">
-              <h3 className="font-semibold text-[#EDECEA] text-[13px]">Trainingsvolumen</h3>
-              <p className="text-[11px] text-[#797D83] mt-0.5 mb-4">kg bewegt pro Woche (Gewicht × Wdh. × Sätze)</p>
-              <BarChart
-                data={weeklyVolume.map(w => ({ label: w.label, value: w.volume }))}
-                formatValue={formatVolume}
-              />
-            </div>
-          )}
-
-          {/* Recent workouts */}
-          {workoutLogs.length > 0 && (
-            <div className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setShowRecentWorkouts(open => !open)}
-                className={`w-full px-5 py-4 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors ${showRecentWorkouts ? 'border-b border-white/[0.04]' : ''}`}
-                aria-expanded={showRecentWorkouts}
-              >
-                <h3 className="font-semibold text-[#EDECEA] text-[13px]">Letzte Trainings</h3>
-                <svg
-                  className={`w-4 h-4 text-[#797D83] transition-transform ${showRecentWorkouts ? 'rotate-180' : ''}`}
-                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              <Collapsible open={showRecentWorkouts}>
-                <ul className="divide-y divide-white/[0.04]">
-                  {workoutLogs.slice(0, 5).map((log, index) => (
-                    <li key={log.id}>
-                      <StaggerItem index={index} className="flex items-center gap-3 px-5 py-3">
-                        <div className="w-8 h-8 rounded-xl bg-[#A78BFA]/10 flex items-center justify-center text-[#A78BFA] flex-shrink-0">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[13px] font-medium text-[#EDECEA]">
-                            {(log.workout_day as { name: string } | null)?.name ?? 'Training'}
-                          </div>
-                          <div className="text-[11px] text-[#797D83]">
-                            {new Date(log.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })}
-                          </div>
-                        </div>
-                        {log.duration_seconds ? (
-                          <span className="text-[11px] text-[#797D83] bg-white/[0.05] px-2 py-1 rounded-lg tabular-nums">
-                            {formatDuration(log.duration_seconds)}
-                          </span>
-                        ) : null}
-                      </StaggerItem>
-                    </li>
-                  ))}
-                </ul>
-              </Collapsible>
-            </div>
-          )}
-
           {/* Weight history */}
-          {progressLogs.length > 0 && (
+          {visibleProgressLogs.length > 0 && (
             <div className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
               <div className="px-5 py-4 border-b border-white/[0.04]">
                 <h3 className="font-semibold text-[#EDECEA] text-[13px]">Gewichtsverlauf</h3>
               </div>
               <ul className="divide-y divide-white/[0.04]">
-                {progressLogs.map((log, i) => {
-                  const prev = progressLogs[i + 1]
+                {visibleProgressLogs.map((log, i) => {
+                  const prev = visibleProgressLogs[i + 1]
                   const diff = log.body_weight && prev?.body_weight ? log.body_weight - prev.body_weight : null
                   return (
                     <li key={log.id} className="flex items-center gap-4 px-5 py-3">
@@ -746,7 +842,7 @@ export default function ProgressPage() {
             </div>
           )}
 
-          {progressLogs.length === 0 && workoutLogs.length === 0 && (
+          {visibleProgressLogs.length === 0 && workoutLogs.length === 0 && (
             <div className="bg-[#111111] rounded-2xl border border-white/[0.06]">
               <EmptyState
                 icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M3 17l6-6 4 4 8-8" /><path d="M14 7h7v7" /></svg>}
@@ -760,7 +856,156 @@ export default function ProgressPage() {
         </div>
       )}
 
+      {/* ── ÜBUNGEN ── */}
+      {tab === 'exercises' && (
+        <div className="space-y-4">
+          {exerciseProgress.length === 0 || !selectedExercise ? (
+            <div className="bg-[#111111] rounded-2xl border border-white/[0.06]">
+              <EmptyState
+                icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M3 17l6-6 4 4 8-8" /><path d="M14 7h7v7" /></svg>}
+                title="Noch keine Übungsdaten"
+                subtext="Trage beim Training Gewicht oder Wiederholungen ein, um deine Steigerung zu sehen."
+                ctaLabel="Training starten"
+                ctaOnClick={() => router.push('/client/plan')}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-4">
+                <div className="flex items-start gap-3 mb-3.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#A78BFA]/10 flex items-center justify-center text-[#A78BFA] flex-shrink-0">
+                    <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-[14px] font-semibold text-[#EDECEA]">Übungsfortschritt</h2>
+                    <p className="text-[11px] text-[#797D83] mt-0.5">
+                      Entwicklung aus deinen letzten {Math.min(totalWorkouts, 100)} {Math.min(totalWorkouts, 100) === 1 ? 'Training' : 'Trainings'}
+                    </p>
+                  </div>
+                </div>
+                <label className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-[#797D83] mb-1.5" htmlFor="exercise-progress-select">
+                  Übung auswählen
+                </label>
+                <div className="relative">
+                  <select
+                    id="exercise-progress-select"
+                    value={selectedExercise.name}
+                    onChange={event => setSelectedExerciseName(event.target.value)}
+                    className="w-full appearance-none bg-white/[0.045] border border-white/[0.08] rounded-xl px-3.5 py-3 pr-10 text-[13px] font-medium text-[#EDECEA] outline-none focus:border-[#A78BFA]/50 focus:ring-2 focus:ring-[#A78BFA]/10 transition"
+                  >
+                    {exerciseProgress.map(series => (
+                      <option key={series.name} value={series.name} className="bg-[#181818]">
+                        {series.name}
+                      </option>
+                    ))}
+                  </select>
+                  <svg className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#797D83]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+
+              <div className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
+                <div className="p-5 pb-4 border-b border-white/[0.05]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#A78BFA] mb-1">
+                        {selectedExercise.metric === 'weight' ? 'Max. Gewicht pro Training' : 'Max. Wiederholungen'}
+                      </p>
+                      <h2 className="text-[19px] leading-tight font-bold text-[#EDECEA] truncate">{selectedExercise.name}</h2>
+                    </div>
+                    <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold tabular-nums ${
+                      selectedExercise.change > 0
+                        ? 'bg-[#A78BFA]/10 text-[#A78BFA]'
+                        : selectedExercise.change < 0
+                          ? 'bg-amber-400/10 text-amber-400'
+                          : 'bg-white/[0.05] text-[#797D83]'
+                    }`}>
+                      {selectedExercise.change > 0 ? '+' : ''}{formatExerciseValue(selectedExercise.change, selectedExercise.metric)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#797D83] mt-2">
+                    {selectedExercise.changePercent !== null
+                      ? `${selectedExercise.changePercent > 0 ? '+' : ''}${selectedExercise.changePercent.toFixed(1)} % seit dem ersten Eintrag`
+                      : 'Seit dem ersten Eintrag'}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-3 divide-x divide-white/[0.05] border-b border-white/[0.05]">
+                  <div className="px-3 py-3.5 text-center">
+                    <div className="text-[15px] font-bold text-[#EDECEA] tabular-nums">
+                      {formatExerciseValue(selectedExercise.current, selectedExercise.metric)}
+                    </div>
+                    <div className="text-[10px] text-[#797D83] mt-0.5">Aktuell</div>
+                  </div>
+                  <div className="px-3 py-3.5 text-center">
+                    <div className="text-[15px] font-bold text-[#A78BFA] tabular-nums">
+                      {formatExerciseValue(selectedExercise.best, selectedExercise.metric)}
+                    </div>
+                    <div className="text-[10px] text-[#797D83] mt-0.5">Bestwert</div>
+                  </div>
+                  <div className="px-3 py-3.5 text-center">
+                    <div className="text-[15px] font-bold text-[#EDECEA] tabular-nums">{selectedExercise.points.length}</div>
+                    <div className="text-[10px] text-[#797D83] mt-0.5">Einheiten</div>
+                  </div>
+                </div>
+
+                <div className="px-3 pt-4 pb-2">
+                  <ExerciseProgressChart series={selectedExercise} />
+                  {selectedExercise.points.length > 12 && (
+                    <p className="text-[10px] text-[#797D83] text-center -mt-1 mb-2">Letzte 12 Einheiten im Diagramm</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-[#111111] rounded-2xl border border-white/[0.06] overflow-hidden">
+                <div className="px-5 py-4 border-b border-white/[0.04] flex items-center justify-between">
+                  <h3 className="font-semibold text-[#EDECEA] text-[13px]">Letzte Einheiten</h3>
+                  <span className="text-[10px] text-[#797D83]">{selectedExercise.points.length} gesamt</span>
+                </div>
+                <ul className="divide-y divide-white/[0.04]">
+                  {[...selectedExercise.points].reverse().slice(0, 6).map((point, index) => {
+                    const previousPoint = selectedExercise.points[selectedExercise.points.length - 2 - index]
+                    const difference = previousPoint ? point.value - previousPoint.value : null
+                    return (
+                      <li key={point.workoutId} className="flex items-center gap-3 px-5 py-3.5">
+                        <div className="w-9 h-9 rounded-xl bg-white/[0.04] flex flex-col items-center justify-center flex-shrink-0">
+                          <span className="text-[12px] leading-none font-bold text-[#EDECEA]">{new Date(point.date).getDate()}</span>
+                          <span className="text-[8px] leading-none uppercase text-[#797D83] mt-0.5">
+                            {new Date(point.date).toLocaleDateString('de-DE', { month: 'short' }).replace('.', '')}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13px] font-medium text-[#EDECEA] truncate">
+                            {formatExerciseValue(point.value, selectedExercise.metric)}
+                            {selectedExercise.metric === 'weight' && point.reps !== null && (
+                              <span className="font-normal text-[#797D83]"> · {point.reps} Wdh.</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-[#797D83] truncate mt-0.5">{point.workoutName ?? 'Training'}</div>
+                        </div>
+                        {difference !== null && difference !== 0 ? (
+                          <span className={`text-[11px] font-semibold tabular-nums ${difference > 0 ? 'text-[#A78BFA]' : 'text-amber-400'}`}>
+                            {difference > 0 ? '+' : ''}{formatExerciseValue(difference, selectedExercise.metric)}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-[#797D83]/60">–</span>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* ── CHECK-IN ── */}
+      {tab === 'cycle' && clientGender === 'FEMALE' && <PeriodTracker />}
+
       {tab === 'checkin' && (
         <div className="space-y-4">
 

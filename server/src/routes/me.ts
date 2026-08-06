@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { NotificationType } from "@prisma/client";
+import { ClientGender, NotificationType, Prisma } from "@prisma/client";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -14,6 +14,8 @@ import {
   normalizeExerciseName,
   type HistoricalWorkout,
 } from "../../../lib/workout-player";
+import { buildBodyWeightHistory, dateKeyInTimeZone } from "../../../lib/body-weight";
+import { daysBetweenDateKeys, isValidDateKey } from "../../../lib/period-tracking";
 import {
   listNotificationsForUser,
   mapNotification,
@@ -207,6 +209,7 @@ meRouter.get("/dashboard", requireAuth, async (req: AuthenticatedRequest, res) =
         fullName: true,
         email: true,
         trainerId: true,
+        gender: true,
       },
     });
 
@@ -224,6 +227,7 @@ meRouter.get("/dashboard", requireAuth, async (req: AuthenticatedRequest, res) =
       activeLogs,
       monthlyWorkouts,
       latestProgressLog,
+      latestWeightCheckin,
       currentWeekCheckin,
       unreadMessageCount,
     ] = await Promise.all([
@@ -283,13 +287,33 @@ meRouter.get("/dashboard", requireAuth, async (req: AuthenticatedRequest, res) =
         },
       }),
       prisma.progressLog.findFirst({
-        where: { clientId: clientProfile.id },
-        orderBy: { date: "desc" },
+        where: {
+          clientId: clientProfile.id,
+          bodyWeight: { not: null },
+        },
+        orderBy: [
+          { date: "desc" },
+          { createdAt: "desc" },
+        ],
         select: {
           id: true,
           date: true,
           bodyWeight: true,
           notes: true,
+          createdAt: true,
+        },
+      }),
+      prisma.weeklyCheckin.findFirst({
+        where: {
+          clientId: clientProfile.id,
+          bodyWeight: { not: null },
+        },
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          bodyWeight: true,
+          createdAt: true,
+          updatedAt: true,
         },
       }),
       prisma.weeklyCheckin.findFirst({
@@ -307,12 +331,30 @@ meRouter.get("/dashboard", requireAuth, async (req: AuthenticatedRequest, res) =
       }),
     ]);
 
+    const latestBodyWeight = buildBodyWeightHistory(
+      latestProgressLog ? [{
+        id: latestProgressLog.id,
+        date: latestProgressLog.date,
+        bodyWeight: latestProgressLog.bodyWeight,
+        createdAt: latestProgressLog.createdAt.toISOString(),
+        notes: latestProgressLog.notes,
+      }] : [],
+      latestWeightCheckin ? [{
+        id: latestWeightCheckin.id,
+        bodyWeight: latestWeightCheckin.bodyWeight,
+        createdAt: latestWeightCheckin.createdAt.toISOString(),
+        updatedAt: latestWeightCheckin.updatedAt.toISOString(),
+      }] : [],
+    )[0] ?? null;
+
+    res.set("Cache-Control", "private, no-store, max-age=0");
     return res.json({
       client: {
         id: clientProfile.id,
         fullName: clientProfile.fullName,
         email: clientProfile.email,
         trainerId: clientProfile.trainerId,
+        gender: clientProfile.gender,
       },
       activePlan: assignment
         ? {
@@ -335,6 +377,7 @@ meRouter.get("/dashboard", requireAuth, async (req: AuthenticatedRequest, res) =
         })),
       },
       latestProgressLog,
+      latestBodyWeight,
       hasCurrentWeekCheckin: Boolean(currentWeekCheckin),
       unreadMessageCount,
     });
@@ -396,6 +439,7 @@ meRouter.get("/client-profile", requireAuth, async (req: AuthenticatedRequest, r
         fullName: true,
         email: true,
         trainerId: true,
+        gender: true,
       },
     });
 
@@ -2132,13 +2176,259 @@ const progressLogSelect = {
   updatedAt: true,
 } as const;
 
+const periodEntrySelect = {
+  id: true,
+  clientId: true,
+  startDate: true,
+  endDate: true,
+  flow: true,
+  symptoms: true,
+  notes: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+const PERIOD_FLOWS = new Set(["LIGHT", "MEDIUM", "HEAVY"]);
+const PERIOD_SYMPTOMS = new Set([
+  "CRAMPS",
+  "HEADACHE",
+  "FATIGUE",
+  "BACK_PAIN",
+  "MOOD_CHANGES",
+  "CRAVINGS",
+]);
+
+const normalizePeriodFlow = (value: unknown): string | null | undefined => {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toUpperCase();
+  return PERIOD_FLOWS.has(normalized) ? normalized : undefined;
+};
+
+const normalizePeriodSymptoms = (value: unknown): string[] | undefined => {
+  if (!Array.isArray(value) || value.length > 6) return undefined;
+  const normalized = [...new Set(value.map(item => (
+    typeof item === "string" ? item.trim().toUpperCase() : ""
+  )))];
+  return normalized.every(item => PERIOD_SYMPTOMS.has(item)) ? normalized : undefined;
+};
+
+const normalizePeriodNotes = (value: unknown): string | null | undefined => {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return normalized.length <= 500 ? normalized || null : undefined;
+};
+
+const validatePeriodDates = (
+  startDate: string,
+  endDate: string | null,
+): string | null => {
+  const today = dateKeyInTimeZone(new Date());
+  if (!isValidDateKey(startDate) || startDate > today) {
+    return "Bitte gib ein gültiges Startdatum ein.";
+  }
+  if (endDate === null) return null;
+  if (!isValidDateKey(endDate) || endDate > today) {
+    return "Bitte gib ein gültiges Enddatum ein.";
+  }
+  const duration = daysBetweenDateKeys(startDate, endDate);
+  if (duration === null || duration < 0) {
+    return "Das Enddatum muss am oder nach dem Startdatum liegen.";
+  }
+  return null;
+};
+
+meRouter.get("/period-entries", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const rawLimit = parseInt(String(req.query.limit ?? "24"), 10);
+  const limit = isNaN(rawLimit) || rawLimit < 1 ? 24 : Math.min(rawLimit, 60);
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true, gender: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+    if (clientProfile.gender !== ClientGender.FEMALE) {
+      return res.status(403).json({ message: "Zyklus-Tracking ist für dieses Profil nicht aktiviert." });
+    }
+
+    const periodEntries = await prisma.menstrualCycleEntry.findMany({
+      where: { clientId: clientProfile.id },
+      orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
+      take: limit,
+      select: periodEntrySelect,
+    });
+
+    res.set("Cache-Control", "private, no-store, max-age=0");
+    return res.json({ periodEntries });
+  } catch (error) {
+    return unexpectedErrorResponse(res, "me:period-entries:list", error);
+  }
+});
+
+meRouter.post("/period-entries", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const startDate = typeof req.body?.startDate === "string" ? req.body.startDate.trim() : "";
+  const endDate = req.body?.endDate === null || req.body?.endDate === "" || req.body?.endDate === undefined
+    ? null
+    : typeof req.body?.endDate === "string" ? req.body.endDate.trim() : "";
+  const flow = normalizePeriodFlow(req.body?.flow);
+  const symptoms = normalizePeriodSymptoms(req.body?.symptoms ?? []);
+  const notes = normalizePeriodNotes(req.body?.notes);
+  const dateError = validatePeriodDates(startDate, endDate);
+
+  if (dateError) return res.status(400).json({ message: dateError });
+  if (flow === undefined || symptoms === undefined || notes === undefined) {
+    return res.status(400).json({ message: "Ungültige Zyklusdaten." });
+  }
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true, gender: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+    if (clientProfile.gender !== ClientGender.FEMALE) {
+      return res.status(403).json({ message: "Zyklus-Tracking ist für dieses Profil nicht aktiviert." });
+    }
+
+    if (endDate === null) {
+      const activeEntry = await prisma.menstrualCycleEntry.findFirst({
+        where: { clientId: clientProfile.id, endDate: null },
+        select: { id: true },
+      });
+      if (activeEntry) {
+        return res.status(409).json({ message: "Beende zuerst deine aktuell laufende Periode." });
+      }
+    }
+
+    const periodEntry = await prisma.menstrualCycleEntry.create({
+      data: { clientId: clientProfile.id, startDate, endDate, flow, symptoms, notes },
+      select: periodEntrySelect,
+    });
+
+    res.set("Cache-Control", "private, no-store, max-age=0");
+    return res.status(201).json({ periodEntry });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return res.status(409).json({ message: "Für diesen Starttag gibt es bereits einen Eintrag." });
+    }
+    return unexpectedErrorResponse(res, "me:period-entries:create", error);
+  }
+});
+
+meRouter.patch("/period-entries/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const entryId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!entryId) return res.status(404).json({ message: "Not found" });
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true, gender: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+    if (clientProfile.gender !== ClientGender.FEMALE) {
+      return res.status(403).json({ message: "Zyklus-Tracking ist für dieses Profil nicht aktiviert." });
+    }
+
+    const existing = await prisma.menstrualCycleEntry.findFirst({
+      where: { id: entryId, clientId: clientProfile.id },
+      select: { id: true, startDate: true },
+    });
+    if (!existing) return res.status(404).json({ message: "Not found" });
+
+    const data: Prisma.MenstrualCycleEntryUpdateInput = {};
+    if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "endDate")) {
+      const endDate = req.body?.endDate === null || req.body?.endDate === ""
+        ? null
+        : typeof req.body?.endDate === "string" ? req.body.endDate.trim() : "";
+      const dateError = validatePeriodDates(existing.startDate, endDate);
+      if (dateError) return res.status(400).json({ message: dateError });
+      data.endDate = endDate;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "flow")) {
+      const flow = normalizePeriodFlow(req.body?.flow);
+      if (flow === undefined) return res.status(400).json({ message: "Ungültige Stärke." });
+      data.flow = flow;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "symptoms")) {
+      const symptoms = normalizePeriodSymptoms(req.body?.symptoms);
+      if (symptoms === undefined) return res.status(400).json({ message: "Ungültige Symptome." });
+      data.symptoms = symptoms;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "notes")) {
+      const notes = normalizePeriodNotes(req.body?.notes);
+      if (notes === undefined) return res.status(400).json({ message: "Die Notiz ist zu lang." });
+      data.notes = notes;
+    }
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ message: "Keine Änderungen angegeben." });
+    }
+
+    const periodEntry = await prisma.menstrualCycleEntry.update({
+      where: { id: existing.id },
+      data,
+      select: periodEntrySelect,
+    });
+
+    res.set("Cache-Control", "private, no-store, max-age=0");
+    return res.json({ periodEntry });
+  } catch (error) {
+    return unexpectedErrorResponse(res, "me:period-entries:update", error);
+  }
+});
+
+meRouter.delete("/period-entries/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (req.user?.role !== "client") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const entryId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!entryId) return res.status(404).json({ message: "Not found" });
+
+  try {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true, gender: true },
+    });
+    if (!clientProfile) return res.status(404).json({ message: "Not found" });
+    if (clientProfile.gender !== ClientGender.FEMALE) {
+      return res.status(403).json({ message: "Zyklus-Tracking ist für dieses Profil nicht aktiviert." });
+    }
+
+    const existing = await prisma.menstrualCycleEntry.findFirst({
+      where: { id: entryId, clientId: clientProfile.id },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ message: "Not found" });
+
+    await prisma.menstrualCycleEntry.delete({ where: { id: existing.id } });
+    res.set("Cache-Control", "private, no-store, max-age=0");
+    return res.json({ deleted: true, id: existing.id });
+  } catch (error) {
+    return unexpectedErrorResponse(res, "me:period-entries:delete", error);
+  }
+});
+
 meRouter.get("/progress-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
   if (req.user?.role !== "client") {
     return res.status(403).json({ message: "Forbidden" });
   }
 
   const rawLimit = parseInt(String(req.query.limit ?? "30"), 10);
-  const limit = isNaN(rawLimit) || rawLimit < 1 ? 30 : Math.min(rawLimit, 200);
+  const limit = isNaN(rawLimit) || rawLimit < 1 ? 30 : Math.min(rawLimit, 500);
 
   try {
     const clientProfile = await prisma.clientProfile.findUnique({
@@ -2149,11 +2439,15 @@ meRouter.get("/progress-logs", requireAuth, async (req: AuthenticatedRequest, re
 
     const progressLogs = await prisma.progressLog.findMany({
       where: { clientId: clientProfile.id },
-      orderBy: { date: "desc" },
+      orderBy: [
+        { date: "desc" },
+        { createdAt: "desc" },
+      ],
       take: limit,
       select: progressLogSelect,
     });
 
+    res.set("Cache-Control", "private, no-store, max-age=0");
     return res.json({ progressLogs });
   } catch (error) {
         return unexpectedErrorResponse(res, "me:progress-logs:list", error);
@@ -2448,7 +2742,7 @@ meRouter.get("/progress-summary", requireAuth, async (req: AuthenticatedRequest,
   try {
     const clientProfile = await prisma.clientProfile.findUnique({
       where: { userId: req.user.userId },
-      select: { id: true, fullName: true, trainerId: true },
+      select: { id: true, fullName: true, trainerId: true, gender: true },
     });
     if (!clientProfile) return res.status(404).json({ message: "Not found" });
 
@@ -2492,6 +2786,7 @@ meRouter.get("/progress-summary", requireAuth, async (req: AuthenticatedRequest,
         id: clientProfile.id,
         fullName: clientProfile.fullName,
         trainerId: clientProfile.trainerId,
+        gender: clientProfile.gender,
       },
       workoutSummary: {
         completedWorkoutCount,

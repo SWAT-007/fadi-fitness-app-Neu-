@@ -131,6 +131,10 @@ export default function WorkoutPlayerPage() {
   const autosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   // Guards against double-completion (rapid clicks / effect re-runs).
   const completingRef = useRef(false)
+  // A completed exercise selected by the user is being reviewed. Without this
+  // guard, auto-advance immediately navigates away again and its sets cannot be
+  // reopened.
+  const reviewingCompletedExerciseIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (complete) return
@@ -215,9 +219,12 @@ export default function WorkoutPlayerPage() {
   }, [id, router, freshStart])
 
   const updateSet = (exerciseId: string, setIndex: number, field: keyof SetLog, value: string | boolean) => {
-    // Haptic tap only when checking a set OFF (not when undoing it).
+    // Haptic tap only when checking a set on (not when undoing it).
     if (field === 'completed' && value === true) {
       void tapLight()
+    }
+    if (field === 'completed' && value === false) {
+      reviewingCompletedExerciseIdRef.current = null
     }
     setLogs(prev => ({
       ...prev,
@@ -420,6 +427,19 @@ export default function WorkoutPlayerPage() {
 
   useEffect(() => { setBulkKgOpen(false) }, [currentExerciseIndex])
 
+  const selectExercise = (exerciseIndex: number) => {
+    const selectedExercise = exercises[exerciseIndex]
+    const selectedSets = selectedExercise ? logs[selectedExercise.id] ?? [] : []
+    reviewingCompletedExerciseIdRef.current = (
+      selectedExercise
+      && selectedSets.length > 0
+      && selectedSets.every(set => set.completed)
+    )
+      ? selectedExercise.id
+      : null
+    setCurrentExerciseIndex(exerciseIndex)
+  }
+
   // Auto-advance when the visible exercise is done. Completion is independent
   // of exercise order and requires every expected set of every exercise.
   useEffect(() => {
@@ -429,6 +449,7 @@ export default function WorkoutPlayerPage() {
     const sets = logs[exercise.id]
     if (!sets || sets.length === 0) return
     if (!sets.every(s => s.completed)) return
+    if (reviewingCompletedExerciseIdRef.current === exercise.id) return
 
     const remainingRequiredSets = countRemainingRequiredSets(
       exercises,
@@ -446,6 +467,7 @@ export default function WorkoutPlayerPage() {
       if (nextExerciseIndex === -1) return
 
       const t = setTimeout(() => {
+        if (reviewingCompletedExerciseIdRef.current === exercise.id) return
         setCurrentExerciseIndex(nextExerciseIndex)
         window.scrollTo({ top: 0, behavior: 'smooth' })
       }, 400)
@@ -622,7 +644,7 @@ export default function WorkoutPlayerPage() {
                   <button
                     key={ex.id}
                     type="button"
-                    onClick={() => setCurrentExerciseIndex(i)}
+                    onClick={() => selectExercise(i)}
                     aria-label={ex.name}
                     className={`relative flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden border-2 transition-all ${
                       isActive
@@ -851,13 +873,15 @@ export default function WorkoutPlayerPage() {
             })}
           </div>
 
-          <div className="pb-3 text-center text-xs text-[#797D83]">
-            {completedCount === exerciseSets.length
-              ? (remainingRequiredSets === 0
-                  ? (saving ? 'Wird gespeichert…' : 'Workout wird abgeschlossen…')
-                  : 'Nächste offene Übung…')
-              : `${completedCount} / ${exerciseSets.length} Sätze erledigt`}
-          </div>
+          {completedCount < exerciseSets.length ? (
+            <div className="pb-3 text-center text-xs text-[#797D83]">
+              {completedCount} / {exerciseSets.length} Sätze erledigt
+            </div>
+          ) : remainingRequiredSets === 0 ? (
+            <div className="pb-3 text-center text-xs text-[#797D83]">
+              {saving ? 'Wird gespeichert…' : 'Workout wird abgeschlossen…'}
+            </div>
+          ) : null}
         </div>
 
         {error && (

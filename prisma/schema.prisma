@@ -28,6 +28,12 @@ enum NotificationType {
   SYSTEM
 }
 
+enum ClientGender {
+  FEMALE
+  MALE
+  DIVERSE
+}
+
 model User {
   id                      String             @id @default(cuid())
   email                   String             @unique
@@ -72,6 +78,7 @@ model ClientProfile {
   email                  String
   phone                  String?
   notes                  String?
+  gender                 ClientGender?
   status                 String                  @default("active")
   legacySupabaseClientId String?                 @unique
   legacySupabaseUserId   String?                 @unique
@@ -85,6 +92,7 @@ model ClientProfile {
   exerciseChangeRequests ExerciseChangeRequest[]
   progressLogs           ProgressLog[]
   weeklyCheckins         WeeklyCheckin[]
+  menstrualCycleEntries  MenstrualCycleEntry[]
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
 
@@ -477,6 +485,22 @@ model ProgressLog {
   legacySupabaseProgressLogId String?       @unique
 
   @@index([clientId, date])
+}
+
+model MenstrualCycleEntry {
+  id        String        @id @default(cuid())
+  clientId  String
+  client    ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  startDate String
+  endDate   String?
+  flow      String?
+  symptoms  String[]      @default([])
+  notes     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([clientId, startDate])
+  @@index([clientId, startDate])
 }
 
 model WeeklyCheckin {

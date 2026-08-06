@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import type { CheckinImage, Client, AssignedPlan, WorkoutPlan, WorkoutLog, ProgressLog, WeeklyCheckin } from '@/lib/types'
+import type { CheckinImage, Client, ClientGender, AssignedPlan, WorkoutPlan, WorkoutLog, ProgressLog, WeeklyCheckin } from '@/lib/types'
+import { buildBodyWeightHistory } from '@/lib/body-weight'
 
 type BackendCheckinImage = {
   id: string
@@ -42,6 +43,7 @@ function mapCheckin(c: BackendCheckin): WeeklyCheckin {
     body_weight: c.bodyWeight,
     comment: c.comment,
     created_at: c.createdAt,
+    updated_at: c.updatedAt,
     checkin_images: c.images.map(img => ({
       id: img.id,
       checkin_id: img.checkinId,
@@ -115,6 +117,7 @@ type BackendClientPayload = {
     email?: string
     phone?: string | null
     notes?: string | null
+    gender?: ClientGender | null
     status?: string
     linked?: boolean
     createdAt?: string
@@ -318,6 +321,7 @@ export default function ClientDetailPage() {
   const [savingProfile, setSavingProfile] = useState(false)
   const [profileName, setProfileName] = useState('')
   const [profilePhone, setProfilePhone] = useState('')
+  const [profileGender, setProfileGender] = useState<ClientGender | ''>('')
   const [resetPasswordOpen, setResetPasswordOpen] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
@@ -364,6 +368,7 @@ export default function ClientDetailPage() {
         email: (backendClient.email ?? '').trim(),
         phone: backendClient.phone ?? null,
         notes: backendClient.notes ?? null,
+        gender: backendClient.gender ?? null,
         created_at: backendClient.createdAt ?? new Date().toISOString(),
       }
 
@@ -522,6 +527,7 @@ export default function ClientDetailPage() {
       setClient(normalizedClient)
       setProfileName(normalizedClient.full_name ?? '')
       setProfilePhone(normalizedClient.phone ?? '')
+      setProfileGender(normalizedClient.gender ?? '')
       setNotesValue(normalizedClient.notes ?? '')
       if (assignmentsResponse.ok) {
         const backendAssignments = Array.isArray(assignmentsPayload?.assignments) ? assignmentsPayload.assignments : []
@@ -729,6 +735,7 @@ export default function ClientDetailPage() {
     if (!client) return
     setProfileName(client.full_name ?? '')
     setProfilePhone(client.phone ?? '')
+    setProfileGender(client.gender ?? '')
   }
 
   const handleSaveProfile = async () => {
@@ -758,6 +765,7 @@ export default function ClientDetailPage() {
           name: fullName,
           email,
           phone,
+          gender: profileGender || null,
           notes: client.notes ?? '',
         }),
       })
@@ -946,7 +954,29 @@ export default function ClientDetailPage() {
   const activeNutritionPlan = assignedNutritionPlans.find((plan) => plan.is_active)
   const latestNutritionAssignment = assignedNutritionPlans[0]
   const nutritionManagePlanId = activeNutritionPlan?.plan_id ?? latestNutritionAssignment?.plan_id ?? null
-  const lastProgress = progressLogs[0]
+  const visibleProgressLogs: ProgressLog[] = buildBodyWeightHistory(
+    progressLogs.map(log => ({
+      id: log.id,
+      date: log.date,
+      bodyWeight: log.body_weight,
+      createdAt: log.created_at,
+      notes: log.notes,
+    })),
+    checkins.map(checkin => ({
+      id: checkin.id,
+      bodyWeight: checkin.body_weight,
+      createdAt: checkin.created_at,
+      updatedAt: checkin.updated_at,
+    })),
+  ).map(entry => ({
+    id: entry.id,
+    client_id: id,
+    date: entry.date,
+    body_weight: entry.bodyWeight,
+    notes: entry.notes,
+    created_at: entry.createdAt,
+  }))
+  const lastProgress = visibleProgressLogs[0]
   const lastWorkout = historyLogs[0]
   const latestCheckin = checkins[0]
   const thisWeekStart = getWeekStartKey(new Date())
@@ -1063,6 +1093,22 @@ export default function ClientDetailPage() {
                     placeholder="Optional"
                   />
                 </div>
+                <div>
+                  <label className="text-xs text-[#797D83] block mb-1">Geschlecht</label>
+                  <select
+                    value={profileGender}
+                    onChange={(e) => setProfileGender(e.target.value as ClientGender | '')}
+                    className="w-full rounded-lg border border-white/[0.08] bg-[#0b0c0f] px-3 py-2 text-sm text-[#EDECEA] focus:outline-none focus:ring-2 focus:ring-[#A78BFA]/30"
+                  >
+                    <option value="">Nicht angegeben</option>
+                    <option value="FEMALE">Weiblich</option>
+                    <option value="MALE">Männlich</option>
+                    <option value="DIVERSE">Divers</option>
+                  </select>
+                  <p className="text-xs text-[#797D83] mt-1">
+                    „Weiblich“ aktiviert das private Zyklus-Tracking in der Kunden-App.
+                  </p>
+                </div>
                 <div className="flex gap-2 pt-1">
                   <button
                     onClick={() => {
@@ -1099,6 +1145,12 @@ export default function ClientDetailPage() {
                   <dd className="text-sm text-[#EDECEA]">{client.phone}</dd>
                 </div>
               )}
+              <div className="flex gap-4">
+                <dt className="text-sm text-[#797D83] w-24 flex-shrink-0">Geschlecht</dt>
+                <dd className="text-sm text-[#EDECEA]">
+                  {client.gender === 'FEMALE' ? 'Weiblich' : client.gender === 'MALE' ? 'Männlich' : client.gender === 'DIVERSE' ? 'Divers' : 'Nicht angegeben'}
+                </dd>
+              </div>
               {client.notes && (
                 <div className="flex gap-4">
                   <dt className="text-sm text-[#797D83] w-24 flex-shrink-0">Notiz</dt>
@@ -1239,7 +1291,7 @@ export default function ClientDetailPage() {
             </div>
             <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-5 shadow-sm text-center col-span-2 sm:col-span-1">
               <div className="text-2xl font-bold text-[#EDECEA]">
-                {progressLogs[0]?.body_weight ? `${progressLogs[0].body_weight} kg` : '—'}
+                {visibleProgressLogs[0]?.body_weight ? `${visibleProgressLogs[0].body_weight} kg` : '—'}
               </div>
               <div className="text-[#797D83] text-xs mt-1">Letztes Gewicht</div>
             </div>
@@ -1766,7 +1818,7 @@ export default function ClientDetailPage() {
       {/* Progress */}
       {tab === 'progress' && (
         <div className="space-y-4">
-          {progressLogs.length === 0 ? (
+          {visibleProgressLogs.length === 0 ? (
             <div className="bg-[#111111] rounded-2xl border border-white/[0.06] py-12 text-center shadow-sm text-[#797D83] text-sm">
               Noch keine Gewichtsdaten vorhanden.
             </div>
@@ -1774,11 +1826,11 @@ export default function ClientDetailPage() {
             <>
               {/* Weight chart */}
               {(() => {
-                const chartData = [...progressLogs].reverse()
+                const chartData = [...visibleProgressLogs].reverse()
                   .map(l => ({ label: l.date, value: l.body_weight ?? 0 }))
                   .filter(d => d.value > 0)
-                const latest = progressLogs[0]?.body_weight
-                const oldest = progressLogs[progressLogs.length - 1]?.body_weight
+                const latest = visibleProgressLogs[0]?.body_weight
+                const oldest = visibleProgressLogs[visibleProgressLogs.length - 1]?.body_weight
                 const change = latest && oldest ? latest - oldest : null
                 return chartData.length >= 2 ? (
                   <div className="bg-[#111111] rounded-2xl border border-white/[0.06] p-5 shadow-sm">
@@ -1802,8 +1854,8 @@ export default function ClientDetailPage() {
                   <h3 className="font-semibold text-[#EDECEA]">Verlauf</h3>
                 </div>
                 <ul className="divide-y divide-white/[0.04]">
-                  {progressLogs.map((log, i) => {
-                    const prev = progressLogs[i + 1]
+                  {visibleProgressLogs.map((log, i) => {
+                    const prev = visibleProgressLogs[i + 1]
                     const diff = log.body_weight && prev?.body_weight ? log.body_weight - prev.body_weight : null
                     return (
                       <li key={log.id} className="flex items-center gap-4 px-6 py-3">

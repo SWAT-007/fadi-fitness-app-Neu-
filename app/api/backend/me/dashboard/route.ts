@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const BACKEND_TOKEN_COOKIE = 'backend_token'
 const BACKEND_API_URL = process.env.BACKEND_API_URL ?? 'http://localhost:4000'
+const NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store, max-age=0' }
 
 export async function GET(request: NextRequest) {
   const token = request.cookies.get(BACKEND_TOKEN_COOKIE)?.value
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     const payload = await backendResponse.json().catch(() => null)
     return NextResponse.json(
       payload ?? { ok: false, message: 'Invalid backend response' },
-      { status: backendResponse.status },
+      { status: backendResponse.status, headers: NO_STORE_HEADERS },
     )
   } catch {
     return NextResponse.json({ ok: false, message: 'Backend unavailable' }, { status: 502 })

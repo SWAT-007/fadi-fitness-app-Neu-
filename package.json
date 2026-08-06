@@ -7,7 +7,7 @@
     "build": "prisma generate && tsc --noEmit && next build --webpack",
     "start": "prisma migrate deploy && next start",
     "start:api": "tsx server/src/index.ts",
-    "test": "tsx --test lib/workout-player.test.ts lib/nutrition-targets.test.ts proxy.test.ts",
+    "test": "tsx --test lib/workout-player.test.ts lib/nutrition-targets.test.ts lib/body-weight.test.ts lib/exercise-progress.test.ts lib/period-tracking.test.ts proxy.test.ts",
     "lint": "eslint",
     "dev:api": "tsx watch server/src/index.ts",
     "postinstall": "prisma generate"
